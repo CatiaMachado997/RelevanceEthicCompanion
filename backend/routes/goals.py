@@ -15,12 +15,7 @@ from utils.serialization import serialize_row, serialize_rows
 from services.context_manager import ContextManager
 from esl.engine import EthicalSafeguardLayer
 from esl.models import ProposedAction, ActionType, UrgencyLevel, ESLDecisionStatus
-from utils.supabase_auth import get_current_user_id
-# from utils.auth import get_current_user_id
-
-
-# A mock user ID for development without authentication
-MOCK_USER_ID = "00000000-0000-0000-0000-000000000000"
+from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 
 
 def get_context_manager() -> ContextManager:
@@ -135,7 +130,7 @@ async def create_goal(
 
 @router.get("/", response_model=dict)
 async def list_goals(
-    user_id: str = MOCK_USER_ID,
+    user_id: str = Depends(get_current_read_user_id),
     status: Optional[str] = None,
     active_only: bool = True
 ):
@@ -180,7 +175,7 @@ async def list_goals(
 @router.get("/{goal_id}", response_model=dict)
 async def get_goal(
     goal_id: str,
-    user_id: str = MOCK_USER_ID
+    user_id: str = Depends(get_current_read_user_id)
 ):
     """
     Get a specific goal by ID

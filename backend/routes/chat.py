@@ -13,12 +13,7 @@ from datetime import datetime, UTC
 from services.orchestrator_v2 import OrchestratorV2
 from services.context_manager import ContextManager
 from esl.models import ActionType
-from utils.supabase_auth import get_current_user_id
-
-
-# A mock user ID for development without authentication
-MOCK_USER_ID = "00000000-0000-0000-0000-000000000000"
-
+from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 
 # Router
 router = APIRouter(prefix="/api/chat", tags=["Chat"])
@@ -172,7 +167,7 @@ async def send_message(
 
 @router.get("/history", response_model=ConversationHistoryResponse)
 async def get_conversation_history(
-    user_id: str = MOCK_USER_ID,
+    user_id: str = Depends(get_current_read_user_id),
     limit: int = 50,
     offset: int = 0,
     context_manager: ContextManager = Depends(get_context_manager)

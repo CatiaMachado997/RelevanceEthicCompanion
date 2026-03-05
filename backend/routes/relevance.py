@@ -13,11 +13,7 @@ from datetime import datetime
 from services.context_manager import ContextManager
 from services.orchestrator_v2 import OrchestratorV2
 from services.relevance_engine import RelevanceEngine
-# from utils.auth import get_current_user_id
-
-
-# A mock user ID for development without authentication
-MOCK_USER_ID = "00000000-0000-0000-0000-000000000000"
+from utils.supabase_auth import get_current_read_user_id
 
 
 class ScanResponse(BaseModel):
@@ -42,7 +38,7 @@ def get_orchestrator() -> OrchestratorV2:
 
 @router.post("/scan", response_model=ScanResponse)
 async def scan(
-    user_id: str = MOCK_USER_ID,
+    user_id: str = Depends(get_current_read_user_id),
     window_minutes: int = 15,
     engine: RelevanceEngine = Depends(get_engine),
     orchestrator: OrchestratorV2 = Depends(get_orchestrator),

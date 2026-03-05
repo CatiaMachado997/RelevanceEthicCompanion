@@ -16,12 +16,7 @@ from esl.models import UserValue, ValueType, ProposedAction, ActionType, Urgency
 from esl.engine import EthicalSafeguardLayer
 from utils.db import get_db
 from utils.serialization import serialize_row, serialize_rows
-from utils.supabase_auth import get_current_user_id
-# from utils.auth import get_current_user_id
-
-
-# A mock user ID for development without authentication
-MOCK_USER_ID = "00000000-0000-0000-0000-000000000000"
+from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 
 
 # Request/Response models
@@ -146,7 +141,7 @@ async def create_value(
 
 @router.get("/", response_model=dict)
 async def list_values(
-    user_id: str = MOCK_USER_ID,
+    user_id: str = Depends(get_current_read_user_id),
     active_only: bool = True,
     value_type: Optional[str] = None
 ):
@@ -192,7 +187,7 @@ async def list_values(
 @router.get("/{value_id}", response_model=dict)
 async def get_value(
     value_id: str,
-    user_id: str = MOCK_USER_ID
+    user_id: str = Depends(get_current_read_user_id)
 ):
     """
     Get a specific user value by ID

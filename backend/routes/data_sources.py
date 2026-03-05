@@ -13,7 +13,7 @@ from services.context_manager import ContextManager
 from services.embedding_service import EmbeddingService
 from utils.weaviate_client import get_weaviate_client
 from utils.oauth_state import create_signed_state, validate_signed_state
-from utils.supabase_auth import get_current_user_id
+from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -167,7 +167,7 @@ async def trigger_manual_sync(
 
 @router.get("/connected")
 async def get_connected_sources(
-    user_id: str = "00000000-0000-0000-0000-000000000000",
+    user_id: str = Depends(get_current_read_user_id),
     ingestion: DataIngestionService = Depends(get_data_ingestion)
 ) -> List[Dict[str, Any]]:
     """
