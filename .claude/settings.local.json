@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tree:*)",
+      "Bash(curl:*)",
+      "Bash(python3:*)",
+      "Bash(docker compose:*)",
+      "Bash(open -a Docker)",
+      "Bash(lsof:*)",
+      "Bash(find:*)",
+      "Bash(wc:*)",
+      "Bash(grep:*)",
+      "Bash(xargs kill:*)",
+      "Bash(__NEW_LINE_d87a5cf1dca4b9fe__ curl -s -X POST http://localhost:8000/api/chat -H \"Content-Type: application/json\" -d '{\"\"message\"\": \"\"Hello! Can you help me understand what you can do?\"\"}' )",
+      "Bash(python -m json.tool:*)",
+      "Bash(__NEW_LINE_faa1554ab52003f1__ curl -s -X POST \"http://localhost:8000/api/chat/\" -H \"Content-Type: application/json\" -d '{\"\"message\"\": \"\"Hello! Can you help me understand what you can do?\"\"}' )",
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Bash(ls:*)",
+      "Bash(docker exec:*)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)"
+    ]
+  }
+}

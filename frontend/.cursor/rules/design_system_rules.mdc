@@ -1,0 +1,506 @@
+# Ethic Companion Design System Rules
+
+This document provides comprehensive guidance for integrating Figma designs using the Model Context Protocol (MCP) into the Ethic Companion frontend.
+
+---
+
+## 1. Token Definitions
+
+### Location
+Design tokens are defined in `/app/globals.css` using CSS custom properties.
+
+### Format
+Tokens use **HSL color format** (without the `hsl()` wrapper) for flexibility:
+
+```css
+/* /app/globals.css */
+:root {
+  --background: 0 0% 100%;        /* H S% L% format */
+  --foreground: 240 10% 3.9%;
+  --primary: 240 5.9% 10%;
+  --primary-foreground: 0 0% 98%;
+  /* ... */
+}
+```
+
+### Color Token Mapping
+
+| Token Name | Light Mode | Dark Mode | Usage |
+|------------|------------|-----------|-------|
+| `--background` | White | Near-black | Page backgrounds |
+| `--foreground` | Dark slate | White | Primary text |
+| `--primary` | Dark slate | White | Buttons, links |
+| `--primary-foreground` | White | Dark | Text on primary |
+| `--secondary` | Light gray | Dark gray | Secondary buttons |
+| `--muted` | Light gray | Dark gray | Muted backgrounds |
+| `--muted-foreground` | Medium gray | Light gray | Secondary text |
+| `--accent` | Light gray | Dark gray | Hover states |
+| `--destructive` | Red | Dark red | Error states |
+| `--border` | Light gray | Dark gray | Borders |
+| `--card` | White | Near-black | Card backgrounds |
+
+### Sidebar-Specific Tokens
+```css
+--sidebar: 0 0% 98%;
+--sidebar-foreground: 240 5.3% 26.1%;
+--sidebar-primary: 240 5.9% 10%;
+--sidebar-accent: 240 4.8% 95.9%;
+--sidebar-border: 220 13% 91%;
+```
+
+### Radius Tokens
+```css
+--radius: 0.5rem;              /* Base: 8px */
+--radius-sm: calc(var(--radius) - 4px);   /* 4px */
+--radius-md: calc(var(--radius) - 2px);   /* 6px */
+--radius-lg: var(--radius);               /* 8px */
+--radius-xl: calc(var(--radius) + 4px);   /* 12px */
+```
+
+### Theme Integration
+Tokens are exposed to Tailwind via `@theme inline` block:
+```css
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-primary: hsl(var(--primary));
+  /* ... */
+}
+```
+
+### Figma to Token Mapping
+
+| Figma Color | Project Token |
+|-------------|---------------|
+| `#4f46e5` (Indigo) | Use `primary` or gradient |
+| `#1e293b` (Slate 800) | `foreground` |
+| `#475569` (Slate 600) | `muted-foreground` |
+| `#f8fafc` (Slate 50) | `secondary` / `muted` |
+| `#e2e8f0` (Slate 200) | `border` |
+
+---
+
+## 2. Component Library
+
+### Location
+UI components are in `/components/ui/` following the **shadcn/ui** pattern.
+
+### Available Components
+
+| Component | File | Description |
+|-----------|------|-------------|
+| `Button` | `button.tsx` | Multi-variant button with CVA |
+| `Card` | `card.tsx` | Card container with header/content/footer |
+| `Input` | `input.tsx` | Text input field |
+| `Badge` | `badge.tsx` | Status badges |
+| `Dialog` | `dialog.tsx` | Modal dialogs |
+| `DropdownMenu` | `dropdown-menu.tsx` | Dropdown menus |
+| `Select` | `select.tsx` | Select inputs |
+| `Collapsible` | `collapsible.tsx` | Expandable sections |
+| `Tooltip` | `tooltip.tsx` | Hover tooltips |
+| `Avatar` | `avatar.tsx` | User avatars |
+| `Separator` | `separator.tsx` | Divider lines |
+| `Sidebar` | `sidebar.tsx` | App sidebar |
+| `Sheet` | `sheet.tsx` | Slide-out panels |
+| `Skeleton` | `skeleton.tsx` | Loading placeholders |
+| `Breadcrumb` | `breadcrumb.tsx` | Navigation breadcrumbs |
+| `Textarea` | `textarea.tsx` | Multi-line text input |
+| `Label` | `label.tsx` | Form labels |
+
+### Component Architecture Pattern
+
+Components use **Class Variance Authority (CVA)** for variants:
+
+```tsx
+// Pattern: /components/ui/button.tsx
+import { cva, type VariantProps } from "class-variance-authority"
+import { cn } from "@/lib/utils"
+
+const buttonVariants = cva(
+  "base-classes-here",
+  {
+    variants: {
+      variant: {
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        ghost: "hover:bg-accent hover:text-accent-foreground",
+        destructive: "bg-destructive text-white hover:bg-destructive/90",
+        outline: "border bg-background shadow-xs hover:bg-accent",
+        link: "text-primary underline-offset-4 hover:underline",
+      },
+      size: {
+        default: "h-9 px-4 py-2",
+        sm: "h-8 px-3",
+        lg: "h-10 px-6",
+        icon: "size-9",
+        "icon-sm": "size-8",
+        "icon-lg": "size-10",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
+  }
+)
+
+function Button({ className, variant, size, ...props }) {
+  return (
+    <button
+      className={cn(buttonVariants({ variant, size, className }))}
+      {...props}
+    />
+  )
+}
+```
+
+### Creating New Components
+
+1. Create file in `/components/ui/` or `/components/[feature]/`
+2. Use `"use client"` directive if component has interactivity
+3. Import `cn` from `@/lib/utils`
+4. Use CVA for variants when needed
+5. Compose from existing Radix primitives when possible
+
+---
+
+## 3. Frameworks & Libraries
+
+### Core Stack
+
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| **Next.js** | 16.0.3 | React framework (App Router) |
+| **React** | 19.2.0 | UI library |
+| **TypeScript** | ^5 | Type safety |
+| **Tailwind CSS** | ^4.1.17 | Utility-first CSS |
+
+### UI Libraries
+
+| Library | Purpose |
+|---------|---------|
+| `@radix-ui/*` | Accessible UI primitives |
+| `class-variance-authority` | Component variant management |
+| `clsx` | Conditional class names |
+| `tailwind-merge` | Merge Tailwind classes |
+| `framer-motion` | Animations |
+| `lucide-react` | Icons |
+| `tailwindcss-animate` | Animation utilities |
+
+### Build System
+- **Bundler**: Next.js Turbopack (built-in)
+- **CSS Processing**: PostCSS with `@tailwindcss/postcss`
+- **Compiler**: React Compiler enabled (`reactCompiler: true`)
+
+---
+
+## 4. Asset Management
+
+### Static Assets Location
+```
+/public/
+├── file.svg
+├── globe.svg
+├── next.svg
+├── vercel.svg
+└── window.svg
+```
+
+### Image Usage
+
+```tsx
+// Using Next.js Image (recommended for optimization)
+import Image from "next/image"
+
+<Image
+  src="/globe.svg"
+  alt="Description"
+  width={24}
+  height={24}
+/>
+
+// For dynamic/external images
+<img
+  src={imageUrl}
+  alt="Description"
+  className="h-full w-full object-cover"
+/>
+```
+
+### Asset Best Practices
+
+1. Place static assets in `/public/`
+2. Use Next.js `Image` for optimization
+3. For Figma exports:
+   - Download SVGs for icons
+   - Download optimized PNGs/WebP for images
+   - Store in `/public/images/[feature]/`
+
+---
+
+## 5. Icon System
+
+### Library
+**Lucide React** (`lucide-react`)
+
+### Usage Pattern
+```tsx
+import {
+  Search,
+  Home,
+  Settings,
+  ChevronDown,
+  Shield,
+  // ...
+} from "lucide-react"
+
+// In component
+<Search className="h-4 w-4" />
+<Shield className="h-5 w-5 text-white" />
+```
+
+### Icon Sizing Convention
+
+| Size Class | Pixels | Usage |
+|------------|--------|-------|
+| `h-3 w-3` | 12px | Tiny indicators |
+| `h-3.5 w-3.5` | 14px | Small inline |
+| `h-4 w-4` | 16px | Default/buttons |
+| `h-5 w-5` | 20px | Headers/emphasis |
+| `h-6 w-6` | 24px | Large/standalone |
+
+### Figma Icon Mapping
+
+| Figma/Phosphor | Lucide Equivalent |
+|----------------|-------------------|
+| HouseSimple | `Home` |
+| MagnifyingGlass | `Search` |
+| GlobeSimple | `Globe` |
+| CaretDown | `ChevronDown` |
+| CaretUp | `ChevronUp` |
+| Lightbulb | `Lightbulb` |
+| BookOpen | `BookOpen` |
+| Microphone | `Mic` |
+| Paperclip | `Paperclip` |
+| PlusCircle | `PlusCircle` |
+| ArrowUp | `ArrowUp` |
+| Play | `Play` |
+| ImageSquare | `Image` |
+| AirplaneInFlight | `Plane` |
+| GraduationCap | `GraduationCap` |
+| Info | `Info` |
+| Clock | `Clock` |
+| Share | `Share` |
+| X | `X` |
+| Plus | `Plus` |
+| Compass | `Compass` |
+| Books | `Library` |
+
+---
+
+## 6. Styling Approach
+
+### Methodology
+**Tailwind CSS v4** with CSS custom properties for theming.
+
+### Utility Function
+```ts
+// /lib/utils.ts
+import { type ClassValue, clsx } from "clsx"
+import { twMerge } from "tailwind-merge"
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
+```
+
+### Usage
+```tsx
+import { cn } from "@/lib/utils"
+
+<div className={cn(
+  "base-classes",
+  isActive && "active-classes",
+  className
+)} />
+```
+
+### Color Usage
+Always use semantic tokens, not raw colors:
+
+```tsx
+// ✅ Correct
+<div className="bg-background text-foreground" />
+<div className="bg-primary text-primary-foreground" />
+<div className="border-border" />
+<div className="text-muted-foreground" />
+
+// ❌ Avoid
+<div className="bg-white text-black" />
+<div className="bg-slate-900" />
+```
+
+### Responsive Design
+
+```tsx
+// Mobile-first breakpoints
+<div className="w-full md:w-1/2 lg:w-1/3" />
+<div className="text-sm md:text-base lg:text-lg" />
+<div className="p-4 md:p-6 lg:p-8" />
+
+// Tailwind breakpoints
+// sm: 640px
+// md: 768px
+// lg: 1024px
+// xl: 1280px
+// 2xl: 1536px
+```
+
+### Dark Mode
+Uses `.dark` class on parent:
+
+```css
+@custom-variant dark (&:is(.dark *));
+```
+
+```tsx
+// Automatic dark mode support via tokens
+<div className="bg-card text-card-foreground" />
+
+// Manual dark mode overrides when needed
+<div className="bg-blue-50 dark:bg-blue-950/30" />
+```
+
+### Common Patterns
+
+```tsx
+// Cards
+<div className="rounded-xl border bg-card p-4 shadow" />
+
+// Hover states
+<button className="transition-colors hover:bg-accent" />
+
+// Focus states
+<input className="focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
+
+// Gradients (brand accent)
+<div className="bg-gradient-to-br from-blue-600 to-purple-600" />
+```
+
+---
+
+## 7. Project Structure
+
+```
+frontend/
+├── app/                          # Next.js App Router
+│   ├── layout.tsx               # Root layout (fonts, metadata)
+│   ├── page.tsx                 # Landing page
+│   ├── globals.css              # Global styles & tokens
+│   ├── login/
+│   │   └── page.tsx
+│   └── dashboard/
+│       ├── layout.tsx           # Dashboard layout (sidebar)
+│       ├── page.tsx             # Dashboard home
+│       ├── chat/page.tsx
+│       ├── goals/page.tsx
+│       ├── values/page.tsx
+│       ├── transparency/page.tsx
+│       └── search/page.tsx      # Search feature
+│
+├── components/
+│   ├── ui/                      # Base UI components (shadcn)
+│   │   ├── button.tsx
+│   │   ├── card.tsx
+│   │   ├── input.tsx
+│   │   └── ...
+│   ├── search/                  # Feature-specific components
+│   │   ├── search-sidebar.tsx
+│   │   ├── source-card.tsx
+│   │   ├── answer-section.tsx
+│   │   ├── overview-panel.tsx
+│   │   └── follow-up-input.tsx
+│   ├── app-sidebar.tsx          # Main app sidebar
+│   ├── dashboard-breadcrumb.tsx
+│   └── collapsible-trigger.tsx
+│
+├── lib/
+│   └── utils.ts                 # Utility functions (cn)
+│
+├── hooks/
+│   └── useAuth.ts               # Authentication hook
+│
+├── public/                      # Static assets
+│   └── *.svg
+│
+├── __tests__/                   # Jest tests
+│
+└── Configuration files
+    ├── package.json
+    ├── next.config.ts
+    ├── tsconfig.json
+    └── postcss.config.mjs
+```
+
+### Feature Organization Pattern
+
+For new features, create a dedicated folder:
+```
+/components/[feature-name]/
+├── [feature]-main.tsx
+├── [feature]-sidebar.tsx
+├── [feature]-card.tsx
+└── index.ts (optional barrel export)
+```
+
+---
+
+## 8. Figma Integration Workflow
+
+### When Implementing Figma Designs
+
+1. **Extract design context** using `get_design_context` MCP tool
+2. **Map Figma tokens** to project tokens (see mapping tables above)
+3. **Identify reusable components** from `/components/ui/`
+4. **Map Figma icons** to Lucide equivalents
+5. **Create feature components** in `/components/[feature]/`
+6. **Create page** in `/app/[route]/page.tsx`
+
+### Color Translation Example
+
+```tsx
+// Figma: background #f8fafc, text #1e293b
+// Project: bg-secondary text-foreground
+
+// Figma: button indigo #4f46e5
+// Project: Use gradient or customize primary
+<div className="bg-gradient-to-br from-blue-600 to-purple-600" />
+```
+
+### Typography
+- **Font**: Inter (Google Font)
+- **Variable**: `--font-inter`
+- Use Tailwind text utilities: `text-xs`, `text-sm`, `text-base`, `text-lg`, etc.
+
+### Spacing
+Use Tailwind spacing scale:
+- `p-2` = 8px
+- `p-3` = 12px
+- `p-4` = 16px
+- `p-6` = 24px
+- `gap-2`, `gap-3`, `gap-4` for flex/grid gaps
+
+---
+
+## 9. Component Checklist
+
+When creating a new component from Figma:
+
+- [ ] Add `"use client"` if interactive
+- [ ] Import `cn` from `@/lib/utils`
+- [ ] Use semantic color tokens
+- [ ] Use Lucide icons
+- [ ] Support `className` prop for customization
+- [ ] Add proper TypeScript types
+- [ ] Follow CVA pattern for variants
+- [ ] Test dark mode appearance
+- [ ] Test hover/focus states
