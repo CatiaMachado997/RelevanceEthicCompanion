@@ -30,6 +30,18 @@ async def lifespan(app: FastAPI):
     print("⚖️  Ethical Safeguard Layer: ACTIVE")
     print("🎯 Mission: Trust over Engagement")
 
+    if settings.ENVIRONMENT != "development":
+        if not settings.AUTH_ENFORCEMENT_ENABLED:
+            logger.warning(
+                "⚠️  AUTH_ENFORCEMENT_ENABLED is false in %s. Protected routes may allow fallback behavior.",
+                settings.ENVIRONMENT,
+            )
+        if not settings.AUTH_ENFORCE_READ_ROUTES:
+            logger.warning(
+                "⚠️  AUTH_ENFORCE_READ_ROUTES is false in %s. Read routes are not strictly authenticated.",
+                settings.ENVIRONMENT,
+            )
+
     # Initialize and start background scheduler (Phase 5)
     try:
         from services.scheduler import BackgroundScheduler

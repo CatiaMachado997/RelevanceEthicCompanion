@@ -4,18 +4,18 @@
 
 Ethic Companion is an AI assistant built on trust, not engagement. It helps you focus on what matters by filtering noise and respecting your boundaries—always.
 
-## 🎯 Purpose
+## Purpose
 
 In an era of information overload and attention manipulation, Ethic Companion is different:
 
-- ❌ **NOT** optimized for "time in-app"
-- ❌ **NOT** designed to maximize engagement
-- ❌ **NOT** using dark patterns or FOMO
-- ✅ **IS** optimized for your well-being
-- ✅ **IS** respecting your explicit boundaries
-- ✅ **IS** transparent about every decision
+- **NOT** optimized for "time in-app"
+- **NOT** designed to maximize engagement
+- **NOT** using dark patterns or FOMO
+- **IS** optimized for your well-being
+- **IS** respecting your explicit boundaries
+- **IS** transparent about every decision
 
-## 🛡️ Ethical Safeguard Layer
+## Ethical Safeguard Layer
 
 Every action that affects you passes through our **Ethical Safeguard Layer (ESL)**:
 
@@ -26,7 +26,7 @@ Every action that affects you passes through our **Ethical Safeguard Layer (ESL)
 
 **The ESL is not optional. It is mandatory and cannot be bypassed.**
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 Frontend (Next.js) ↔️ Backend (FastAPI) ↔️ Supabase
@@ -35,7 +35,7 @@ Frontend (Next.js) ↔️ Backend (FastAPI) ↔️ Supabase
                       (Mandatory Gateway)
 ```
 
-## 📂 Project Structure
+## Project Structure
 
 ```
 /
@@ -44,7 +44,7 @@ Frontend (Next.js) ↔️ Backend (FastAPI) ↔️ Supabase
 └── README.md         # This file
 ```
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Backend Setup
 
@@ -64,22 +64,22 @@ See `backend/README.md` for detailed setup.
 
 Coming soon! (Todo #12)
 
-## 📋 Development Roadmap
+## Development Roadmap
 
 We're building this step-by-step, with the ESL as our foundation:
 
-1. ✅ **Backend Project Structure** (Current)
-2. 🔄 **ESL Data Models** (Next)
-3. ⏳ ESL Engine Implementation
-4. ⏳ ESL Rule System
-5. ⏳ ESL Audit & Logging
-6. ⏳ Supabase Integration
-7. ⏳ Context Manager
-8. ⏳ ... and more!
+1. **Backend Project Structure** (Current)
+2. **ESL Data Models** (Next)
+3. ESL Engine Implementation
+4. ESL Rule System
+5. ESL Audit & Logging
+6. Supabase Integration
+7. Context Manager
+8. ... and more!
 
 See the full roadmap in our todo list.
 
-## 🎯 MVP Features (v1.0)
+## MVP Features (v1.0)
 
 - User-defined values & boundaries
 - Google Calendar integration (read-only)
@@ -88,7 +88,7 @@ See the full roadmap in our todo list.
 - Text-to-Speech summaries (Google Cloud TTS)
 - ESL transparency dashboard
 
-## 🔧 Tech Stack
+## Tech Stack
 
 **Backend:**
 - FastAPI (Python)
@@ -107,14 +107,14 @@ See the full roadmap in our todo list.
 - Google Cloud Run (Backend)
 - Vercel (Frontend)
 
-## 📄 Core Principles
+## Core Principles
 
 1. **User Well-being is Primary Metric**
 2. **User Control is Crucial**
 3. **Commitment to Non-Manipulation**
 4. **Continuous Research and Alignment**
 
-## 👩‍💻 Founder
+## Founder
 
 **Cátia Machado**  
 November 4, 2025
@@ -123,7 +123,7 @@ November 4, 2025
 
 *"Trust over Engagement. Always."*
 
-## 📖 Documentation
+## Documentation
 
 - [Backend README](./backend/README.md) - Detailed backend architecture and ESL design
 - [Technical Design Document](./DESIGN.md) - Coming soon
@@ -132,10 +132,10 @@ November 4, 2025
 - [Implementation Plan Template](./docs/templates/implementation-plan.md)
 - [Test Plan Template](./docs/templates/test-plan.md)
 
-## 🤝 Contributing
+## Contributing
 
 This project is in active development. Contributions welcome, but must align with our ethical principles.
 
-## 📝 License
+## License
 
 TBD

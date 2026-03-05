@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = ["http://localhost:3000"]
     AUTH_ENFORCEMENT_ENABLED: bool = False
     AUTH_ENFORCE_WRITE_ROUTES: bool = True
+    AUTH_ENFORCE_READ_ROUTES: bool = False
 
     # Supabase auth
     SUPABASE_URL: str = ""

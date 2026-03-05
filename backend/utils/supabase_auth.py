@@ -140,3 +140,15 @@ async def get_current_user(request: Request) -> UserPrincipal:
 async def get_current_user_id(request: Request) -> str:
     principal = await get_current_user(request)
     return principal.user_id
+
+
+def _read_routes_enforced() -> bool:
+    return settings.AUTH_ENFORCEMENT_ENABLED and settings.AUTH_ENFORCE_READ_ROUTES
+
+
+async def get_current_read_user_id(request: Request) -> str:
+    if not _read_routes_enforced():
+        logger.warning("Read route auth enforcement disabled, using mock user fallback")
+        return MOCK_USER_ID
+    principal = await get_current_user(request)
+    return principal.user_id

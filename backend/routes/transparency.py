@@ -7,18 +7,13 @@ No hidden behavior, complete transparency.
 
 from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional
-from uuid import UUID
 from pydantic import BaseModel, Field
 
 from services.orchestrator_v2 import OrchestratorV2
 from services.context_manager import ContextManager
 from esl.audit import ESLAuditLogger
 from utils.db import get_db
-# from utils.auth import get_current_user_id
-
-
-# A mock user ID for development without authentication
-MOCK_USER_ID = "00000000-0000-0000-0000-000000000000"
+from utils.supabase_auth import get_current_read_user_id
 
 
 # Response models
@@ -72,7 +67,7 @@ def get_orchestrator() -> OrchestratorV2:
 
 @router.get("/logs", response_model=ESLLogsResponse)
 async def get_esl_logs(
-    user_id: str = MOCK_USER_ID,
+    user_id: str = Depends(get_current_read_user_id),
     days: int = 7,
     decision_status: Optional[str] = None,
     limit: int = 100,
@@ -108,7 +103,7 @@ async def get_esl_logs(
 
 @router.get("/report", response_model=dict)
 async def get_esl_report(
-    user_id: UUID = MOCK_USER_ID,
+    user_id: str = Depends(get_current_read_user_id),
     days: int = 7,
     orchestrator: OrchestratorV2 = Depends(get_orchestrator)
 ):
@@ -162,7 +157,7 @@ async def get_esl_report(
 
 @router.get("/stats", response_model=dict)
 async def get_esl_statistics(
-    user_id: UUID = MOCK_USER_ID,
+    user_id: str = Depends(get_current_read_user_id),
     audit_logger: ESLAuditLogger = Depends(get_audit_logger)
 ):
     """
@@ -182,7 +177,7 @@ async def get_esl_statistics(
 
 @router.get("/insights", response_model=dict)
 async def get_esl_insights(
-    user_id: UUID = MOCK_USER_ID,
+    user_id: str = Depends(get_current_read_user_id),
     audit_logger: ESLAuditLogger = Depends(get_audit_logger)
 ):
     """

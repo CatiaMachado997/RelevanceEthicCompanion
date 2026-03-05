@@ -82,6 +82,20 @@ def test_chat_write_route_requires_auth(client):
     assert response.status_code == 401
 
 
+def test_chat_history_read_route_requires_auth_when_read_enforced(client, monkeypatch):
+    monkeypatch.setattr(settings, "AUTH_ENFORCE_READ_ROUTES", True)
+    response = client.get("/api/chat/history")
+    assert response.status_code == 401
+
+
+def test_chat_history_read_route_allows_dev_fallback_when_read_not_enforced(client, monkeypatch):
+    monkeypatch.setattr(settings, "AUTH_ENFORCEMENT_ENABLED", False)
+    monkeypatch.setattr(settings, "AUTH_ENFORCE_READ_ROUTES", False)
+    monkeypatch.setattr(settings, "ENVIRONMENT", "development")
+    response = client.get("/api/chat/history")
+    assert response.status_code == 200
+
+
 def test_data_source_sync_requires_auth(client):
     response = client.post("/api/data-sources/sync/google_calendar")
     assert response.status_code == 401
