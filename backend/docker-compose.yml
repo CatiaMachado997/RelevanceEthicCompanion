@@ -1,0 +1,32 @@
+services:
+  db:
+    image: pgvector/pgvector:pg15
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=ethic-companion
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  weaviate:
+    image: semitechnologies/weaviate:1.27.0
+    restart: always
+    ports:
+      - "8080:8080"
+      - "50051:50051"  # gRPC port for v4 API
+    environment:
+      - AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true
+      - PERSISTENCE_DATA_PATH=/var/lib/weaviate
+      - QUERY_DEFAULTS_LIMIT=20
+      - DEFAULT_VECTORIZER_MODULE=none
+      - ENABLE_MODULES=''
+      - CLUSTER_HOSTNAME=node1
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+
+volumes:
+  postgres_data:
+  weaviate_data:

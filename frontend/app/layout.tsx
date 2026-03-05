@@ -1,0 +1,24 @@
+import type { Metadata } from "next";
+import { GeistSans } from "geist/font/sans";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "Ethic Companion - AI with Trust over Engagement",
+  description: "Your AI companion built on ethical principles. Assists without manipulating. Trust over engagement.",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en" className={GeistSans.className}>
+      <body
+        className="antialiased bg-background text-foreground"
+      >
+        {children}
+      </body>
+    </html>
+  );
+}
