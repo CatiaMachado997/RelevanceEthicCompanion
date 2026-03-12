@@ -15,16 +15,16 @@ const TYPE_LABELS: Record<ValueType, string> = {
 }
 
 const TYPE_COLORS: Record<ValueType, { bg: string; text: string; border: string }> = {
-  boundary:     { bg: 'rgba(194,113,79,0.10)',  text: '#C2714F', border: 'rgba(194,113,79,0.25)' },
+  boundary:     { bg: 'rgba(0,0,0,0.06)',        text: '#000000', border: 'rgba(0,0,0,0.15)' },
   preference:   { bg: 'rgba(74,124,89,0.10)',   text: '#4A7C59', border: 'rgba(74,124,89,0.25)' },
   topic_filter: { bg: 'rgba(155,122,61,0.10)',  text: '#9B7A3D', border: 'rgba(155,122,61,0.25)' },
   time_window:  { bg: 'rgba(91,127,166,0.10)',  text: '#5B7FA6', border: 'rgba(91,127,166,0.25)' },
 }
 
 const CARD_STYLE = {
-  background: '#FFFFFF',
-  border: '1px solid rgba(0,0,0,0.04)',
-  boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+  background: '#ffffff',
+  border: '1px solid rgba(0,0,0,0.08)',
+  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
 }
 
 function TypeBadge({ type }: { type: ValueType }) {
@@ -114,15 +114,15 @@ export default function ValuesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold" style={{ color: '#1C1917' }}>Your Values</h2>
-          <p className="text-sm mt-0.5" style={{ color: '#78716C' }}>
+          <h2 className="text-base font-semibold" style={{ color: '#0a0a0a' }}>Your Values</h2>
+          <p className="text-sm mt-0.5" style={{ color: '#6b6b6b' }}>
             Define the boundaries ESL protects for you.
           </p>
         </div>
         <button
           onClick={openCreate}
           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-90"
-          style={{ background: '#C2714F', color: '#FFFFFF' }}
+          style={{ background: '#000000', color: '#ffffff' }}
         >
           <Plus size={15} />
           Add Value
@@ -136,7 +136,7 @@ export default function ValuesPage() {
         </div>
       ) : values.length === 0 ? (
         <div className="rounded-2xl p-10 text-center" style={CARD_STYLE}>
-          <p className="text-sm" style={{ color: '#A8A29E' }}>
+          <p className="text-sm" style={{ color: '#9e9e9e' }}>
             No values yet. Add your first boundary or preference.
           </p>
         </div>
@@ -149,7 +149,7 @@ export default function ValuesPage() {
                   <GripVertical
                     size={14}
                     className="shrink-0 opacity-0 group-hover:opacity-40 transition-opacity cursor-grab"
-                    style={{ color: '#A8A29E' }}
+                    style={{ color: '#9e9e9e' }}
                   />
                   <TypeBadge type={v.type as ValueType} />
                 </div>
@@ -159,7 +159,7 @@ export default function ValuesPage() {
                     className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-black/5 transition-colors"
                     aria-label="Edit value"
                   >
-                    <Pencil size={13} style={{ color: '#78716C' }} />
+                    <Pencil size={13} style={{ color: '#6b6b6b' }} />
                   </button>
                   <button
                     onClick={() => handleDelete(v.id)}
@@ -170,8 +170,8 @@ export default function ValuesPage() {
                   </button>
                 </div>
               </div>
-              <p className="mt-3 text-sm font-medium" style={{ color: '#1C1917' }}>{v.value}</p>
-              <p className="mt-1 text-xs" style={{ color: '#A8A29E' }}>Priority {v.priority}</p>
+              <p className="mt-3 text-sm font-medium" style={{ color: '#0a0a0a' }}>{v.value}</p>
+              <p className="mt-1 text-xs" style={{ color: '#9e9e9e' }}>Priority {v.priority}</p>
             </div>
           ))}
         </div>
@@ -184,27 +184,27 @@ export default function ValuesPage() {
             className="flex-1 bg-black/20 backdrop-blur-sm"
             onClick={() => setSheetOpen(false)}
           />
-          <div className="w-[400px] flex flex-col h-full shadow-2xl" style={{ background: '#FAF8F5' }}>
+          <div className="w-[400px] flex flex-col h-full shadow-2xl" style={{ background: '#f9f9f9' }}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-black/5">
-              <h3 className="text-sm font-semibold" style={{ color: '#1C1917' }}>
+              <h3 className="text-sm font-semibold" style={{ color: '#0a0a0a' }}>
                 {editingValue ? 'Edit Value' : 'Add Value'}
               </h3>
               <button onClick={() => setSheetOpen(false)} aria-label="Close sheet">
-                <X size={18} style={{ color: '#78716C' }} />
+                <X size={18} style={{ color: '#6b6b6b' }} />
               </button>
             </div>
 
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
               {!editingValue && (
                 <div>
-                  <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#78716C' }}>
+                  <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#6b6b6b' }}>
                     Type
                   </label>
                   <select
                     value={formType}
                     onChange={e => setFormType(e.target.value as ValueType)}
                     className="w-full rounded-lg px-3 py-2 text-sm outline-none"
-                    style={{ background: '#FFFFFF', border: '1px solid rgba(0,0,0,0.10)', color: '#1C1917' }}
+                    style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.10)', color: '#0a0a0a' }}
                   >
                     {(Object.keys(TYPE_LABELS) as ValueType[]).map(t => (
                       <option key={t} value={t}>{TYPE_LABELS[t]}</option>
@@ -214,7 +214,7 @@ export default function ValuesPage() {
               )}
 
               <div>
-                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#78716C' }}>
+                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#6b6b6b' }}>
                   Value
                 </label>
                 <textarea
@@ -223,12 +223,12 @@ export default function ValuesPage() {
                   placeholder="e.g. no_work_after_19h"
                   rows={3}
                   className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-none"
-                  style={{ background: '#FFFFFF', border: '1px solid rgba(0,0,0,0.10)', color: '#1C1917' }}
+                  style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.10)', color: '#0a0a0a' }}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#78716C' }}>
+                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#6b6b6b' }}>
                   Priority (1 = highest)
                 </label>
                 <input
@@ -238,7 +238,7 @@ export default function ValuesPage() {
                   value={formPriority}
                   onChange={e => setFormPriority(Number(e.target.value))}
                   className="w-full rounded-lg px-3 py-2 text-sm outline-none"
-                  style={{ background: '#FFFFFF', border: '1px solid rgba(0,0,0,0.10)', color: '#1C1917' }}
+                  style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.10)', color: '#0a0a0a' }}
                 />
               </div>
             </div>
@@ -247,7 +247,7 @@ export default function ValuesPage() {
               <button
                 onClick={() => setSheetOpen(false)}
                 className="flex-1 py-2 rounded-lg text-sm font-medium"
-                style={{ background: 'rgba(0,0,0,0.05)', color: '#78716C' }}
+                style={{ background: 'rgba(0,0,0,0.05)', color: '#6b6b6b' }}
               >
                 Cancel
               </button>
@@ -255,7 +255,7 @@ export default function ValuesPage() {
                 onClick={handleSave}
                 disabled={!formValue.trim() || saving}
                 className="flex-1 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5 transition-opacity disabled:opacity-50"
-                style={{ background: '#C2714F', color: '#FFFFFF' }}
+                style={{ background: '#000000', color: '#ffffff' }}
               >
                 <Check size={14} />
                 {saving ? 'Saving…' : 'Save'}

@@ -19,9 +19,9 @@ const ESL_COLORS = {
 }
 
 const CARD_STYLE = {
-  background: '#FFFFFF',
-  border: '1px solid rgba(0,0,0,0.04)',
-  boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+  background: '#ffffff',
+  border: '1px solid rgba(0,0,0,0.08)',
+  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
 }
 
 export default function DashboardPage() {
@@ -72,8 +72,8 @@ export default function DashboardPage() {
 
       {/* Greeting card */}
       <div className="rounded-2xl p-6" style={CARD_STYLE}>
-        <p className="text-sm mb-1" style={{ color: '#78716C' }}>{dateStr}</p>
-        <h2 className="text-2xl font-semibold" style={{ color: '#1C1917' }}>{greeting}</h2>
+        <p className="text-sm mb-1" style={{ color: '#6b6b6b' }}>{dateStr}</p>
+        <h2 className="text-2xl font-semibold" style={{ color: '#0a0a0a' }}>{greeting}</h2>
       </div>
 
       {/* Stats row */}
@@ -87,19 +87,19 @@ export default function DashboardPage() {
           >
             <div
               className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-              style={{ background: 'rgba(194,113,79,0.10)' }}
+              style={{ background: 'rgba(0,0,0,0.06)' }}
             >
-              <Icon size={18} style={{ color: '#C2714F' }} />
+              <Icon size={18} style={{ color: '#000000' }} />
             </div>
             <div>
               {loading ? (
                 <Skeleton className="h-7 w-10 mb-1" />
               ) : (
-                <p className="text-2xl font-semibold" style={{ color: '#1C1917' }}>
+                <p className="text-2xl font-semibold" style={{ color: '#0a0a0a' }}>
                   {value ?? '—'}
                 </p>
               )}
-              <p className="text-xs" style={{ color: '#78716C' }}>{label}</p>
+              <p className="text-xs" style={{ color: '#6b6b6b' }}>{label}</p>
             </div>
           </Link>
         ))}
@@ -111,16 +111,16 @@ export default function DashboardPage() {
         {/* Chat shortcut */}
         <div className="rounded-2xl p-5 flex flex-col justify-between" style={CARD_STYLE}>
           <div className="flex items-center gap-2 mb-3">
-            <MessageSquare size={16} style={{ color: '#C2714F' }} />
-            <h3 className="text-sm font-semibold" style={{ color: '#1C1917' }}>Chat</h3>
+            <MessageSquare size={16} style={{ color: '#000000' }} />
+            <h3 className="text-sm font-semibold" style={{ color: '#0a0a0a' }}>Chat</h3>
           </div>
-          <p className="text-sm mb-4" style={{ color: '#78716C' }}>
+          <p className="text-sm mb-4" style={{ color: '#6b6b6b' }}>
             Ask your companion anything. Every response goes through ESL.
           </p>
           <Link
             href="/dashboard/chat"
             className="inline-flex items-center gap-1.5 text-sm font-medium"
-            style={{ color: '#C2714F' }}
+            style={{ color: '#000000' }}
           >
             Open chat <ArrowRight size={14} />
           </Link>
@@ -130,10 +130,10 @@ export default function DashboardPage() {
         <div className="rounded-2xl p-5" style={CARD_STYLE}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <Target size={16} style={{ color: '#C2714F' }} />
-              <h3 className="text-sm font-semibold" style={{ color: '#1C1917' }}>Active Goals</h3>
+              <Target size={16} style={{ color: '#000000' }} />
+              <h3 className="text-sm font-semibold" style={{ color: '#0a0a0a' }}>Active Goals</h3>
             </div>
-            <Link href="/dashboard/goals" className="text-xs" style={{ color: '#C2714F' }}>
+            <Link href="/dashboard/goals" className="text-xs" style={{ color: '#000000' }}>
               View all
             </Link>
           </div>
@@ -142,13 +142,13 @@ export default function DashboardPage() {
               {[1, 2, 3].map(i => <Skeleton key={i} className="h-5 w-full" />)}
             </div>
           ) : recentGoals.length === 0 ? (
-            <p className="text-sm" style={{ color: '#A8A29E' }}>No active goals yet.</p>
+            <p className="text-sm" style={{ color: '#9e9e9e' }}>No active goals yet.</p>
           ) : (
             <ul className="space-y-2">
               {recentGoals.map(g => (
                 <li key={g.id} className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: '#4A7C59' }} />
-                  <span className="text-sm truncate" style={{ color: '#1C1917' }}>{g.title}</span>
+                  <span className="text-sm truncate" style={{ color: '#0a0a0a' }}>{g.title}</span>
                 </li>
               ))}
             </ul>
@@ -160,10 +160,10 @@ export default function DashboardPage() {
       <div className="rounded-2xl p-5" style={CARD_STYLE}>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <Shield size={16} style={{ color: '#C2714F' }} />
-            <h3 className="text-sm font-semibold" style={{ color: '#1C1917' }}>Recent ESL Decisions</h3>
+            <Shield size={16} style={{ color: '#000000' }} />
+            <h3 className="text-sm font-semibold" style={{ color: '#0a0a0a' }}>Recent ESL Decisions</h3>
           </div>
-          <Link href="/dashboard/transparency" className="text-xs" style={{ color: '#C2714F' }}>
+          <Link href="/dashboard/transparency" className="text-xs" style={{ color: '#000000' }}>
             View report
           </Link>
         </div>
@@ -172,7 +172,7 @@ export default function DashboardPage() {
             {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-6 w-20 rounded-full" />)}
           </div>
         ) : eslActivity.length === 0 ? (
-          <p className="text-sm" style={{ color: '#A8A29E' }}>No decisions recorded yet.</p>
+          <p className="text-sm" style={{ color: '#9e9e9e' }}>No decisions recorded yet.</p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {eslActivity.map((log, idx) => {

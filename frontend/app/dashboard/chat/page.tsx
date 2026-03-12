@@ -43,7 +43,7 @@ function ESLTag({ decision }: { decision: Message['esl_decision'] }) {
         {expanded ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
       </button>
       {expanded && (
-        <p className="mt-1.5 text-xs px-2" style={{ color: '#78716C' }}>
+        <p className="mt-1.5 text-xs px-2" style={{ color: '#6b6b6b' }}>
           {decision.reason}
         </p>
       )}
@@ -121,9 +121,9 @@ export default function ChatPage() {
     <div
       className="flex flex-col rounded-2xl overflow-hidden"
       style={{
-        background: '#FFFFFF',
-        border: '1px solid rgba(0,0,0,0.04)',
-        boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+        background: '#ffffff',
+        border: '1px solid rgba(0,0,0,0.08)',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
         height: 'calc(100vh - 56px - 48px - 24px)',
       }}
     >
@@ -137,7 +137,7 @@ export default function ChatPage() {
 
         {isEmpty && (
           <div className="flex flex-col items-center justify-center h-full gap-4">
-            <p className="text-sm" style={{ color: '#A8A29E' }}>
+            <p className="text-sm" style={{ color: '#9e9e9e' }}>
               Ask your companion anything
             </p>
             <div className="flex flex-wrap gap-2 justify-center">
@@ -146,7 +146,7 @@ export default function ChatPage() {
                   key={p}
                   onClick={() => send(p)}
                   className="px-3 py-1.5 rounded-full text-sm transition-colors hover:bg-black/5"
-                  style={{ border: '1px solid rgba(0,0,0,0.08)', color: '#78716C' }}
+                  style={{ border: '1px solid rgba(0,0,0,0.08)', color: '#6b6b6b' }}
                 >
                   {p}
                 </button>
@@ -160,7 +160,7 @@ export default function ChatPage() {
             {msg.role === 'user' ? (
               <div
                 className="max-w-[70%] px-4 py-2.5 rounded-2xl rounded-br-sm text-sm"
-                style={{ background: 'rgba(194,113,79,0.12)', color: '#1C1917' }}
+                style={{ background: 'rgba(0,0,0,0.06)', color: '#0a0a0a' }}
               >
                 {msg.content}
               </div>
@@ -168,8 +168,8 @@ export default function ChatPage() {
               <div
                 className="max-w-[70%] px-4 py-2.5 rounded-2xl rounded-bl-sm text-sm border-l-2"
                 style={{
-                  background: '#FAF8F5',
-                  color: '#1C1917',
+                  background: '#f9f9f9',
+                  color: '#0a0a0a',
                   borderLeftColor: msg.esl_decision
                     ? (ESL_COLORS[msg.esl_decision.status]?.leftBorder ?? '#E5E5E5')
                     : '#E5E5E5',
@@ -186,14 +186,14 @@ export default function ChatPage() {
           <div className="flex justify-start">
             <div
               className="px-4 py-3 rounded-2xl rounded-bl-sm"
-              style={{ background: '#FAF8F5', border: '1px solid rgba(0,0,0,0.06)' }}
+              style={{ background: '#f5f5f5', border: '1px solid rgba(0,0,0,0.06)' }}
             >
               <div className="flex gap-1">
                 {[0, 1, 2].map(i => (
                   <span
                     key={i}
                     className="w-1.5 h-1.5 rounded-full animate-bounce"
-                    style={{ background: '#A8A29E', animationDelay: `${i * 150}ms` }}
+                    style={{ background: '#9e9e9e', animationDelay: `${i * 150}ms` }}
                   />
                 ))}
               </div>
@@ -205,7 +205,7 @@ export default function ChatPage() {
       </div>
 
       {/* Input bar */}
-      <div className="px-4 py-3 border-t border-black/5" style={{ background: '#FAF8F5' }}>
+      <div className="px-4 py-3 border-t border-black/5" style={{ background: '#f5f5f5' }}>
         <div className="flex items-end gap-2">
           <textarea
             value={input}
@@ -224,9 +224,9 @@ export default function ChatPage() {
             rows={1}
             className="flex-1 resize-none rounded-xl px-4 py-2.5 text-sm outline-none"
             style={{
-              background: '#FFFFFF',
+              background: '#ffffff',
               border: '1px solid rgba(0,0,0,0.08)',
-              color: '#1C1917',
+              color: '#0a0a0a',
               maxHeight: '120px',
               overflowY: 'auto',
             }}
@@ -235,7 +235,7 @@ export default function ChatPage() {
             onClick={() => send(input)}
             disabled={!input.trim() || loading}
             className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-opacity disabled:opacity-40"
-            style={{ background: '#C2714F' }}
+            style={{ background: '#000000' }}
             aria-label="Send message"
           >
             <Send size={15} color="#FFFFFF" />
