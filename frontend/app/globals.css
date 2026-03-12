@@ -4,95 +4,37 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Brand Primary - Rich Terracotta #D2691E */
-  --primary: 25 75% 47%;
-  --primary-foreground: 0 0% 100%;
+  --primary: 0 0% 4%;                 /* #0a0a0a near-black */
+  --primary-foreground: 0 0% 100%;    /* white */
 
-  /* Warm Tan/Beige Scale - More Saturated */
-  --background: 35 40% 92%;         /* #F5EDE3 - Warm tan background */
-  --foreground: 25 30% 25%;         /* #5C4A3A - Rich brown text */
-  --card: 35 35% 95%;               /* #F8F3ED - Light warm tan card */
-  --card-foreground: 25 30% 25%;    /* #5C4A3A - Rich brown text */
-  --popover: 35 35% 95%;
-  --popover-foreground: 25 30% 25%;
-  --secondary: 35 30% 88%;          /* #E8DCC8 - Warm beige */
-  --secondary-foreground: 25 30% 30%; /* #6B5745 - Medium brown */
-  --muted: 35 25% 90%;              /* #EBE3D5 - Light warm beige */
-  --muted-foreground: 25 20% 45%;   /* #8C7A65 - Warm taupe text */
-  --accent: 35 30% 88%;
-  --accent-foreground: 25 30% 30%;
-  --destructive: 10 50% 50%;        /* #BF5C4F - Warm terracotta red */
+  --background: 0 0% 100%;            /* #ffffff pure white */
+  --foreground: 0 0% 4%;              /* #0a0a0a near-black */
+  --card: 0 0% 100%;                  /* #ffffff */
+  --card-foreground: 0 0% 4%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 4%;
+  --secondary: 0 0% 96%;              /* #f5f5f5 light gray */
+  --secondary-foreground: 0 0% 4%;
+  --muted: 0 0% 96%;
+  --muted-foreground: 0 0% 42%;       /* #6b6b6b */
+  --accent: 0 0% 96%;
+  --accent-foreground: 0 0% 4%;
+  --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 100%;
-  --border: 35 25% 80%;             /* #D9C9B3 - Warm tan border */
-  --input: 35 20% 85%;              /* #DFD3C3 - Warm tan input */
-  --ring: 25 75% 47%;               /* Match primary */
+  --border: 0 0% 90%;                 /* #e5e5e5 */
+  --input: 0 0% 96%;                  /* #f5f5f5 */
+  --ring: 0 0% 4%;
 
-  /* Chart colors - Warm palette */
-  --chart-1: 15 42% 56%;            /* Terracotta */
-  --chart-2: 140 25% 52%;           /* Sage green */
-  --chart-3: 35 35% 60%;            /* Golden tan */
-  --chart-4: 200 15% 58%;           /* Blue-grey */
-  --chart-5: 25 45% 50%;            /* Burnt orange */
+  --radius: 0.75rem;
 
-  /* Radius - increased for rounded design */
-  --radius: 0.75rem;                /* 12px base */
-
-  /* Warm tan/brown scale - More Saturated */
-  --gray-50: 35 40% 95%;            /* #F7EFE6 - Light warm cream */
-  --gray-100: 35 35% 90%;           /* #F0E4D4 - Soft warm tan */
-  --gray-200: 35 30% 82%;           /* #E3D2BB - Warm sand */
-  --gray-300: 35 25% 70%;           /* #CCBA9E - Tan */
-  --gray-400: 30 20% 55%;           /* #A89478 - Warm taupe */
-  --gray-500: 25 20% 45%;           /* #8C7A65 - Medium brown */
-  --gray-600: 25 25% 35%;           /* #6B5745 - Rich brown */
-  --gray-700: 25 30% 30%;           /* #5C4A3A - Dark brown */
-  --gray-800: 25 35% 20%;           /* #42352A - Deep brown */
-  --gray-900: 25 40% 15%;           /* #322619 - Very dark brown */
-
-  /* Sidebar specific - Warm tan tones */
-  --sidebar: 35 40% 92%;            /* #F5EDE3 */
-  --sidebar-foreground: 25 20% 45%;
-  --sidebar-primary: 25 75% 47%;
+  --sidebar: 0 0% 98%;                /* #fafafa */
+  --sidebar-foreground: 0 0% 42%;
+  --sidebar-primary: 0 0% 4%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 35 30% 88%;
-  --sidebar-accent-foreground: 25 30% 30%;
-  --sidebar-border: 35 25% 80%;
-  --sidebar-ring: 25 75% 47%;
-}
-
-.dark {
-  --primary: 15 42% 56%;
-  --primary-foreground: 0 0% 100%;
-  --background: 30 18% 11%;         /* #1F1C18 - Warm dark */
-  --foreground: 30 25% 98%;         /* #FAF9F7 - Warm white */
-  --card: 30 14% 17%;               /* #2F2C27 - Deep brown card */
-  --card-foreground: 30 25% 98%;
-  --popover: 30 14% 17%;
-  --popover-foreground: 30 25% 98%;
-  --secondary: 35 13% 26%;          /* #48443D - Dark taupe */
-  --secondary-foreground: 30 25% 98%;
-  --muted: 35 13% 26%;
-  --muted-foreground: 30 8% 66%;
-  --accent: 35 13% 26%;
-  --accent-foreground: 30 25% 98%;
-  --destructive: 10 35% 59%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 30 9% 36%;              /* #5C5850 - Muted brown border */
-  --input: 215 19% 35%;
-  --ring: 239 84% 67%;
-  --chart-1: 239 84% 67%;
-  --chart-2: 160 60% 45%;
-  --chart-3: 30 80% 55%;
-  --chart-4: 280 65% 60%;
-  --chart-5: 340 75% 55%;
-  --sidebar: 222 47% 11%;
-  --sidebar-foreground: 210 40% 96%;
-  --sidebar-primary: 239 84% 67%;
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 217 33% 17%;
-  --sidebar-accent-foreground: 210 40% 96%;
-  --sidebar-border: 215 19% 35%;
-  --sidebar-ring: 239 84% 67%;
+  --sidebar-accent: 0 0% 94%;
+  --sidebar-accent-foreground: 0 0% 4%;
+  --sidebar-border: 0 0% 90%;
+  --sidebar-ring: 0 0% 4%;
 }
 
 @theme inline {
@@ -115,11 +57,6 @@
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
-  --color-chart-1: hsl(var(--chart-1));
-  --color-chart-2: hsl(var(--chart-2));
-  --color-chart-3: hsl(var(--chart-3));
-  --color-chart-4: hsl(var(--chart-4));
-  --color-chart-5: hsl(var(--chart-5));
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -143,29 +80,16 @@
   }
 }
 
-/* Shimmer animation for skeleton loaders */
 @keyframes shimmer {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
-  }
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }
 
-/* ESL pulse animation (signature interaction) */
 @keyframes esl-pulse {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(1.5);
-    opacity: 0.5;
-  }
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.5); opacity: 0.5; }
 }
 
-/* Utility classes */
 .animate-shimmer {
   animation: shimmer 2s infinite;
   will-change: transform;
@@ -176,7 +100,6 @@
   will-change: transform, opacity;
 }
 
-/* Accessibility: Respect user motion preferences */
 @media (prefers-reduced-motion: reduce) {
   .animate-shimmer,
   .animate-esl-pulse {
