@@ -1,22 +1,15 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { transparencyApi, goalsApi, valuesApi } from '@/lib/api'
+import { transparencyApi, goalsApi, valuesApi, type Goal } from '@/lib/api'
 import Link from 'next/link'
 import { MessageSquare, Heart, Shield, ArrowRight, Target } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 
-interface Goal {
-  id: string
-  title: string
-  status: string
-  priority: number
-}
-
 interface ESLLog {
-  id: string
-  decision: { status: 'APPROVED' | 'VETOED' | 'MODIFIED'; reason: string }
-  timestamp: string
+  id?: string
+  decision?: { status: 'APPROVED' | 'VETOED' | 'MODIFIED'; reason: string }
+  timestamp?: string
 }
 
 const ESL_COLORS = {
@@ -55,7 +48,7 @@ export default function DashboardPage() {
         }
         if (values.status === 'fulfilled') setValueCount((values.value?.values ?? []).length)
         if (report.status === 'fulfilled') setEslCount(report.value?.total_decisions ?? 0)
-        if (logs.status === 'fulfilled') setEslActivity((logs.value?.logs ?? []).slice(0, 5) as ESLLog[])
+        if (logs.status === 'fulfilled') setEslActivity((logs.value?.logs ?? []).slice(0, 5) as unknown as ESLLog[])
       } finally {
         setLoading(false)
       }
