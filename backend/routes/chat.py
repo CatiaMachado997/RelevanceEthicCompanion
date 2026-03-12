@@ -5,7 +5,7 @@ Integrates: User Input → Orchestrator → ESL → LLM → Response
 All chat interactions go through ESL for ethical protection.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from datetime import datetime, UTC
@@ -14,6 +14,7 @@ from services.orchestrator_v2 import OrchestratorV2
 from services.context_manager import ContextManager
 from esl.models import ActionType
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
+from utils.rate_limit import limiter
 
 # Router
 router = APIRouter(prefix="/api/chat", tags=["Chat"])
@@ -90,8 +91,10 @@ async def get_available_llm_models():
 
 
 @router.post("/", response_model=ChatResponse)
+@limiter.limit("30/minute")
 async def send_message(
-    request: ChatRequest,
+    request: Request,
+    body: ChatRequest,
     user_id: str = Depends(get_current_user_id),
     orchestrator: OrchestratorV2 = Depends(get_orchestrator)
 ):
@@ -134,8 +137,8 @@ async def send_message(
         # Handle message through orchestrator (includes ESL evaluation)
         result = await orchestrator.handle_user_message(
             user_id=user_id,
-            message=request.message,
-            context=request.context
+            message=body.message,
+            context=body.context
         )
 
         default_reason = result.get("error", "Request failed before ESL decision")
@@ -146,7 +149,7 @@ async def send_message(
         }
 
         return ChatResponse(
-            message=result.get("message", request.message),
+            message=result.get("message", body.message),
             response=result.get("response"),
             executed=result.get("executed", False),
             esl_decision=esl_decision,
