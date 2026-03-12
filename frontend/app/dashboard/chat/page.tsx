@@ -209,7 +209,11 @@ export default function ChatPage() {
         <div className="flex items-end gap-2">
           <textarea
             value={input}
-            onChange={e => setInput(e.target.value)}
+            onChange={e => {
+              setInput(e.target.value)
+              e.target.style.height = 'auto'
+              e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
+            }}
             onKeyDown={e => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
@@ -224,6 +228,7 @@ export default function ChatPage() {
               border: '1px solid rgba(0,0,0,0.08)',
               color: '#1C1917',
               maxHeight: '120px',
+              overflowY: 'auto',
             }}
           />
           <button
