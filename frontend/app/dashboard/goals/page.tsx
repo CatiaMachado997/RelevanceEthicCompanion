@@ -1,508 +1,344 @@
 'use client'
 
-import { useEffect, useState, useMemo, useCallback } from 'react'
-import { goalsApi, Goal } from '@/lib/api'
-import { motion } from 'framer-motion'
-import {
-  Plus,
-  Target,
-  CheckCircle2,
-  Pause,
-  Archive,
-  Pencil,
-  Trash2,
-  Calendar,
-} from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState, useEffect } from 'react'
+import { goalsApi, type Goal } from '@/lib/api'
+import { Plus, MoreHorizontal, Check, X, ChevronDown, ChevronRight } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { TopHeader } from '@/components/top-header'
-import { DragDropList } from '@/components/drag-drop-list'
 
-const STATUS_OPTIONS = ['active', 'completed', 'paused', 'archived'] as const
-type GoalStatus = typeof STATUS_OPTIONS[number]
+type GoalStatus = 'active' | 'completed' | 'paused' | 'archived'
 
-const statusConfig: Record<GoalStatus, { label: string; color: string; icon: typeof Target }> = {
-  active: {
-    label: 'Active',
-    color: 'bg-blue-100 text-blue-700 border-blue-200',
-    icon: Target,
-  },
-  completed: {
-    label: 'Completed',
-    color: 'bg-green-100 text-[#171717] border-[#E5E5E5]',
-    icon: CheckCircle2,
-  },
-  paused: {
-    label: 'Paused',
-    color: 'bg-yellow-100 text-yellow-700 border-yellow-200',
-    icon: Pause,
-  },
-  archived: {
-    label: 'Archived',
-    color: 'bg-gray-100 text-gray-500 border-gray-200',
-    icon: Archive,
-  },
+const STATUS_COLORS: Record<GoalStatus, { bg: string; text: string; border: string }> = {
+  active:    { bg: 'rgba(74,124,89,0.10)',   text: '#4A7C59', border: 'rgba(74,124,89,0.25)' },
+  completed: { bg: 'rgba(28,25,23,0.08)',    text: '#1C1917', border: 'rgba(28,25,23,0.15)' },
+  paused:    { bg: 'rgba(155,122,61,0.10)',  text: '#9B7A3D', border: 'rgba(155,122,61,0.25)' },
+  archived:  { bg: 'rgba(168,162,158,0.10)', text: '#A8A29E', border: 'rgba(168,162,158,0.25)' },
+}
+
+const PRIORITY_COLORS = ['#C2714F', '#9B7A3D', '#5B7FA6', '#4A7C59', '#A8A29E']
+
+const CARD_STYLE = {
+  background: '#FFFFFF',
+  border: '1px solid rgba(0,0,0,0.04)',
+  boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+}
+
+function StatusBadge({ status }: { status: GoalStatus }) {
+  const c = STATUS_COLORS[status] ?? STATUS_COLORS.active
+  return (
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium capitalize"
+      style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}
+    >
+      {status}
+    </span>
+  )
 }
 
 export default function GoalsPage() {
   const [goals, setGoals] = useState<Goal[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<string | null>('active')
-  const [isFormOpen, setIsFormOpen] = useState(false)
+  const [showCompleted, setShowCompleted] = useState(false)
+  const [sheetOpen, setSheetOpen] = useState(false)
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null)
-  const [deleteConfirm, setDeleteConfirm] = useState<Goal | null>(null)
-  const [submitting, setSubmitting] = useState(false)
-  const [isReordering, setIsReordering] = useState(false)
-  const [originalGoals, setOriginalGoals] = useState<Goal[]>([])
-  const [reorderError, setReorderError] = useState<string | null>(null)
+  const [openMenu, setOpenMenu] = useState<string | null>(null)
 
-  // Form state
   const [formTitle, setFormTitle] = useState('')
-  const [formDescription, setFormDescription] = useState('')
-  const [formPriority, setFormPriority] = useState('5')
-  const [formTargetDate, setFormTargetDate] = useState('')
+  const [formDesc, setFormDesc] = useState('')
+  const [formPriority, setFormPriority] = useState(5)
+  const [formDate, setFormDate] = useState('')
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    loadGoals()
-  }, [filter])
+    goalsApi.list()
+      .then(r => setGoals(r.goals ?? []))
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [])
 
-  const loadGoals = async () => {
-    try {
-      const response = await goalsApi.list(filter || undefined)
-      const loadedGoals = response.goals || []
-      setGoals(loadedGoals)
-      setOriginalGoals(loadedGoals) // Store for revert on error
-    } catch (error) {
-      console.error('Failed to load goals:', error)
-      setGoals([]) // Reset to empty array on error
-      setOriginalGoals([])
-    } finally {
-      setLoading(false)
-    }
-  }
+  const activeGoals = goals.filter(g => g.status === 'active' || g.status === 'paused')
+  const completedGoals = goals.filter(g => g.status === 'completed' || g.status === 'archived')
 
-  const openCreateForm = () => {
+  const openCreate = () => {
     setEditingGoal(null)
     setFormTitle('')
-    setFormDescription('')
-    setFormPriority('5')
-    setFormTargetDate('')
-    setIsFormOpen(true)
+    setFormDesc('')
+    setFormPriority(5)
+    setFormDate('')
+    setSheetOpen(true)
   }
 
-  const openEditForm = (goal: Goal) => {
-    setEditingGoal(goal)
-    setFormTitle(goal.title)
-    setFormDescription(goal.description || '')
-    setFormPriority(String(goal.priority))
-    setFormTargetDate(goal.target_date ? goal.target_date.split('T')[0] : '')
-    setIsFormOpen(true)
+  const openEdit = (g: Goal) => {
+    setEditingGoal(g)
+    setFormTitle(g.title)
+    setFormDesc(g.description ?? '')
+    setFormPriority(g.priority)
+    setFormDate(g.target_date ?? '')
+    setOpenMenu(null)
+    setSheetOpen(true)
   }
 
-  const handleSubmit = async () => {
+  const handleSave = async () => {
     if (!formTitle.trim()) return
-
-    setSubmitting(true)
+    setSaving(true)
     try {
-      const data = {
-        title: formTitle,
-        description: formDescription || undefined,
-        priority: parseInt(formPriority),
-        target_date: formTargetDate || undefined,
-      }
-
       if (editingGoal) {
-        await goalsApi.update(editingGoal.id, data)
+        const updated = await goalsApi.update(editingGoal.id, {
+          title: formTitle,
+          description: formDesc || undefined,
+          priority: formPriority,
+          target_date: formDate || undefined,
+        })
+        setGoals(prev => prev.map(g => g.id === editingGoal.id ? updated : g))
       } else {
-        await goalsApi.create(data)
+        const created = await goalsApi.create({
+          title: formTitle,
+          description: formDesc || undefined,
+          priority: formPriority,
+          target_date: formDate || undefined,
+        })
+        if (created) setGoals(prev => [...prev, created])
       }
-      setIsFormOpen(false)
-      await loadGoals()
-    } catch (error) {
-      console.error('Failed to save goal:', error)
+      setSheetOpen(false)
+    } catch (e) {
+      console.error(e)
     } finally {
-      setSubmitting(false)
+      setSaving(false)
     }
   }
 
-  const handleStatusChange = async (goal: Goal, newStatus: GoalStatus) => {
+  const handleComplete = async (id: string) => {
     try {
-      await goalsApi.update(goal.id, { status: newStatus })
-      await loadGoals()
-    } catch (error) {
-      console.error('Failed to update goal status:', error)
-    }
+      const updated = await goalsApi.update(id, { status: 'completed' })
+      setGoals(prev => prev.map(g => g.id === id ? updated : g))
+      setOpenMenu(null)
+    } catch (e) { console.error(e) }
   }
 
-  const handleDelete = async () => {
-    if (!deleteConfirm) return
-
-    setSubmitting(true)
+  const handleArchive = async (id: string) => {
     try {
-      await goalsApi.delete(deleteConfirm.id)
-      setDeleteConfirm(null)
-      await loadGoals()
-    } catch (error) {
-      console.error('Failed to delete goal:', error)
-    } finally {
-      setSubmitting(false)
-    }
+      await goalsApi.delete(id)
+      setGoals(prev => prev.map(g => g.id === id ? { ...g, status: 'archived' as GoalStatus } : g))
+      setOpenMenu(null)
+    } catch (e) { console.error(e) }
   }
 
-  const handleReorder = useCallback(async (reorderedGoals: Goal[]) => {
-    const previousGoals = goals  // Capture current state for this reorder
-    setGoals(reorderedGoals)
-    setIsReordering(true)
-    setReorderError(null)  // Clear any previous errors
-
-    try {
-      await goalsApi.reorder(reorderedGoals.map((g) => g.id))
-
-      // Update originalGoals after successful reorder
-      setOriginalGoals(reorderedGoals)
-    } catch (error) {
-      console.error('Reorder failed:', error)
-      setGoals(previousGoals)  // Revert to state at start of THIS reorder
-      setReorderError('Failed to save goal order. Please try again.')
-      // Clear error after 5 seconds
-      setTimeout(() => setReorderError(null), 5000)
-    } finally {
-      setIsReordering(false)
-    }
-  }, [goals])
-
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return null
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    })
-  }
-
-  const renderGoalCard = (goal: Goal, isDragging: boolean) => {
-    const index = goals.findIndex((g) => g.id === goal.id)
-    const config = statusConfig[goal.status]
-    const Icon = config.icon
-
+  function GoalRow({ goal }: { goal: Goal }) {
+    const dotColor = PRIORITY_COLORS[Math.min(goal.priority - 1, 4)]
+    const isCompleted = goal.status === 'completed'
     return (
-      <Card
-        className={`border-[#E5E5E5] rounded-lg shadow-md hover:shadow-md transition-shadow ${
-          isDragging ? 'cursor-grabbing' : 'cursor-grab'
-        }`}
+      <div
+        className="flex items-center gap-4 px-5 py-4 rounded-xl"
+        style={{ border: '1px solid rgba(0,0,0,0.04)', background: '#FFFFFF' }}
       >
-        <CardHeader className="pb-3">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl font-bold text-[#A3A3A3]">
-                {index + 1}
-              </span>
-              <div>
-                <CardTitle className="text-lg text-[#171717]">{goal.title}</CardTitle>
-                {goal.description && (
-                  <p className="text-sm text-[#525252] mt-1">
-                    {goal.description}
-                  </p>
-                )}
-              </div>
-            </div>
-            <Badge variant="outline" className={`${config.color} rounded-full`}>
-              <Icon className="h-3 w-3 mr-1" />
-              {config.label}
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center gap-4 text-sm text-[#525252]">
-              {goal.target_date && (
-                <span className="flex items-center gap-1">
-                  <Calendar className="h-4 w-4" />
-                  Target: {formatDate(goal.target_date)}
-                </span>
-              )}
-              <span>Priority: {goal.priority}</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {goal.status === 'active' && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-[#E5E5E5] text-[#171717] hover:bg-[#F5F5F5] hover:text-[#171717] rounded-lg"
-                  onClick={() => handleStatusChange(goal, 'completed')}
-                >
-                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                  Complete
-                </Button>
-              )}
-              {goal.status !== 'archived' && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-[#E5E5E5] text-[#525252] hover:bg-[#FAFAFA] rounded-lg"
-                  onClick={() => handleStatusChange(goal, 'archived')}
-                >
-                  <Archive className="h-3 w-3 mr-1" />
-                  Archive
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-[#E5E5E5] text-[#525252] hover:bg-[#FAFAFA] rounded-lg"
-                onClick={() => openEditForm(goal)}
+        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: dotColor }} />
+        <div className="flex-1 min-w-0">
+          <p
+            className="text-sm font-medium truncate"
+            style={{
+              color: '#1C1917',
+              textDecoration: isCompleted ? 'line-through' : 'none',
+              opacity: isCompleted ? 0.5 : 1,
+            }}
+          >
+            {goal.title}
+          </p>
+          {goal.description && (
+            <p className="text-xs mt-0.5 truncate" style={{ color: '#A8A29E' }}>{goal.description}</p>
+          )}
+        </div>
+        {goal.target_date && (
+          <span className="text-xs shrink-0 hidden sm:block" style={{ color: '#A8A29E' }}>
+            {new Date(goal.target_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          </span>
+        )}
+        <StatusBadge status={goal.status as GoalStatus} />
+        <div className="relative">
+          <button
+            onClick={e => { e.stopPropagation(); setOpenMenu(openMenu === goal.id ? null : goal.id) }}
+            className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-black/5 transition-colors"
+            aria-label="Goal actions"
+          >
+            <MoreHorizontal size={15} style={{ color: '#78716C' }} />
+          </button>
+          {openMenu === goal.id && (
+            <div
+              className="absolute right-0 top-8 z-10 w-36 rounded-xl py-1 text-sm shadow-lg"
+              style={{ background: '#FFFFFF', border: '1px solid rgba(0,0,0,0.08)' }}
+            >
+              <button
+                onClick={() => openEdit(goal)}
+                className="w-full text-left px-3 py-2 hover:bg-black/5 transition-colors"
+                style={{ color: '#1C1917' }}
               >
-                <Pencil className="h-3 w-3 mr-1" />
                 Edit
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-[#E5E5E5] text-red-600 hover:bg-red-50 hover:text-red-700 rounded-lg"
-                onClick={() => setDeleteConfirm(goal)}
+              </button>
+              {goal.status === 'active' && (
+                <button
+                  onClick={() => handleComplete(goal.id)}
+                  className="w-full text-left px-3 py-2 hover:bg-black/5 transition-colors"
+                  style={{ color: '#4A7C59' }}
+                >
+                  Mark complete
+                </button>
+              )}
+              <button
+                onClick={() => handleArchive(goal.id)}
+                className="w-full text-left px-3 py-2 hover:bg-black/5 transition-colors"
+                style={{ color: '#B04A3A' }}
               >
-                <Trash2 className="h-3 w-3 mr-1" />
-                Delete
-              </Button>
+                Archive
+              </button>
             </div>
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  // Calculate counts for sidebar
-  const goalCounts = useMemo(() => {
-    if (!goals || !Array.isArray(goals)) return {}
-    return goals.reduce((acc, g) => {
-      acc[g.status] = (acc[g.status] || 0) + 1
-      return acc
-    }, {} as Record<string, number>)
-  }, [goals])
-
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: { staggerChildren: 0.1 },
-    },
-  }
-
-  const itemVariants = {
-    hidden: { y: 20, opacity: 0 },
-    visible: { y: 0, opacity: 1 },
-  }
-
-  if (loading) {
-    return (
-      <>
-        <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-          <TopHeader />
-          <div className="flex-1 overflow-y-auto p-6 bg-white">
-            <div className="space-y-6 max-w-5xl">
-              <div className="flex flex-col space-y-2">
-                <Skeleton className="h-8 w-[200px]" />
-                <Skeleton className="h-4 w-[300px]" />
-              </div>
-              <div className="space-y-4">
-                {[1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-[140px] rounded-lg" />
-                ))}
-              </div>
-            </div>
-          </div>
-        </main>
-      </>
+          )}
+        </div>
+      </div>
     )
   }
 
   return (
-    <>
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <TopHeader />
-        <div className="flex-1 overflow-y-auto p-6 bg-white">
-          <motion.div
-            className="space-y-6 max-w-5xl"
-            variants={containerVariants}
-            initial="hidden"
-            animate="visible"
-          >
-            {/* Header */}
-            <div className="flex flex-col gap-1">
-              <h1 className="text-2xl font-bold tracking-tight text-[#171717]">Goals</h1>
-              <p className="text-[#525252]">Track what matters to you</p>
-            </div>
+    <div className="space-y-5" onClick={() => openMenu && setOpenMenu(null)}>
 
-            {/* Error Notification */}
-            {reorderError && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
-                {reorderError}
-              </div>
-            )}
-
-            {/* Goals List */}
-            {(!goals || goals.length === 0) ? (
-              <motion.div variants={itemVariants}>
-                <Card className="p-12 text-center border-[#E5E5E5] rounded-lg">
-                  <Target className="h-10 w-10 mx-auto text-[#A3A3A3]" />
-                  <h3 className="font-semibold mt-4 text-lg text-[#171717]">No goals yet</h3>
-                  <p className="text-[#525252] mt-2">
-                    Set your first goal to start tracking what matters to you.
-                  </p>
-                  <Button onClick={openCreateForm} className="mt-6 bg-[#171717] hover:bg-[#404040] rounded-full">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Your First Goal
-                  </Button>
-                </Card>
-              </motion.div>
-            ) : (
-              <DragDropList
-                items={goals}
-                onReorder={handleReorder}
-                getItemId={(goal) => goal.id}
-                renderItem={(goal, isDragging) => renderGoalCard(goal, isDragging)}
-              />
-            )}
-          </motion.div>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-semibold" style={{ color: '#1C1917' }}>Your Goals</h2>
+          <p className="text-sm mt-0.5" style={{ color: '#78716C' }}>
+            Goals inform ESL about your priorities.
+          </p>
         </div>
-      </main>
+        <button
+          onClick={e => { e.stopPropagation(); openCreate() }}
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-90"
+          style={{ background: '#C2714F', color: '#FFFFFF' }}
+        >
+          <Plus size={15} />
+          Add Goal
+        </button>
+      </div>
 
-      {/* Create/Edit Sheet */}
-      <Sheet open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <SheetContent>
-          <SheetHeader>
-            <SheetTitle>
-              {editingGoal ? 'Edit Goal' : 'Create New Goal'}
-            </SheetTitle>
-            <SheetDescription>
-              {editingGoal
-                ? 'Update your goal details.'
-                : 'Set a new goal to track your progress.'}
-            </SheetDescription>
-          </SheetHeader>
-          <div className="grid gap-4 py-6">
-            <div className="grid gap-2">
-              <Label htmlFor="title">Title</Label>
-              <Input
-                id="title"
-                placeholder="e.g., Launch MVP"
-                value={formTitle}
-                onChange={(e) => setFormTitle(e.target.value)}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="description">Description (optional)</Label>
-              <Textarea
-                id="description"
-                placeholder="Describe your goal..."
-                value={formDescription}
-                onChange={(e) => setFormDescription(e.target.value)}
-                rows={3}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="priority">Priority (1-10)</Label>
-              <Select value={formPriority} onValueChange={setFormPriority}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select priority" />
-                </SelectTrigger>
-                <SelectContent>
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((p) => (
-                    <SelectItem key={p} value={String(p)}>
-                      {p} {p === 1 ? '(Highest)' : p === 10 ? '(Lowest)' : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="target_date">Target Date (optional)</Label>
-              <Input
-                id="target_date"
-                type="date"
-                value={formTargetDate}
-                onChange={(e) => setFormTargetDate(e.target.value)}
-              />
-            </div>
-          </div>
-          <SheetFooter>
-            <Button
-              onClick={handleSubmit}
-              disabled={!formTitle.trim() || submitting}
-              className="!bg-[#D2691E] hover:!bg-[#B85A19] text-white"
-            >
-              {submitting
-                ? 'Saving...'
-                : editingGoal
-                ? 'Save Changes'
-                : 'Create Goal'}
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+      {/* Active goals section */}
+      <div className="rounded-2xl overflow-hidden" style={CARD_STYLE}>
+        <div className="px-5 py-3 border-b border-black/5">
+          <h3 className="text-xs font-medium uppercase tracking-wide" style={{ color: '#78716C' }}>
+            Active &amp; Paused
+          </h3>
+        </div>
+        <div className="p-3 space-y-2">
+          {loading ? (
+            [1, 2, 3].map(i => <Skeleton key={i} className="h-14 rounded-xl" />)
+          ) : activeGoals.length === 0 ? (
+            <p className="px-2 py-4 text-sm text-center" style={{ color: '#A8A29E' }}>
+              No active goals. Add one to get started.
+            </p>
+          ) : (
+            activeGoals.map(g => <GoalRow key={g.id} goal={g} />)
+          )}
+        </div>
+      </div>
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Goal</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete this goal? This action cannot be
-              undone.
-            </DialogDescription>
-          </DialogHeader>
-          {deleteConfirm && (
-            <div className="py-4">
-              <p className="font-medium">{deleteConfirm.title}</p>
-              {deleteConfirm.description && (
-                <p className="text-sm text-muted-foreground mt-1">
-                  {deleteConfirm.description}
-                </p>
-              )}
+      {/* Completed / archived section */}
+      {completedGoals.length > 0 && (
+        <div className="rounded-2xl overflow-hidden" style={CARD_STYLE}>
+          <button
+            onClick={e => { e.stopPropagation(); setShowCompleted(v => !v) }}
+            className="w-full flex items-center justify-between px-5 py-3 border-b border-black/5 hover:bg-black/[0.02] transition-colors"
+          >
+            <h3 className="text-xs font-medium uppercase tracking-wide" style={{ color: '#78716C' }}>
+              Completed &amp; Archived ({completedGoals.length})
+            </h3>
+            {showCompleted
+              ? <ChevronDown size={14} style={{ color: '#A8A29E' }} />
+              : <ChevronRight size={14} style={{ color: '#A8A29E' }} />
+            }
+          </button>
+          {showCompleted && (
+            <div className="p-3 space-y-2">
+              {completedGoals.map(g => <GoalRow key={g.id} goal={g} />)}
             </div>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteConfirm(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={submitting}
-            >
-              {submitting ? 'Deleting...' : 'Delete'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+        </div>
+      )}
+
+      {/* Slide-over sheet */}
+      {sheetOpen && (
+        <div className="fixed inset-0 z-50 flex" onClick={e => e.stopPropagation()}>
+          <div className="flex-1 bg-black/20 backdrop-blur-sm" onClick={() => setSheetOpen(false)} />
+          <div className="w-[400px] flex flex-col h-full shadow-2xl" style={{ background: '#FAF8F5' }}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-black/5">
+              <h3 className="text-sm font-semibold" style={{ color: '#1C1917' }}>
+                {editingGoal ? 'Edit Goal' : 'Add Goal'}
+              </h3>
+              <button onClick={() => setSheetOpen(false)} aria-label="Close sheet">
+                <X size={18} style={{ color: '#78716C' }} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#78716C' }}>Title</label>
+                <input
+                  type="text"
+                  value={formTitle}
+                  onChange={e => setFormTitle(e.target.value)}
+                  placeholder="e.g. Launch MVP"
+                  className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                  style={{ background: '#FFFFFF', border: '1px solid rgba(0,0,0,0.10)', color: '#1C1917' }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#78716C' }}>Description</label>
+                <textarea
+                  value={formDesc}
+                  onChange={e => setFormDesc(e.target.value)}
+                  placeholder="Optional details…"
+                  rows={3}
+                  className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-none"
+                  style={{ background: '#FFFFFF', border: '1px solid rgba(0,0,0,0.10)', color: '#1C1917' }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#78716C' }}>Priority (1 = highest)</label>
+                <input
+                  type="number" min={1} max={10}
+                  value={formPriority}
+                  onChange={e => setFormPriority(Number(e.target.value))}
+                  className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                  style={{ background: '#FFFFFF', border: '1px solid rgba(0,0,0,0.10)', color: '#1C1917' }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#78716C' }}>Target Date</label>
+                <input
+                  type="date"
+                  value={formDate}
+                  onChange={e => setFormDate(e.target.value)}
+                  className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                  style={{ background: '#FFFFFF', border: '1px solid rgba(0,0,0,0.10)', color: '#1C1917' }}
+                />
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-black/5 flex gap-2">
+              <button
+                onClick={() => setSheetOpen(false)}
+                className="flex-1 py-2 rounded-lg text-sm font-medium"
+                style={{ background: 'rgba(0,0,0,0.05)', color: '#78716C' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={!formTitle.trim() || saving}
+                className="flex-1 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5 transition-opacity disabled:opacity-50"
+                style={{ background: '#C2714F', color: '#FFFFFF' }}
+              >
+                <Check size={14} />
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
