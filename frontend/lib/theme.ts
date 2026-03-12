@@ -39,7 +39,7 @@ export const colors = {
   statusActive: '#4A7C59',
   statusActiveBg: 'rgba(74,124,89,0.10)',
   statusCompleted: '#1C1917',
-  statusCompletedBg: 'rgba(28,25,23,0.08)',
+  statusCompletedBg: 'rgba(28,25,23,0.10)',
   statusPaused: '#9B7A3D',
   statusPausedBg: 'rgba(155,122,61,0.10)',
   statusArchived: '#A8A29E',
