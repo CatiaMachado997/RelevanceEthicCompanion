@@ -13,7 +13,6 @@ import {
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
   Select,
@@ -44,17 +43,17 @@ interface AuditLog {
 const decisionConfig = {
   APPROVED: {
     label: 'Approved',
-    color: 'bg-green-100 text-[#171717] border-[#E5E5E5]',
+    color: 'bg-[#f0fdf4] text-[#166534] border-[#bbf7d0]',
     icon: CheckCircle2,
   },
   VETOED: {
     label: 'Vetoed',
-    color: 'bg-red-100 text-red-700 border-red-200',
+    color: 'bg-[#fef2f2] text-[#991b1b] border-[#fecaca]',
     icon: ShieldAlert,
   },
   MODIFIED: {
     label: 'Modified',
-    color: 'bg-yellow-100 text-yellow-700 border-yellow-200',
+    color: 'bg-[#fefce8] text-[#854d0e] border-[#fef08a]',
     icon: FileEdit,
   },
 }
@@ -135,11 +134,11 @@ export default function TransparencyPage() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 {[1, 2, 3, 4].map((i) => (
-                  <Skeleton key={i} className="h-[120px] rounded-lg" />
+                  <Skeleton key={i} className="h-[120px] rounded-2xl" />
                 ))}
               </div>
-              <Skeleton className="h-[200px] rounded-lg" />
-              <Skeleton className="h-[400px] rounded-lg" />
+              <Skeleton className="h-[200px] rounded-2xl" />
+              <Skeleton className="h-[400px] rounded-2xl" />
             </div>
           </div>
         </main>
@@ -160,8 +159,8 @@ export default function TransparencyPage() {
           >
             {/* Header */}
             <div className="flex flex-col gap-1">
-              <h1 className="text-2xl font-bold tracking-tight text-[#171717]">Transparency</h1>
-              <p className="text-[#525252]">
+              <h1 className="text-2xl font-bold tracking-tight text-[#0a0a0a]">Transparency</h1>
+              <p className="text-[#6b6b6b]">
                 See how ESL protects your boundaries
               </p>
             </div>
@@ -170,72 +169,72 @@ export default function TransparencyPage() {
             {report && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                 <motion.div variants={itemVariants} className="h-full">
-                  <Card className="border-[#E5E5E5] rounded-lg shadow-md h-full">
+                  <Card className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)] h-full">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium text-[#525252]">
+                      <CardTitle className="text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">
                         Total Decisions
                       </CardTitle>
-                      <div className="w-8 h-8 rounded-lg bg-[#FAFAFA] flex items-center justify-center">
-                        <Activity className="h-4 w-4 text-[#171717]" />
+                      <div className="w-8 h-8 rounded-xl bg-[#f5f5f5] flex items-center justify-center">
+                        <Activity className="h-4 w-4 text-[#0a0a0a]" />
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold text-[#171717]">{report.total_decisions}</div>
-                      <p className="text-xs text-[#525252]">
+                      <div className="text-2xl font-bold text-[#0a0a0a]">{report.total_decisions}</div>
+                      <p className="text-xs text-[#9e9e9e]">
                         Last {days} days
                       </p>
                     </CardContent>
                   </Card>
                 </motion.div>
                 <motion.div variants={itemVariants} className="h-full">
-                  <Card className="border-[#E5E5E5] rounded-lg shadow-md h-full">
+                  <Card className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)] h-full">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium text-[#525252]">
+                      <CardTitle className="text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">
                         Approval Rate
                       </CardTitle>
-                      <div className="w-8 h-8 rounded-lg bg-[#F5F5F5] flex items-center justify-center">
-                        <CheckCircle2 className="h-4 w-4 text-[#171717]" />
+                      <div className="w-8 h-8 rounded-xl bg-[#f5f5f5] flex items-center justify-center">
+                        <CheckCircle2 className="h-4 w-4 text-[#0a0a0a]" />
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold text-[#171717]">
+                      <div className="text-2xl font-bold text-[#0a0a0a]">
                         {(report.approval_rate * 100).toFixed(0)}%
                       </div>
-                      <p className="text-xs text-[#525252]">
+                      <p className="text-xs text-[#9e9e9e]">
                         {report.approved_count} approved
                       </p>
                     </CardContent>
                   </Card>
                 </motion.div>
                 <motion.div variants={itemVariants} className="h-full">
-                  <Card className="border-[#E5E5E5] rounded-lg shadow-md h-full">
+                  <Card className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)] h-full">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium text-[#525252]">Protected</CardTitle>
-                      <div className="w-8 h-8 rounded-lg bg-[#F5F5F5] flex items-center justify-center">
-                        <ShieldAlert className="h-4 w-4 text-[#525252]" />
+                      <CardTitle className="text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">Protected</CardTitle>
+                      <div className="w-8 h-8 rounded-xl bg-[#f5f5f5] flex items-center justify-center">
+                        <ShieldAlert className="h-4 w-4 text-[#6b6b6b]" />
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold text-[#525252]">
+                      <div className="text-2xl font-bold text-[#0a0a0a]">
                         {report.vetoed_count}
                       </div>
-                      <p className="text-xs text-[#525252]">Actions blocked</p>
+                      <p className="text-xs text-[#9e9e9e]">Actions blocked</p>
                     </CardContent>
                   </Card>
                 </motion.div>
                 <motion.div variants={itemVariants} className="h-full">
-                  <Card className="border-[#E5E5E5] rounded-lg shadow-md h-full">
+                  <Card className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)] h-full">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium text-[#525252]">Modified</CardTitle>
-                      <div className="w-8 h-8 rounded-lg bg-[#171717]/10 flex items-center justify-center">
-                        <FileEdit className="h-4 w-4 text-[#171717]" />
+                      <CardTitle className="text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">Modified</CardTitle>
+                      <div className="w-8 h-8 rounded-xl bg-[#f5f5f5] flex items-center justify-center">
+                        <FileEdit className="h-4 w-4 text-[#0a0a0a]" />
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold text-[#171717]">
+                      <div className="text-2xl font-bold text-[#0a0a0a]">
                         {report.modified_count}
                       </div>
-                      <p className="text-xs text-[#525252]">Actions adjusted</p>
+                      <p className="text-xs text-[#9e9e9e]">Actions adjusted</p>
                     </CardContent>
                   </Card>
                 </motion.div>
@@ -245,13 +244,13 @@ export default function TransparencyPage() {
             {/* ESL Insights */}
             {insights.length > 0 && (
               <motion.div variants={itemVariants}>
-                <Card className="bg-gradient-to-br from-[#171717]/5 to-[#171717]/10 border-[#171717]/20 rounded-lg">
+                <Card className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-[#fafafa] shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-[#171717]">
+                    <CardTitle className="flex items-center gap-2 text-[#0a0a0a] text-base">
                       <ShieldCheck className="h-4 w-4" />
                       ESL Insights
                     </CardTitle>
-                    <CardDescription className="text-[#525252]">
+                    <CardDescription className="text-[#6b6b6b]">
                       Recent observations from the safeguard layer
                     </CardDescription>
                   </CardHeader>
@@ -260,9 +259,9 @@ export default function TransparencyPage() {
                       {insights.map((insight, i) => (
                         <li
                           key={i}
-                          className="flex items-start gap-3 text-[#525252] text-sm"
+                          className="flex items-start gap-3 text-[#6b6b6b] text-sm"
                         >
-                          <div className="mt-1.5 h-1.5 w-1.5 rounded-full bg-[#171717] shrink-0" />
+                          <div className="mt-1.5 h-1.5 w-1.5 rounded-full bg-[#0a0a0a] shrink-0" />
                           {insight}
                         </li>
                       ))}
@@ -274,11 +273,11 @@ export default function TransparencyPage() {
 
             {/* Audit Log */}
             <motion.div variants={itemVariants}>
-              <Card className="border-[#E5E5E5] rounded-lg shadow-md">
+              <Card className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
                 <CardHeader>
                   <div>
-                    <CardTitle className="text-[#171717]">Audit Log</CardTitle>
-                    <CardDescription className="text-[#525252]">
+                    <CardTitle className="text-[#0a0a0a]">Audit Log</CardTitle>
+                    <CardDescription className="text-[#6b6b6b]">
                       Detailed record of all ESL decisions
                     </CardDescription>
                   </div>
@@ -286,9 +285,9 @@ export default function TransparencyPage() {
                 <CardContent>
                   {logs.length === 0 ? (
                     <div className="text-center py-12">
-                      <Activity className="h-10 w-10 mx-auto text-[#A3A3A3]" />
-                      <h3 className="font-semibold mt-4 text-lg text-[#171717]">No logs found</h3>
-                      <p className="text-[#525252] mt-2">
+                      <Activity className="h-10 w-10 mx-auto text-[#9e9e9e]" />
+                      <h3 className="font-semibold mt-4 text-lg text-[#0a0a0a]">No logs found</h3>
+                      <p className="text-[#6b6b6b] mt-2">
                         {statusFilter
                           ? `No ${statusFilter.toLowerCase()} decisions in the last ${days} days.`
                           : `No ESL decisions in the last ${days} days.`}
@@ -298,17 +297,17 @@ export default function TransparencyPage() {
                     <div className="overflow-x-auto">
                       <table className="w-full">
                         <thead>
-                          <tr className="border-b border-[#E5E5E5]">
-                            <th className="text-left py-3 px-4 text-sm font-medium text-[#525252]">
+                          <tr className="border-b border-[rgba(0,0,0,0.06)]">
+                            <th className="text-left py-3 px-4 text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">
                               Time
                             </th>
-                            <th className="text-left py-3 px-4 text-sm font-medium text-[#525252]">
+                            <th className="text-left py-3 px-4 text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">
                               Action
                             </th>
-                            <th className="text-left py-3 px-4 text-sm font-medium text-[#525252]">
+                            <th className="text-left py-3 px-4 text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">
                               Decision
                             </th>
-                            <th className="text-left py-3 px-4 text-sm font-medium text-[#525252]">
+                            <th className="text-left py-3 px-4 text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">
                               Reason
                             </th>
                           </tr>
@@ -318,23 +317,23 @@ export default function TransparencyPage() {
                             const config = decisionConfig[log.decision_status]
                             const Icon = config.icon
                             return (
-                              <tr key={log.id} className="border-b border-[#E5E5E5] last:border-0">
+                              <tr key={log.id} className="border-b border-[rgba(0,0,0,0.04)] last:border-0">
                                 <td className="py-3 px-4 text-sm">
-                                  <div className="flex items-center gap-2 text-[#525252]">
+                                  <div className="flex items-center gap-2 text-[#6b6b6b]">
                                     <Clock className="h-3 w-3" />
                                     {formatTime(log.timestamp)}
                                   </div>
                                 </td>
-                                <td className="py-3 px-4 text-sm font-medium text-[#171717]">
+                                <td className="py-3 px-4 text-sm font-medium text-[#0a0a0a]">
                                   {formatActionType(log.action_type)}
                                 </td>
                                 <td className="py-3 px-4">
-                                  <Badge variant="outline" className={`${config.color} rounded-full`}>
+                                  <Badge variant="outline" className={`${config.color} rounded-full px-2.5 py-0.5 text-xs`}>
                                     <Icon className="h-3 w-3 mr-1" />
                                     {config.label}
                                   </Badge>
                                 </td>
-                                <td className="py-3 px-4 text-sm text-[#525252] max-w-xs truncate">
+                                <td className="py-3 px-4 text-sm text-[#6b6b6b] max-w-xs truncate">
                                   {log.reason}
                                 </td>
                               </tr>

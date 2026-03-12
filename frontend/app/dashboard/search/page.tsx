@@ -149,30 +149,30 @@ export default function SearchPage() {
   const getTypeColor = (type: string) => {
     switch (type) {
       case "value":
-        return "bg-[#F5F5F5] text-[#171717]"
+        return "bg-[#f5f5f5] text-[#0a0a0a]"
       case "goal":
-        return "bg-[#F5F5F5] text-[#171717]"
+        return "bg-[#f5f5f5] text-[#0a0a0a]"
       case "chat":
-        return "bg-[#F5F5F5] text-[#171717]"
+        return "bg-[#f5f5f5] text-[#0a0a0a]"
       default:
-        return "bg-[#FAFAFA] text-[#525252]"
+        return "bg-[#fafafa] text-[#6b6b6b]"
     }
   }
 
   return (
-    <div className="flex-1 overflow-auto bg-[#FAFAFA] p-4 md:p-6">
+    <div className="flex-1 overflow-auto bg-white p-4 md:p-6">
       <div className="mx-auto max-w-4xl space-y-4 md:space-y-6">
         {/* Header */}
-        <div className="space-y-2">
-          <h1 className="text-2xl font-semibold text-[#171717]">Search</h1>
-          <p className="text-sm text-[#525252]">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold tracking-tight text-[#0a0a0a]">Search</h1>
+          <p className="text-sm text-[#6b6b6b]">
             Search across your values, goals, and chat history
           </p>
         </div>
 
         {/* Search Input */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#A3A3A3]" />
+          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9e9e9e]" />
           <input
             type="text"
             value={query}
@@ -183,20 +183,20 @@ export default function SearchPage() {
               }
             }}
             placeholder="Search..."
-            className="h-10 w-full rounded-lg border border-[#E5E5E5] bg-white pl-9 pr-9 text-sm text-[#171717] placeholder:text-[#A3A3A3] focus:border-[#171717] focus:outline-none focus:ring-1 focus:ring-[#171717]"
+            className="h-11 w-full rounded-xl border border-[rgba(0,0,0,0.12)] bg-white pl-10 pr-10 text-sm text-[#0a0a0a] placeholder:text-[#9e9e9e] focus:border-[#0a0a0a] focus:outline-none focus:ring-1 focus:ring-[#0a0a0a]"
           />
           {query && (
             <button
               onClick={handleClear}
-              className="absolute right-3 top-1/2 -translate-y-1/2 rounded hover:bg-[#F5F5F5]"
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-0.5 hover:bg-[#f5f5f5]"
             >
-              <X className="h-4 w-4 text-[#A3A3A3]" />
+              <X className="h-4 w-4 text-[#9e9e9e]" />
             </button>
           )}
         </div>
 
         {/* Filter Buttons */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {(["all", "values", "goals", "chat"] as FilterType[]).map((filter) => (
             <button
               key={filter}
@@ -204,10 +204,10 @@ export default function SearchPage() {
                 setFilterType(filter)
                 if (query) performSearch(query)
               }}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+              className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
                 filterType === filter
-                  ? "bg-[#171717] text-white"
-                  : "bg-white text-[#525252] hover:bg-[#F5F5F5] border border-[#E5E5E5]"
+                  ? "bg-[#000000] text-white"
+                  : "border border-[rgba(0,0,0,0.10)] text-[#6b6b6b] bg-white hover:bg-[#f5f5f5]"
               }`}
             >
               {filter.charAt(0).toUpperCase() + filter.slice(1)}
@@ -218,55 +218,55 @@ export default function SearchPage() {
         {/* Results */}
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#E5E5E5] border-t-[#171717]" />
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-[rgba(0,0,0,0.08)] border-t-[#0a0a0a]" />
           </div>
         ) : results.length > 0 ? (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-medium text-[#525252]">
+              <p className="text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">
                 {results.length} result{results.length !== 1 ? "s" : ""}
-              </h2>
+              </p>
             </div>
             <div className="space-y-2">
               {results.map((result) => (
                 <div
                   key={`${result.type}-${result.id}`}
-                  className="rounded-lg border border-[#E5E5E5] bg-white p-4 transition-shadow hover:shadow-md"
+                  className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-shadow hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)]"
                 >
                   <div className="flex items-start gap-3">
-                    <div className="mt-0.5 text-[#525252]">
+                    <div className="mt-0.5 text-[#6b6b6b]">
                       {getIcon(result.type)}
                     </div>
                     <div className="flex-1 space-y-1">
                       <div className="flex items-center gap-2">
                         <span
-                          className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium ${getTypeColor(
+                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${getTypeColor(
                             result.type
                           )}`}
                         >
                           {result.type}
                         </span>
                         {result.status && (
-                          <span className="text-xs text-[#A3A3A3]">
+                          <span className="text-xs text-[#9e9e9e]">
                             {result.status}
                           </span>
                         )}
                       </div>
-                      <h3 className="font-medium text-[#171717]">
+                      <h3 className="font-medium text-[#0a0a0a]">
                         {result.title}
                       </h3>
                       {result.description && (
-                        <p className="text-sm text-[#525252] line-clamp-2">
+                        <p className="text-sm text-[#6b6b6b] line-clamp-2">
                           {result.description}
                         </p>
                       )}
                       {result.content && result.type === "chat" && (
-                        <p className="text-sm text-[#525252] line-clamp-2">
+                        <p className="text-sm text-[#6b6b6b] line-clamp-2">
                           {result.content}
                         </p>
                       )}
                       {result.created_at && (
-                        <div className="flex items-center gap-1 text-xs text-[#A3A3A3]">
+                        <div className="flex items-center gap-1 text-xs text-[#9e9e9e]">
                           <Clock className="h-3 w-3" />
                           {new Date(result.created_at).toLocaleDateString()}
                         </div>
@@ -279,11 +279,11 @@ export default function SearchPage() {
           </div>
         ) : query ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <Search className="mb-3 h-8 w-8 text-[#E5E5E5]" />
-            <p className="text-sm font-medium text-[#525252]">
+            <Search className="mb-3 h-8 w-8 text-[#9e9e9e]" />
+            <p className="text-sm font-medium text-[#0a0a0a]">
               No results found
             </p>
-            <p className="text-xs text-[#A3A3A3]">
+            <p className="text-xs text-[#9e9e9e]">
               Try adjusting your search or filters
             </p>
           </div>
@@ -292,18 +292,18 @@ export default function SearchPage() {
         {/* Recent Searches */}
         {!query && recentSearches.length > 0 && (
           <div className="space-y-3">
-            <h2 className="text-sm font-medium text-[#525252]">
+            <p className="text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">
               Recent Searches
-            </h2>
+            </p>
             <div className="space-y-2">
               {recentSearches.map((search, index) => (
                 <button
                   key={index}
                   onClick={() => handleRecentClick(search)}
-                  className="flex w-full items-center gap-3 rounded-lg border border-[#E5E5E5] bg-white p-3 text-left transition-shadow hover:shadow-md"
+                  className="flex w-full items-center gap-3 rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white p-3 text-left shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-shadow hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)]"
                 >
-                  <Clock className="h-4 w-4 text-[#A3A3A3]" />
-                  <span className="text-sm text-[#171717]">{search}</span>
+                  <Clock className="h-4 w-4 text-[#9e9e9e]" />
+                  <span className="text-sm text-[#0a0a0a]">{search}</span>
                 </button>
               ))}
             </div>
@@ -313,13 +313,13 @@ export default function SearchPage() {
         {/* Empty State */}
         {!query && recentSearches.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="mb-4 rounded-full bg-[#F5F5F5] p-4">
-              <Search className="h-8 w-8 text-[#A3A3A3]" />
+            <div className="mb-4 rounded-full bg-[#f5f5f5] p-4">
+              <Search className="h-8 w-8 text-[#9e9e9e]" />
             </div>
-            <h3 className="mb-1 text-sm font-medium text-[#171717]">
+            <h3 className="mb-1 text-sm font-medium text-[#0a0a0a]">
               Start searching
             </h3>
-            <p className="text-xs text-[#525252]">
+            <p className="text-xs text-[#6b6b6b]">
               Search across all your values, goals, and chat history
             </p>
           </div>
