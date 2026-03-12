@@ -1,5 +1,5 @@
-import { IconSidebar } from "@/components/icon-sidebar"
-import { TopHeader } from "@/components/top-header"
+import { SidebarProvider, SidebarNav } from "@/components/sidebar"
+import { TopBar } from "@/components/top-bar"
 
 export default function DashboardLayout({
   children,
@@ -7,14 +7,18 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex h-screen bg-background">
-      {/* Icon Sidebar - 80px */}
-      <IconSidebar />
-
-      {/* Main Content Area */}
-      <div className="flex flex-1 min-w-0 overflow-hidden">
-        {children}
+    <SidebarProvider>
+      <div className="flex h-screen" style={{ background: "#FAF8F5" }}>
+        <SidebarNav />
+        <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
+          <TopBar />
+          <main className="flex-1 overflow-y-auto">
+            <div className="max-w-[1100px] mx-auto px-8 py-6">
+              {children}
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
+    </SidebarProvider>
   )
 }
