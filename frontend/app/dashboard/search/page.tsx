@@ -59,16 +59,15 @@ export default function SearchPage() {
         const valuesData = await valuesApi.list()
         const matchedValues = valuesData.values.filter((value) =>
           value.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          value.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          value.context?.toLowerCase().includes(searchQuery.toLowerCase())
+          value.value.toLowerCase().includes(searchQuery.toLowerCase())
         )
         searchResults.push(
           ...matchedValues.map((v) => ({
             id: v.id,
             type: "value" as const,
             title: v.type,
-            description: v.content,
-            content: v.context,
+            description: v.value,
+            content: undefined,
             created_at: v.created_at,
           }))
         )
@@ -86,7 +85,7 @@ export default function SearchPage() {
             id: g.id,
             type: "goal" as const,
             title: g.title,
-            description: g.description,
+            description: g.description ?? undefined,
             created_at: g.created_at,
             status: g.status,
           }))
