@@ -94,7 +94,7 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="p-4">
         <div className="flex items-center space-x-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-#525252 to-purple-600 shrink-0">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#000000] shrink-0">
             <Shield className="h-5 w-5 text-white" />
           </div>
           <div className="flex flex-col overflow-hidden group-data-[collapsible=icon]:hidden transition-all duration-300">
@@ -132,7 +132,7 @@ export function AppSidebar() {
               <DropdownMenuTrigger asChild>
                 <SidebarMenuButton className="h-12">
                    <Avatar className="h-8 w-8 rounded-lg">
-                        <AvatarFallback className="bg-gradient-to-br from-#525252 to-purple-600 text-white rounded-lg">
+                        <AvatarFallback className="bg-[#000000] text-white rounded-lg">
                           {user?.email ? getInitials(user.email) : "U"}
                         </AvatarFallback>
                    </Avatar>
