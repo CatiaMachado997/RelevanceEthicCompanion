@@ -9,17 +9,17 @@ type GoalStatus = 'active' | 'completed' | 'paused' | 'archived'
 
 const STATUS_COLORS: Record<GoalStatus, { bg: string; text: string; border: string }> = {
   active:    { bg: 'rgba(74,124,89,0.10)',   text: '#4A7C59', border: 'rgba(74,124,89,0.25)' },
-  completed: { bg: 'rgba(28,25,23,0.08)',    text: '#1C1917', border: 'rgba(28,25,23,0.15)' },
+  completed: { bg: 'rgba(10,10,10,0.08)',    text: '#0a0a0a', border: 'rgba(10,10,10,0.15)' },
   paused:    { bg: 'rgba(155,122,61,0.10)',  text: '#9B7A3D', border: 'rgba(155,122,61,0.25)' },
-  archived:  { bg: 'rgba(168,162,158,0.10)', text: '#A8A29E', border: 'rgba(168,162,158,0.25)' },
+  archived:  { bg: 'rgba(158,158,158,0.10)', text: '#9e9e9e', border: 'rgba(158,158,158,0.25)' },
 }
 
-const PRIORITY_COLORS = ['#C2714F', '#9B7A3D', '#5B7FA6', '#4A7C59', '#A8A29E']
+const PRIORITY_COLORS = ['#000000', '#9B7A3D', '#5B7FA6', '#4A7C59', '#9e9e9e']
 
 const CARD_STYLE = {
-  background: '#FFFFFF',
-  border: '1px solid rgba(0,0,0,0.04)',
-  boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+  background: '#ffffff',
+  border: '1px solid rgba(0,0,0,0.08)',
+  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
 }
 
 function StatusBadge({ status }: { status: GoalStatus }) {
@@ -128,14 +128,14 @@ export default function GoalsPage() {
     return (
       <div
         className="flex items-center gap-4 px-5 py-4 rounded-xl"
-        style={{ border: '1px solid rgba(0,0,0,0.04)', background: '#FFFFFF' }}
+        style={{ border: '1px solid rgba(0,0,0,0.08)', background: '#ffffff' }}
       >
         <span className="w-2 h-2 rounded-full shrink-0" style={{ background: dotColor }} />
         <div className="flex-1 min-w-0">
           <p
             className="text-sm font-medium truncate"
             style={{
-              color: '#1C1917',
+              color: '#0a0a0a',
               textDecoration: isCompleted ? 'line-through' : 'none',
               opacity: isCompleted ? 0.5 : 1,
             }}
@@ -143,11 +143,11 @@ export default function GoalsPage() {
             {goal.title}
           </p>
           {goal.description && (
-            <p className="text-xs mt-0.5 truncate" style={{ color: '#A8A29E' }}>{goal.description}</p>
+            <p className="text-xs mt-0.5 truncate" style={{ color: '#9e9e9e' }}>{goal.description}</p>
           )}
         </div>
         {goal.target_date && (
-          <span className="text-xs shrink-0 hidden sm:block" style={{ color: '#A8A29E' }}>
+          <span className="text-xs shrink-0 hidden sm:block" style={{ color: '#9e9e9e' }}>
             {new Date(goal.target_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
           </span>
         )}
@@ -158,17 +158,17 @@ export default function GoalsPage() {
             className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-black/5 transition-colors"
             aria-label="Goal actions"
           >
-            <MoreHorizontal size={15} style={{ color: '#78716C' }} />
+            <MoreHorizontal size={15} style={{ color: '#6b6b6b' }} />
           </button>
           {openMenu === goal.id && (
             <div
               className="absolute right-0 top-8 z-10 w-36 rounded-xl py-1 text-sm shadow-lg"
-              style={{ background: '#FFFFFF', border: '1px solid rgba(0,0,0,0.08)' }}
+              style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.08)' }}
             >
               <button
                 onClick={() => openEdit(goal)}
                 className="w-full text-left px-3 py-2 hover:bg-black/5 transition-colors"
-                style={{ color: '#1C1917' }}
+                style={{ color: '#0a0a0a' }}
               >
                 Edit
               </button>
@@ -201,15 +201,15 @@ export default function GoalsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold" style={{ color: '#1C1917' }}>Your Goals</h2>
-          <p className="text-sm mt-0.5" style={{ color: '#78716C' }}>
+          <h2 className="text-base font-semibold" style={{ color: '#0a0a0a' }}>Your Goals</h2>
+          <p className="text-sm mt-0.5" style={{ color: '#6b6b6b' }}>
             Goals inform ESL about your priorities.
           </p>
         </div>
         <button
           onClick={e => { e.stopPropagation(); openCreate() }}
           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-90"
-          style={{ background: '#C2714F', color: '#FFFFFF' }}
+          style={{ background: '#000000', color: '#ffffff' }}
         >
           <Plus size={15} />
           Add Goal
@@ -219,7 +219,7 @@ export default function GoalsPage() {
       {/* Active goals section */}
       <div className="rounded-2xl overflow-hidden" style={CARD_STYLE}>
         <div className="px-5 py-3 border-b border-black/5">
-          <h3 className="text-xs font-medium uppercase tracking-wide" style={{ color: '#78716C' }}>
+          <h3 className="text-xs font-medium uppercase tracking-wide" style={{ color: '#6b6b6b' }}>
             Active &amp; Paused
           </h3>
         </div>
@@ -227,7 +227,7 @@ export default function GoalsPage() {
           {loading ? (
             [1, 2, 3].map(i => <Skeleton key={i} className="h-14 rounded-xl" />)
           ) : activeGoals.length === 0 ? (
-            <p className="px-2 py-4 text-sm text-center" style={{ color: '#A8A29E' }}>
+            <p className="px-2 py-4 text-sm text-center" style={{ color: '#9e9e9e' }}>
               No active goals. Add one to get started.
             </p>
           ) : (
@@ -243,12 +243,12 @@ export default function GoalsPage() {
             onClick={e => { e.stopPropagation(); setShowCompleted(v => !v) }}
             className="w-full flex items-center justify-between px-5 py-3 border-b border-black/5 hover:bg-black/[0.02] transition-colors"
           >
-            <h3 className="text-xs font-medium uppercase tracking-wide" style={{ color: '#78716C' }}>
+            <h3 className="text-xs font-medium uppercase tracking-wide" style={{ color: '#6b6b6b' }}>
               Completed &amp; Archived ({completedGoals.length})
             </h3>
             {showCompleted
-              ? <ChevronDown size={14} style={{ color: '#A8A29E' }} />
-              : <ChevronRight size={14} style={{ color: '#A8A29E' }} />
+              ? <ChevronDown size={14} style={{ color: '#9e9e9e' }} />
+              : <ChevronRight size={14} style={{ color: '#9e9e9e' }} />
             }
           </button>
           {showCompleted && (
@@ -263,57 +263,57 @@ export default function GoalsPage() {
       {sheetOpen && (
         <div className="fixed inset-0 z-50 flex" onClick={e => e.stopPropagation()}>
           <div className="flex-1 bg-black/20 backdrop-blur-sm" onClick={() => setSheetOpen(false)} />
-          <div className="w-[400px] flex flex-col h-full shadow-2xl" style={{ background: '#FAF8F5' }}>
+          <div className="w-[400px] flex flex-col h-full shadow-2xl" style={{ background: '#f9f9f9' }}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-black/5">
-              <h3 className="text-sm font-semibold" style={{ color: '#1C1917' }}>
+              <h3 className="text-sm font-semibold" style={{ color: '#0a0a0a' }}>
                 {editingGoal ? 'Edit Goal' : 'Add Goal'}
               </h3>
               <button onClick={() => setSheetOpen(false)} aria-label="Close sheet">
-                <X size={18} style={{ color: '#78716C' }} />
+                <X size={18} style={{ color: '#6b6b6b' }} />
               </button>
             </div>
 
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
               <div>
-                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#78716C' }}>Title</label>
+                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#6b6b6b' }}>Title</label>
                 <input
                   type="text"
                   value={formTitle}
                   onChange={e => setFormTitle(e.target.value)}
                   placeholder="e.g. Launch MVP"
                   className="w-full rounded-lg px-3 py-2 text-sm outline-none"
-                  style={{ background: '#FFFFFF', border: '1px solid rgba(0,0,0,0.10)', color: '#1C1917' }}
+                  style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.10)', color: '#0a0a0a' }}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#78716C' }}>Description</label>
+                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#6b6b6b' }}>Description</label>
                 <textarea
                   value={formDesc}
                   onChange={e => setFormDesc(e.target.value)}
                   placeholder="Optional details…"
                   rows={3}
                   className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-none"
-                  style={{ background: '#FFFFFF', border: '1px solid rgba(0,0,0,0.10)', color: '#1C1917' }}
+                  style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.10)', color: '#0a0a0a' }}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#78716C' }}>Priority (1 = highest)</label>
+                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#6b6b6b' }}>Priority (1 = highest)</label>
                 <input
                   type="number" min={1} max={10}
                   value={formPriority}
                   onChange={e => setFormPriority(Number(e.target.value))}
                   className="w-full rounded-lg px-3 py-2 text-sm outline-none"
-                  style={{ background: '#FFFFFF', border: '1px solid rgba(0,0,0,0.10)', color: '#1C1917' }}
+                  style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.10)', color: '#0a0a0a' }}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#78716C' }}>Target Date</label>
+                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#6b6b6b' }}>Target Date</label>
                 <input
                   type="date"
                   value={formDate}
                   onChange={e => setFormDate(e.target.value)}
                   className="w-full rounded-lg px-3 py-2 text-sm outline-none"
-                  style={{ background: '#FFFFFF', border: '1px solid rgba(0,0,0,0.10)', color: '#1C1917' }}
+                  style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.10)', color: '#0a0a0a' }}
                 />
               </div>
             </div>
@@ -322,7 +322,7 @@ export default function GoalsPage() {
               <button
                 onClick={() => setSheetOpen(false)}
                 className="flex-1 py-2 rounded-lg text-sm font-medium"
-                style={{ background: 'rgba(0,0,0,0.05)', color: '#78716C' }}
+                style={{ background: 'rgba(0,0,0,0.05)', color: '#6b6b6b' }}
               >
                 Cancel
               </button>
@@ -330,7 +330,7 @@ export default function GoalsPage() {
                 onClick={handleSave}
                 disabled={!formTitle.trim() || saving}
                 className="flex-1 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5 transition-opacity disabled:opacity-50"
-                style={{ background: '#C2714F', color: '#FFFFFF' }}
+                style={{ background: '#000000', color: '#ffffff' }}
               >
                 <Check size={14} />
                 {saving ? 'Saving…' : 'Save'}
