@@ -21,6 +21,7 @@ const ESL_COLORS = {
 const CARD_STYLE = {
   background: '#ffffff',
   border: '1px solid rgba(0,0,0,0.08)',
+  borderRadius: '16px',
   boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
 }
 
@@ -82,13 +83,10 @@ export default function DashboardPage() {
           <Link
             key={label}
             href={href}
-            className="rounded-2xl p-5 flex items-center gap-4 transition-shadow duration-150 hover:shadow-md"
+            className="rounded-2xl p-5 flex items-center gap-4 transition-shadow duration-150 hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)]"
             style={CARD_STYLE}
           >
-            <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-              style={{ background: 'rgba(0,0,0,0.06)' }}
-            >
+            <div className="w-10 h-10 rounded-xl bg-[#f5f5f5] flex items-center justify-center shrink-0">
               <Icon size={18} style={{ color: '#000000' }} />
             </div>
             <div>

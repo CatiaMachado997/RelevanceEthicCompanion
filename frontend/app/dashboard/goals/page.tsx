@@ -26,7 +26,7 @@ function StatusBadge({ status }: { status: GoalStatus }) {
   const c = STATUS_COLORS[status] ?? STATUS_COLORS.active
   return (
     <span
-      className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium capitalize"
+      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize"
       style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}
     >
       {status}
@@ -127,7 +127,7 @@ export default function GoalsPage() {
     const isCompleted = goal.status === 'completed'
     return (
       <div
-        className="flex items-center gap-4 px-5 py-4 rounded-xl"
+        className="flex items-center gap-4 px-5 py-4 rounded-2xl transition-shadow duration-150 hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)]"
         style={{ border: '1px solid rgba(0,0,0,0.08)', background: '#ffffff' }}
       >
         <span className="w-2 h-2 rounded-full shrink-0" style={{ background: dotColor }} />
@@ -208,7 +208,7 @@ export default function GoalsPage() {
         </div>
         <button
           onClick={e => { e.stopPropagation(); openCreate() }}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-90"
+          className="inline-flex items-center gap-1.5 px-5 py-2 rounded-full text-sm font-medium transition-opacity hover:opacity-90"
           style={{ background: '#000000', color: '#ffffff' }}
         >
           <Plus size={15} />
@@ -281,7 +281,7 @@ export default function GoalsPage() {
                   value={formTitle}
                   onChange={e => setFormTitle(e.target.value)}
                   placeholder="e.g. Launch MVP"
-                  className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                  className="w-full rounded-xl px-3 py-2 text-sm outline-none"
                   style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.10)', color: '#0a0a0a' }}
                 />
               </div>
@@ -292,7 +292,7 @@ export default function GoalsPage() {
                   onChange={e => setFormDesc(e.target.value)}
                   placeholder="Optional details…"
                   rows={3}
-                  className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-none"
+                  className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-none"
                   style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.10)', color: '#0a0a0a' }}
                 />
               </div>
@@ -302,7 +302,7 @@ export default function GoalsPage() {
                   type="number" min={1} max={10}
                   value={formPriority}
                   onChange={e => setFormPriority(Number(e.target.value))}
-                  className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                  className="w-full rounded-xl px-3 py-2 text-sm outline-none"
                   style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.10)', color: '#0a0a0a' }}
                 />
               </div>
@@ -312,7 +312,7 @@ export default function GoalsPage() {
                   type="date"
                   value={formDate}
                   onChange={e => setFormDate(e.target.value)}
-                  className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                  className="w-full rounded-xl px-3 py-2 text-sm outline-none"
                   style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.10)', color: '#0a0a0a' }}
                 />
               </div>
@@ -321,7 +321,7 @@ export default function GoalsPage() {
             <div className="px-6 py-4 border-t border-black/5 flex gap-2">
               <button
                 onClick={() => setSheetOpen(false)}
-                className="flex-1 py-2 rounded-lg text-sm font-medium"
+                className="flex-1 py-2 rounded-full text-sm font-medium"
                 style={{ background: 'rgba(0,0,0,0.05)', color: '#6b6b6b' }}
               >
                 Cancel
@@ -329,7 +329,7 @@ export default function GoalsPage() {
               <button
                 onClick={handleSave}
                 disabled={!formTitle.trim() || saving}
-                className="flex-1 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5 transition-opacity disabled:opacity-50"
+                className="flex-1 py-2 rounded-full text-sm font-medium flex items-center justify-center gap-1.5 transition-opacity disabled:opacity-50"
                 style={{ background: '#000000', color: '#ffffff' }}
               >
                 <Check size={14} />
