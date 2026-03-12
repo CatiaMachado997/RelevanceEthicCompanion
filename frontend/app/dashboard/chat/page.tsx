@@ -145,8 +145,8 @@ export default function ChatPage() {
                 <button
                   key={p}
                   onClick={() => send(p)}
-                  className="px-3 py-1.5 rounded-full text-sm transition-colors hover:bg-black/5"
-                  style={{ border: '1px solid rgba(0,0,0,0.08)', color: '#6b6b6b' }}
+                  className="px-3 py-1.5 rounded-full text-sm transition-colors hover:bg-[#f5f5f5]"
+                  style={{ border: '1px solid rgba(0,0,0,0.10)', color: '#6b6b6b' }}
                 >
                   {p}
                 </button>
@@ -205,7 +205,7 @@ export default function ChatPage() {
       </div>
 
       {/* Input bar */}
-      <div className="px-4 py-3 border-t border-black/5" style={{ background: '#f5f5f5' }}>
+      <div className="px-4 py-3 border-t border-[rgba(0,0,0,0.08)]" style={{ background: '#fafafa' }}>
         <div className="flex items-end gap-2">
           <textarea
             value={input}
@@ -225,7 +225,7 @@ export default function ChatPage() {
             className="flex-1 resize-none rounded-xl px-4 py-2.5 text-sm outline-none"
             style={{
               background: '#ffffff',
-              border: '1px solid rgba(0,0,0,0.08)',
+              border: '1px solid rgba(0,0,0,0.10)',
               color: '#0a0a0a',
               maxHeight: '120px',
               overflowY: 'auto',

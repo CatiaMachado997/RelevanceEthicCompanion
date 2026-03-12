@@ -31,7 +31,7 @@ function TypeBadge({ type }: { type: ValueType }) {
   const c = TYPE_COLORS[type] ?? TYPE_COLORS.preference
   return (
     <span
-      className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium"
+      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
       style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}
     >
       {TYPE_LABELS[type] ?? type}
@@ -121,7 +121,7 @@ export default function ValuesPage() {
         </div>
         <button
           onClick={openCreate}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-90"
+          className="inline-flex items-center gap-1.5 px-5 py-2 rounded-full text-sm font-medium transition-opacity hover:opacity-90"
           style={{ background: '#000000', color: '#ffffff' }}
         >
           <Plus size={15} />
@@ -143,7 +143,7 @@ export default function ValuesPage() {
       ) : (
         <div className="grid grid-cols-2 gap-4">
           {values.map(v => (
-            <div key={v.id} className="rounded-2xl p-5 group" style={CARD_STYLE}>
+            <div key={v.id} className="rounded-2xl p-5 group transition-shadow duration-150 hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)]" style={CARD_STYLE}>
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0">
                   <GripVertical
@@ -203,7 +203,7 @@ export default function ValuesPage() {
                   <select
                     value={formType}
                     onChange={e => setFormType(e.target.value as ValueType)}
-                    className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                    className="w-full rounded-xl px-3 py-2 text-sm outline-none"
                     style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.10)', color: '#0a0a0a' }}
                   >
                     {(Object.keys(TYPE_LABELS) as ValueType[]).map(t => (
@@ -222,7 +222,7 @@ export default function ValuesPage() {
                   onChange={e => setFormValue(e.target.value)}
                   placeholder="e.g. no_work_after_19h"
                   rows={3}
-                  className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-none"
+                  className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-none"
                   style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.10)', color: '#0a0a0a' }}
                 />
               </div>
@@ -237,7 +237,7 @@ export default function ValuesPage() {
                   max={10}
                   value={formPriority}
                   onChange={e => setFormPriority(Number(e.target.value))}
-                  className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                  className="w-full rounded-xl px-3 py-2 text-sm outline-none"
                   style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.10)', color: '#0a0a0a' }}
                 />
               </div>
@@ -246,7 +246,7 @@ export default function ValuesPage() {
             <div className="px-6 py-4 border-t border-black/5 flex gap-2">
               <button
                 onClick={() => setSheetOpen(false)}
-                className="flex-1 py-2 rounded-lg text-sm font-medium"
+                className="flex-1 py-2 rounded-full text-sm font-medium"
                 style={{ background: 'rgba(0,0,0,0.05)', color: '#6b6b6b' }}
               >
                 Cancel
@@ -254,7 +254,7 @@ export default function ValuesPage() {
               <button
                 onClick={handleSave}
                 disabled={!formValue.trim() || saving}
-                className="flex-1 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5 transition-opacity disabled:opacity-50"
+                className="flex-1 py-2 rounded-full text-sm font-medium flex items-center justify-center gap-1.5 transition-opacity disabled:opacity-50"
                 style={{ background: '#000000', color: '#ffffff' }}
               >
                 <Check size={14} />
