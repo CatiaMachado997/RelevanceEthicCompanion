@@ -34,7 +34,7 @@ export default function LoginPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1 text-center">
           <div className="flex justify-center mb-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-#525252 to-purple-600">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#000000]">
               <Shield className="h-7 w-7 text-white" />
             </div>
           </div>
