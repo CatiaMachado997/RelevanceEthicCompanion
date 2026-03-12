@@ -184,15 +184,7 @@ export default function GoalsPage() {
     setReorderError(null)  // Clear any previous errors
 
     try {
-      const response = await fetch('/api/goals/reorder', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          goalIds: reorderedGoals.map((g) => g.id),
-        }),
-      })
-
-      if (!response.ok) throw new Error('Failed to reorder goals')
+      await goalsApi.reorder(reorderedGoals.map((g) => g.id))
 
       // Update originalGoals after successful reorder
       setOriginalGoals(reorderedGoals)

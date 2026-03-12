@@ -171,15 +171,7 @@ export default function ValuesPage() {
     setReorderError(null)  // Clear any previous errors
 
     try {
-      const response = await fetch('/api/values/reorder', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          valueIds: reorderedValues.map((v) => v.id),
-        }),
-      })
-
-      if (!response.ok) throw new Error('Failed to reorder values')
+      await valuesApi.reorder(reorderedValues.map((v) => v.id))
 
       // Update originalValues after successful reorder
       setOriginalValues(reorderedValues)

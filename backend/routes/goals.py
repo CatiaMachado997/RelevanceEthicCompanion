@@ -4,7 +4,7 @@ Goals API Routes
 User goals inform ESL about priorities and help AI provide relevant assistance.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Body
 from typing import List, Optional
 from pydantic import BaseModel, Field
 from datetime import datetime, UTC
@@ -327,6 +327,44 @@ async def complete_goal(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error completing goal: {str(e)}")
+
+
+class ReorderGoalsRequest(BaseModel):
+    goalIds: List[str]
+
+
+@router.patch("/reorder", response_model=dict)
+async def reorder_goals(
+    request: ReorderGoalsRequest,
+    user_id: str = Depends(get_current_user_id)
+):
+    """
+    Reorder goals by updating their priority based on provided order.
+
+    Args:
+        request: ReorderGoalsRequest with 'goalIds' list in desired order
+        user_id: Current user ID
+
+    Returns:
+        Success message
+    """
+    goal_ids = request.goalIds
+    if not goal_ids:
+        raise HTTPException(status_code=400, detail="No goalIds provided")
+
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                for index, goal_id in enumerate(goal_ids, start=1):
+                    cur.execute(
+                        "UPDATE goals SET priority = %s WHERE id = %s AND user_id = %s",
+                        (index, str(goal_id), str(user_id)),
+                    )
+
+        return {"status": "success", "message": "Goals reordered successfully"}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reordering goals: {str(e)}")
 
 
 @router.delete("/{goal_id}", response_model=dict)

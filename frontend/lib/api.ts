@@ -182,6 +182,21 @@ export const valuesApi = {
 
     return { message: response.message }
   },
+
+  /**
+   * Reorder values by updating priorities
+   */
+  reorder: async (valueIds: string[]) => {
+    const response = await apiRequest<{
+      status: string
+      message: string
+    }>('/api/values/reorder', {
+      method: 'PATCH',
+      body: JSON.stringify({ valueIds }),
+    })
+
+    return response
+  },
 }
 
 // ==================== Chat API ====================
@@ -324,6 +339,21 @@ export const goalsApi = {
     })
 
     return { message: response.message }
+  },
+
+  /**
+   * Reorder goals by updating priorities
+   */
+  reorder: async (goalIds: string[]) => {
+    const response = await apiRequest<{
+      status: string
+      message: string
+    }>('/api/goals/reorder', {
+      method: 'PATCH',
+      body: JSON.stringify({ goalIds }),
+    })
+
+    return response
   },
 }
 

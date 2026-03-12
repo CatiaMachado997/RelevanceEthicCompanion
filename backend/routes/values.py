@@ -7,7 +7,7 @@ User values are SACRED - they define what ESL protects.
 Philosophy: User empowerment first. No hidden defaults, no dark patterns.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Body
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
@@ -339,6 +339,44 @@ async def delete_value(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting value: {str(e)}")
+
+
+class ReorderValuesRequest(BaseModel):
+    valueIds: List[str]
+
+
+@router.patch("/reorder", response_model=dict)
+async def reorder_values(
+    request: ReorderValuesRequest,
+    user_id: str = Depends(get_current_user_id)
+):
+    """
+    Reorder values by updating their priority based on provided order.
+
+    Args:
+        request: ReorderValuesRequest with 'valueIds' list in desired order
+        user_id: Current user ID
+
+    Returns:
+        Success message
+    """
+    value_ids = request.valueIds
+    if not value_ids:
+        raise HTTPException(status_code=400, detail="No valueIds provided")
+
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                for index, value_id in enumerate(value_ids, start=1):
+                    cur.execute(
+                        "UPDATE user_values SET priority = %s WHERE id = %s AND user_id = %s",
+                        (index, str(value_id), str(user_id)),
+                    )
+
+        return {"status": "success", "message": "Values reordered successfully"}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reordering values: {str(e)}")
 
 
 @router.post("/{value_id}/activate", response_model=dict)

@@ -12,7 +12,12 @@ from contextlib import asynccontextmanager
 import uvicorn
 import logging
 
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+
 from config import settings
+from utils.rate_limit import limiter
 
 # Initialize background scheduler (global instance)
 _scheduler = None
@@ -83,6 +88,10 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 # CORS Configuration
 app.add_middleware(
