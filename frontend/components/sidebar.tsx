@@ -180,8 +180,14 @@ export function SidebarNav() {
 // --- Mobile trigger ---
 
 export function MobileSidebarTrigger() {
+  const { toggle } = useSidebar()
   return (
-    <button className="md:hidden p-2 rounded-lg" style={{ color: "#78716C" }}>
+    <button
+      onClick={toggle}
+      aria-label="Toggle navigation"
+      className="md:hidden p-2 rounded-lg"
+      style={{ color: "#78716C" }}
+    >
       <Menu size={20} />
     </button>
   )
