@@ -6,16 +6,40 @@ import { TopHeader } from '@/components/top-header'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { Settings as SettingsIcon, Bell, Lock, Palette, Database, Calendar, CheckCircle2, XCircle, RefreshCw } from 'lucide-react'
-import { dataSourcesApi, DataSource } from '@/lib/api'
+import {
+  Bell,
+  Lock,
+  Palette,
+  Database,
+  Calendar,
+  CheckCircle2,
+  XCircle,
+  RefreshCw,
+} from 'lucide-react'
+import { dataSourcesApi, DataSource, settingsApi, UserSettings } from '@/lib/api'
+
+const DEFAULT_SETTINGS: UserSettings = {
+  email_notifications: false,
+  push_notifications: false,
+  esl_alerts: true,
+  share_analytics: false,
+  pii_protection: true,
+}
 
 export default function SettingsPage() {
   const [dataSources, setDataSources] = useState<DataSource[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState<string | null>(null)
 
+  const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS)
+  const [dirty, setDirty] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveSuccess, setSaveSuccess] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
   useEffect(() => {
     loadDataSources()
+    loadSettings()
   }, [])
 
   const loadDataSources = async () => {
@@ -26,6 +50,38 @@ export default function SettingsPage() {
       console.error('Failed to load data sources:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadSettings = async () => {
+    try {
+      const data = await settingsApi.get()
+      setSettings(data)
+    } catch (error) {
+      console.error('Failed to load settings:', error)
+    }
+  }
+
+  const handleToggle = (key: keyof UserSettings) => (checked: boolean) => {
+    setSettings(prev => ({ ...prev, [key]: checked }))
+    setDirty(true)
+    setSaveSuccess(false)
+    setSaveError(null)
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    setSaveError(null)
+    setSaveSuccess(false)
+    try {
+      const { email_notifications, push_notifications, esl_alerts, share_analytics, pii_protection } = settings
+      await settingsApi.update({ email_notifications, push_notifications, esl_alerts, share_analytics, pii_protection })
+      setDirty(false)
+      setSaveSuccess(true)
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Failed to save settings')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -59,11 +115,7 @@ export default function SettingsPage() {
     }
   }
 
-  const getCalendarSource = () => {
-    return dataSources.find(s => s.source_type === 'google_calendar')
-  }
-
-  const calendarSource = getCalendarSource()
+  const calendarSource = dataSources.find(s => s.source_type === 'google_calendar')
 
   return (
     <>
@@ -74,9 +126,7 @@ export default function SettingsPage() {
             {/* Header */}
             <div className="flex flex-col gap-1">
               <h1 className="text-2xl font-bold tracking-tight text-[#171717]">Settings</h1>
-              <p className="text-[#525252]">
-                Manage your account preferences and settings
-              </p>
+              <p className="text-[#525252]">Manage your account preferences and settings</p>
             </div>
 
             {/* Connected Data Sources */}
@@ -91,7 +141,6 @@ export default function SettingsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Google Calendar */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#F5F5F5]">
@@ -102,29 +151,19 @@ export default function SettingsPage() {
                         <Label className="text-[#171717]">Google Calendar</Label>
                         {calendarSource && (
                           <div className={`flex items-center gap-1 text-xs ${
-                            calendarSource.status === 'connected'
-                              ? 'text-[#525252]'
-                              : 'text-[#DC2626]'
+                            calendarSource.status === 'connected' ? 'text-[#525252]' : 'text-[#DC2626]'
                           }`}>
                             {calendarSource.status === 'connected' ? (
-                              <>
-                                <CheckCircle2 className="h-3 w-3" />
-                                Connected
-                              </>
+                              <><CheckCircle2 className="h-3 w-3" />Connected</>
                             ) : (
-                              <>
-                                <XCircle className="h-3 w-3" />
-                                Disconnected
-                              </>
+                              <><XCircle className="h-3 w-3" />Disconnected</>
                             )}
                           </div>
                         )}
                       </div>
                       <p className="text-sm text-[#525252]">
                         {calendarSource
-                          ? `Last synced: ${calendarSource.last_sync
-                              ? new Date(calendarSource.last_sync).toLocaleString()
-                              : 'Never'}`
+                          ? `Last synced: ${calendarSource.last_sync ? new Date(calendarSource.last_sync).toLocaleString() : 'Never'}`
                           : 'Sync your calendar events for better context'}
                       </p>
                     </div>
@@ -132,38 +171,22 @@ export default function SettingsPage() {
                   <div className="flex items-center gap-2">
                     {calendarSource?.status === 'connected' ? (
                       <>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="rounded-lg"
+                        <Button variant="outline" size="sm" className="rounded-lg"
                           onClick={() => handleSync(calendarSource.source_type)}
-                          disabled={syncing === calendarSource.source_type}
-                        >
-                          {syncing === calendarSource.source_type ? (
-                            <RefreshCw className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <>
-                              <RefreshCw className="h-4 w-4 mr-1" />
-                              Sync
-                            </>
-                          )}
+                          disabled={syncing === calendarSource.source_type}>
+                          {syncing === calendarSource.source_type
+                            ? <RefreshCw className="h-4 w-4 animate-spin" />
+                            : <><RefreshCw className="h-4 w-4 mr-1" />Sync</>}
                         </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="rounded-lg"
-                          onClick={() => handleDisconnect(calendarSource.source_type)}
-                        >
+                        <Button variant="outline" size="sm" className="rounded-lg"
+                          onClick={() => handleDisconnect(calendarSource.source_type)}>
                           Disconnect
                         </Button>
                       </>
                     ) : (
-                      <Button
-                        variant="default"
-                        size="sm"
+                      <Button variant="default" size="sm"
                         className="rounded-lg bg-[#171717] hover:bg-[#404040]"
-                        onClick={() => handleConnect('google_calendar')}
-                      >
+                        onClick={() => handleConnect('google_calendar')}>
                         Connect
                       </Button>
                     )}
@@ -189,21 +212,30 @@ export default function SettingsPage() {
                     <Label className="text-[#171717]">Email Notifications</Label>
                     <p className="text-sm text-[#525252]">Receive updates via email</p>
                   </div>
-                  <Switch />
+                  <Switch
+                    checked={settings.email_notifications}
+                    onCheckedChange={handleToggle('email_notifications')}
+                  />
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
                     <Label className="text-[#171717]">Push Notifications</Label>
                     <p className="text-sm text-[#525252]">Receive browser notifications</p>
                   </div>
-                  <Switch />
+                  <Switch
+                    checked={settings.push_notifications}
+                    onCheckedChange={handleToggle('push_notifications')}
+                  />
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
                     <Label className="text-[#171717]">ESL Alerts</Label>
                     <p className="text-sm text-[#525252]">Get notified when ESL blocks an action</p>
                   </div>
-                  <Switch defaultChecked />
+                  <Switch
+                    checked={settings.esl_alerts}
+                    onCheckedChange={handleToggle('esl_alerts')}
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -225,14 +257,39 @@ export default function SettingsPage() {
                     <Label className="text-[#171717]">Share Usage Analytics</Label>
                     <p className="text-sm text-[#525252]">Help improve the app by sharing anonymous usage data</p>
                   </div>
-                  <Switch />
+                  <Switch
+                    checked={settings.share_analytics}
+                    onCheckedChange={handleToggle('share_analytics')}
+                  />
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
                     <Label className="text-[#171717]">PII Protection</Label>
                     <p className="text-sm text-[#525252]">Auto-redact sensitive information</p>
                   </div>
-                  <Switch defaultChecked />
+                  <Switch
+                    checked={settings.pii_protection}
+                    onCheckedChange={handleToggle('pii_protection')}
+                  />
+                </div>
+
+                {/* Save feedback */}
+                {saveSuccess && (
+                  <p className="text-sm text-[#525252]">Settings saved.</p>
+                )}
+                {saveError && (
+                  <p className="text-sm text-[#DC2626]">{saveError}</p>
+                )}
+
+                {/* Save button */}
+                <div className="flex justify-end pt-2">
+                  <Button
+                    className="rounded-lg bg-[#171717] hover:bg-[#404040]"
+                    disabled={!dirty || saving}
+                    onClick={handleSave}
+                  >
+                    {saving ? 'Saving…' : 'Save Settings'}
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -244,9 +301,7 @@ export default function SettingsPage() {
                   <Palette className="h-4 w-4 text-[#171717]" />
                   <CardTitle className="text-[#171717]">Appearance</CardTitle>
                 </div>
-                <CardDescription className="text-[#525252]">
-                  Customize the look and feel
-                </CardDescription>
+                <CardDescription className="text-[#525252]">Customize the look and feel</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
@@ -268,9 +323,7 @@ export default function SettingsPage() {
                   <Database className="h-4 w-4 text-[#171717]" />
                   <CardTitle className="text-[#171717]">Data Management</CardTitle>
                 </div>
-                <CardDescription className="text-[#525252]">
-                  Manage your data and account
-                </CardDescription>
+                <CardDescription className="text-[#525252]">Manage your data and account</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -278,18 +331,14 @@ export default function SettingsPage() {
                     <Label className="text-[#171717]">Export Data</Label>
                     <p className="text-sm text-[#525252]">Download all your data</p>
                   </div>
-                  <Button variant="outline" className="rounded-lg" disabled>
-                    Export
-                  </Button>
+                  <Button variant="outline" className="rounded-lg" disabled>Export</Button>
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
                     <Label className="text-[#171717]">Delete Account</Label>
                     <p className="text-sm text-[#525252]">Permanently delete your account and data</p>
                   </div>
-                  <Button variant="destructive" className="rounded-lg" disabled>
-                    Delete
-                  </Button>
+                  <Button variant="destructive" className="rounded-lg" disabled>Delete</Button>
                 </div>
               </CardContent>
             </Card>
