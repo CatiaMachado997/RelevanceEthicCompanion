@@ -7,6 +7,9 @@ from pydantic import BaseModel
 from utils.db import get_db
 from utils.serialization import serialize_row
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
+from services.context_manager import ContextManager
+from esl.engine import EthicalSafeguardLayer
+from esl.models import ProposedAction, ActionType, UrgencyLevel, ESLDecisionStatus
 
 router = APIRouter(prefix="/api/profile", tags=["Profile"])
 
@@ -14,6 +17,14 @@ router = APIRouter(prefix="/api/profile", tags=["Profile"])
 class UpdateProfileRequest(BaseModel):
     display_name: Optional[str] = None
     timezone: Optional[str] = None
+
+
+def get_context_manager() -> ContextManager:
+    return ContextManager()
+
+
+def get_esl(context_manager: ContextManager = Depends(get_context_manager)) -> EthicalSafeguardLayer:
+    return EthicalSafeguardLayer(context_manager)
 
 
 @router.get("/", response_model=dict)
@@ -33,13 +44,15 @@ async def get_profile(user_id: str = Depends(get_current_read_user_id)):
                     "SELECT COUNT(*) AS cnt FROM user_values WHERE user_id = %s AND active = TRUE",
                     (str(user_id),),
                 )
-                values_count = (cur.fetchone() or {}).get("cnt", 0)
+                row = cur.fetchone()
+                values_count = row.get("cnt", 0) if row is not None else 0
 
                 cur.execute(
                     "SELECT COUNT(*) AS cnt FROM goals WHERE user_id = %s AND status = 'active'",
                     (str(user_id),),
                 )
-                goals_count = (cur.fetchone() or {}).get("cnt", 0)
+                row = cur.fetchone()
+                goals_count = row.get("cnt", 0) if row is not None else 0
 
                 cur.execute(
                     """
@@ -61,7 +74,7 @@ async def get_profile(user_id: str = Depends(get_current_read_user_id)):
             "goals_count": goals_count,
             "approval_rate": approval_rate,
         }
-        return result
+        return {"status": "success", "data": result}
 
     except HTTPException:
         raise
@@ -73,8 +86,25 @@ async def get_profile(user_id: str = Depends(get_current_read_user_id)):
 async def update_profile(
     request: UpdateProfileRequest,
     user_id: str = Depends(get_current_user_id),
+    esl: EthicalSafeguardLayer = Depends(get_esl),
 ):
-    updates = {k: v for k, v in request.model_dump().items() if v is not None}
+    proposed_action = ProposedAction(
+        action_type=ActionType.DATA_COLLECTION,
+        content_type="profile_update",
+        content="Updating user profile",
+        urgency=UrgencyLevel.LOW,
+        metadata={"user_id": str(user_id)}
+    )
+    decision = await esl.evaluate_action(proposed_action, user_id)
+    if decision.status == ESLDecisionStatus.VETOED:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Profile update blocked by ESL: {decision.reason}"
+        )
+
+    ALLOWED_UPDATE_FIELDS = {"display_name", "timezone"}
+    updates = {k: v for k, v in request.model_dump().items()
+               if v is not None and k in ALLOWED_UPDATE_FIELDS}
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
 
@@ -93,7 +123,7 @@ async def update_profile(
         if not updated:
             raise HTTPException(status_code=404, detail="User not found")
 
-        return serialize_row(updated)
+        return {"status": "success", "data": serialize_row(updated)}
 
     except HTTPException:
         raise

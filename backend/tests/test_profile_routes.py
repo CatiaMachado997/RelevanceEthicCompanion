@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 import pytest
 
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
@@ -22,12 +22,26 @@ def make_db_mock(fetchone_result=None, fetchall_result=None):
     return mock_conn, mock_cursor
 
 
+def make_mock_esl():
+    from esl.models import ESLDecision, ESLDecisionStatus
+    mock_esl = MagicMock()
+    mock_esl.evaluate_action = AsyncMock(
+        return_value=ESLDecision(
+            status=ESLDecisionStatus.APPROVED,
+            reason="Approved for testing",
+            confidence=1.0,
+        )
+    )
+    return mock_esl
+
+
 def make_app():
-    from routes.profile import router as profile_router
+    from routes.profile import router as profile_router, get_esl
     app = FastAPI()
     app.include_router(profile_router)
     app.dependency_overrides[get_current_user_id] = lambda: TEST_USER_ID
     app.dependency_overrides[get_current_read_user_id] = lambda: TEST_USER_ID
+    app.dependency_overrides[get_esl] = make_mock_esl
     return app
 
 
@@ -53,10 +67,18 @@ def test_get_profile_returns_user_data(client):
         response = client.get("/api/profile/")
 
     assert response.status_code == 200
-    data = response.json()
+    data = response.json()["data"]
     assert data["email"] == "test@example.com"
     assert data["display_name"] == "Test User"
     assert "stats" in data
+
+
+def test_get_profile_user_not_found(client):
+    """GET /api/profile/ when user doesn't exist → 404."""
+    mock_conn, _ = make_db_mock(fetchone_result=None)
+    with patch("routes.profile.get_db", return_value=mock_conn):
+        response = client.get("/api/profile/")
+    assert response.status_code == 404
 
 
 def test_update_profile_saves_name_and_timezone(client):
@@ -71,7 +93,7 @@ def test_update_profile_saves_name_and_timezone(client):
         )
 
     assert response.status_code == 200
-    data = response.json()
+    data = response.json()["data"]
     assert data["display_name"] == "New Name"
     assert data["timezone"] == "America/New_York"
 
