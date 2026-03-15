@@ -130,7 +130,7 @@ async def health():
 
 
 # Import routers
-from routes import auth, values, chat, goals, transparency, relevance, data_sources, profile
+from routes import auth, values, chat, goals, transparency, relevance, data_sources, profile, notifications
 
 # Register routers
 app.include_router(auth.router)
@@ -141,6 +141,7 @@ app.include_router(transparency.router)
 app.include_router(relevance.router)
 app.include_router(data_sources.router)  # Phase 5: Google Calendar integration
 app.include_router(profile.router)
+app.include_router(notifications.router)
 
 
 if __name__ == "__main__":

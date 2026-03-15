@@ -334,6 +334,20 @@ async def complete_goal(
         if not updated_goal:
             raise HTTPException(status_code=404, detail="Goal not found")
 
+        # Insert notification
+        try:
+            from routes.notifications import create_notification
+            goal_title = updated_goal.get("title", goal_id)
+            with get_db() as notif_conn:
+                create_notification(
+                    notif_conn, user_id,
+                    type="goal_completed",
+                    title="Goal Completed",
+                    message=f'You completed "{goal_title}"',
+                )
+        except Exception:
+            pass  # Notification failure must never break goal completion
+
         return {
             "status": "success",
             "message": "Goal completed! 🎉",
