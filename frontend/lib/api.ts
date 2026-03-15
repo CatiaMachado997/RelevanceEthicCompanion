@@ -505,3 +505,30 @@ const api = {
 };
 
 export default api;
+
+// ==================== Settings API ====================
+
+export interface UserSettings {
+  user_id?: string
+  email_notifications: boolean
+  push_notifications: boolean
+  esl_alerts: boolean
+  share_analytics: boolean
+  pii_protection: boolean
+  updated_at?: string
+}
+
+export const settingsApi = {
+  get: async (): Promise<UserSettings> => {
+    const response = await apiRequest<{ status: string; data: UserSettings }>('/api/settings/')
+    return response.data
+  },
+
+  update: async (payload: Omit<UserSettings, 'user_id' | 'updated_at'>): Promise<UserSettings> => {
+    const response = await apiRequest<{ status: string; data: UserSettings }>('/api/settings/', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    })
+    return response.data
+  },
+}
