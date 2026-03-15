@@ -117,15 +117,26 @@ async def root():
 
 @app.get("/health")
 async def health():
-    """Detailed health check"""
+    """Detailed health check with live DB ping"""
+    from utils.db import get_db
+    db_status = "unavailable"
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+        db_status = "connected"
+    except Exception:
+        pass
+
+    overall = "healthy" if db_status == "connected" else "degraded"
     return {
-        "status": "healthy",
+        "status": overall,
         "ethical_safeguard_layer": "active",
         "components": {
             "api": "operational",
             "esl": "active",
-            "database": "connected"  # TODO: Add actual health checks
-        }
+            "database": db_status,
+        },
     }
 
 
