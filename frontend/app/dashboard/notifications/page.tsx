@@ -31,12 +31,14 @@ export default function NotificationsPage() {
   const [unreadCount, setUnreadCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [markingAll, setMarkingAll] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     try {
       const { notifications: data, unread_count } = await notificationsApi.list()
       setNotifications(data)
       setUnreadCount(unread_count)
+      setError(null)
     } catch (error) {
       console.error('Failed to load notifications:', error)
     } finally {
@@ -50,8 +52,8 @@ export default function NotificationsPage() {
     try {
       await notificationsApi.markRead(id)
       await load()
-    } catch (error) {
-      console.error('Failed to mark notification as read:', error)
+    } catch {
+      setError('Failed to update notification. Please try again.')
     }
   }
 
@@ -60,8 +62,8 @@ export default function NotificationsPage() {
     try {
       await notificationsApi.markAllRead()
       await load()
-    } catch (error) {
-      console.error('Failed to mark all as read:', error)
+    } catch {
+      setError('Failed to update notification. Please try again.')
     } finally {
       setMarkingAll(false)
     }
@@ -98,6 +100,8 @@ export default function NotificationsPage() {
                 )}
               </div>
             </div>
+
+            {error && <p className="text-sm text-[#DC2626]">{error}</p>}
 
             {/* Loading */}
             {loading && (
