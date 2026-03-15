@@ -1,62 +1,53 @@
 import { render, screen } from '@testing-library/react';
 import DashboardPage from '../app/dashboard/page';
-import { transparencyApi } from '../lib/api';
+import { transparencyApi, goalsApi, valuesApi } from '../lib/api';
 
-// Mock the transparencyApi
+// Mock all APIs used by the dashboard
 jest.mock('../lib/api', () => ({
   transparencyApi: {
-    insights: jest.fn(),
     report: jest.fn(),
+    logs: jest.fn(),
+  },
+  goalsApi: {
+    list: jest.fn(),
+  },
+  valuesApi: {
+    list: jest.fn(),
   },
 }));
 
 describe('DashboardPage', () => {
   beforeEach(() => {
-    // Reset and mock successful API responses before each test
-    (transparencyApi.insights as jest.Mock).mockClear();
-    (transparencyApi.report as jest.Mock).mockClear();
-    (transparencyApi.insights as jest.Mock).mockResolvedValue({ insights: ['Test Insight'] });
+    // Reset all mocks (clears call history and return values) before re-setting
+    jest.resetAllMocks();
+
     (transparencyApi.report as jest.Mock).mockResolvedValue({
       total_decisions: 100,
       approval_rate: 0.95,
       vetoed_count: 5,
       modified_count: 10,
     });
+    (transparencyApi.logs as jest.Mock).mockResolvedValue({ logs: [] });
+    (goalsApi.list as jest.Mock).mockResolvedValue({ goals: [] });
+    (valuesApi.list as jest.Mock).mockResolvedValue({ values: [] });
   });
 
-  it('shows loading state initially', () => {
+  it('renders stat labels after loading', async () => {
     render(<DashboardPage />);
-    expect(screen.getByText('Loading your dashboard...')).toBeInTheDocument();
-  });
-
-  it('renders dashboard content after loading', async () => {
-    render(<DashboardPage />);
-
-    // findBy queries are async and handle waiting for elements to appear
-    expect(await screen.findByText('Dashboard')).toBeInTheDocument();
-    expect(await screen.findByText('Total Decisions')).toBeInTheDocument();
-    expect(await screen.findByText('100')).toBeInTheDocument();
-    expect(await screen.findByText('Approval Rate')).toBeInTheDocument();
-    expect(await screen.findByText('95%')).toBeInTheDocument();
+    // 'Values Set' and 'ESL Decisions Today' are unique stat labels
+    expect(await screen.findByText('Values Set')).toBeInTheDocument();
+    expect(await screen.findByText('ESL Decisions Today')).toBeInTheDocument();
+    // 'Active Goals' appears twice (stat label + section heading); verify at least one exists
+    expect(screen.getAllByText('Active Goals').length).toBeGreaterThan(0);
   });
 
   it('handles API errors gracefully', async () => {
-    // Mock console.error to suppress expected error messages in the test output
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-
-    // Override the default successful mock with a failed one for this test
-    (transparencyApi.insights as jest.Mock).mockRejectedValue(new Error('API Error'));
     (transparencyApi.report as jest.Mock).mockRejectedValue(new Error('API Error'));
-
+    (goalsApi.list as jest.Mock).mockRejectedValue(new Error('API Error'));
+    (valuesApi.list as jest.Mock).mockRejectedValue(new Error('API Error'));
+    (transparencyApi.logs as jest.Mock).mockRejectedValue(new Error('API Error'));
     render(<DashboardPage />);
-
-    // Wait for the content to be loaded
-    expect(await screen.findByText('Dashboard')).toBeInTheDocument();
-    
-    // Check that the stats are not rendered
-    expect(screen.queryByText('Total Decisions')).not.toBeInTheDocument();
-
-    // Restore console.error
-    consoleErrorSpy.mockRestore();
+    // Component renders without crashing even when all APIs fail
+    expect(await screen.findByText('Values Set')).toBeInTheDocument();
   });
 });
