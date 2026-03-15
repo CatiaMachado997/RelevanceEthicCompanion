@@ -2,11 +2,12 @@
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 from datetime import datetime, UTC
 import pytest
 
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
+from esl.models import ESLDecision, ESLDecisionStatus
 
 TEST_USER_ID = "00000000-0000-0000-0000-000000000000"
 
@@ -23,12 +24,25 @@ def make_db_mock(fetchone_result=None, fetchall_result=None):
     return mock_conn, mock_cursor
 
 
+def make_mock_esl():
+    mock_esl = MagicMock()
+    mock_esl.evaluate_action = AsyncMock(
+        return_value=ESLDecision(
+            status=ESLDecisionStatus.APPROVED,
+            reason="Approved for testing",
+            confidence=1.0,
+        )
+    )
+    return mock_esl
+
+
 def make_app():
-    from routes.notifications import router as notif_router
+    from routes.notifications import router as notif_router, get_esl
     app = FastAPI()
     app.include_router(notif_router)
     app.dependency_overrides[get_current_user_id] = lambda: TEST_USER_ID
     app.dependency_overrides[get_current_read_user_id] = lambda: TEST_USER_ID
+    app.dependency_overrides[get_esl] = make_mock_esl
     return app
 
 
@@ -61,12 +75,14 @@ def test_list_notifications_returns_data(client):
 
 
 def test_list_notifications_unread_filter(client):
-    """GET /api/notifications/?unread_only=true → only unread."""
+    """GET /api/notifications/?unread_only=true → AND read = FALSE in query."""
     mock_conn, mock_cursor = make_db_mock(fetchall_result=[SAMPLE_NOTIF])
     with patch("routes.notifications.get_db", return_value=mock_conn):
         response = client.get("/api/notifications/?unread_only=true")
     assert response.status_code == 200
-    mock_cursor.execute.assert_called()
+    # Verify the SQL filter clause was included
+    all_sql = " ".join(str(call) for call in mock_cursor.execute.call_args_list)
+    assert "read = FALSE" in all_sql
 
 
 def test_mark_one_read(client):
