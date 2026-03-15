@@ -495,17 +495,6 @@ export const dataSourcesApi = {
   },
 }
 
-const api = {
-  values: valuesApi,
-  chat: chatApi,
-  goals: goalsApi,
-  transparency: transparencyApi,
-  relevance: relevanceApi,
-  dataSources: dataSourcesApi,
-};
-
-export default api;
-
 // ==================== Settings API ====================
 
 export interface UserSettings {
@@ -565,3 +554,16 @@ export const notificationsApi = {
     await apiRequest('/api/notifications/read-all', { method: 'PATCH' })
   },
 }
+
+const api = {
+  values: valuesApi,
+  chat: chatApi,
+  goals: goalsApi,
+  transparency: transparencyApi,
+  relevance: relevanceApi,
+  dataSources: dataSourcesApi,
+  settings: settingsApi,
+  notifications: notificationsApi,
+};
+
+export default api;
