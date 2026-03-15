@@ -146,18 +146,7 @@ export default function SearchPage() {
     }
   }
 
-  const getTypeColor = (type: string) => {
-    switch (type) {
-      case "value":
-        return "bg-[#f5f5f5] text-[#0a0a0a]"
-      case "goal":
-        return "bg-[#f5f5f5] text-[#0a0a0a]"
-      case "chat":
-        return "bg-[#f5f5f5] text-[#0a0a0a]"
-      default:
-        return "bg-[#fafafa] text-[#6b6b6b]"
-    }
-  }
+  const getTypeColor = () => "bg-[#f5f5f5] text-[#0a0a0a]"
 
   return (
     <div className="flex-1 overflow-auto bg-white p-4 md:p-6">
@@ -240,9 +229,7 @@ export default function SearchPage() {
                     <div className="flex-1 space-y-1">
                       <div className="flex items-center gap-2">
                         <span
-                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${getTypeColor(
-                            result.type
-                          )}`}
+                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${getTypeColor()}`}
                         >
                           {result.type}
                         </span>
