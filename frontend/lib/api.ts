@@ -532,3 +532,36 @@ export const settingsApi = {
     return response.data
   },
 }
+
+// ==================== Notifications API ====================
+
+export interface Notification {
+  id: string
+  user_id: string
+  type: string
+  title: string
+  message: string
+  read: boolean
+  metadata?: Record<string, unknown>
+  created_at: string
+}
+
+export const notificationsApi = {
+  list: async (unreadOnly = false): Promise<{ notifications: Notification[]; unread_count: number }> => {
+    const url = unreadOnly ? '/api/notifications/?unread_only=true' : '/api/notifications/'
+    const response = await apiRequest<{
+      status: string
+      notifications: Notification[]
+      unread_count: number
+    }>(url)
+    return { notifications: response.notifications || [], unread_count: response.unread_count || 0 }
+  },
+
+  markRead: async (id: string): Promise<void> => {
+    await apiRequest(`/api/notifications/${id}/read`, { method: 'PATCH' })
+  },
+
+  markAllRead: async (): Promise<void> => {
+    await apiRequest('/api/notifications/read-all', { method: 'PATCH' })
+  },
+}
