@@ -293,19 +293,36 @@ async def update_goal(
 @router.post("/{goal_id}/complete", response_model=dict)
 async def complete_goal(
     goal_id: str,
-    user_id: str = Depends(get_current_user_id)
+    user_id: str = Depends(get_current_user_id),
+    esl: EthicalSafeguardLayer = Depends(get_esl)
 ):
     """
     Mark a goal as completed
-    
+
     Args:
         goal_id: Goal ID
         user_id: Current user ID
-    
+        esl: ESL instance for action evaluation
+
     Returns:
         Updated goal
     """
     try:
+        proposed_action = ProposedAction(
+            action_type=ActionType.DATA_COLLECTION,
+            content_type="goal_completion",
+            content=f"Completing goal: {goal_id}",
+            urgency=UrgencyLevel.LOW,
+            metadata={"goal_id": goal_id}
+        )
+        decision = await esl.evaluate_action(proposed_action, user_id)
+
+        if decision.status == ESLDecisionStatus.VETOED:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Goal completion blocked by ESL: {decision.reason}"
+            )
+
         with get_db() as conn:
             with conn.cursor() as cur:
                 cur.execute(

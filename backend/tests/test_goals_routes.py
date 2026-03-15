@@ -169,3 +169,43 @@ def test_reorder_goals_success(client):
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
+
+
+def test_complete_goal_calls_esl(client):
+    """POST /api/goals/{id}/complete → ESL evaluate_action must be called."""
+    completed_row = {
+        **SAMPLE_GOAL_ROW,
+        "status": "completed",
+        "completed_at": datetime(2026, 3, 12, tzinfo=UTC),
+    }
+    mock_conn, _ = make_db_mock(fetchone_result=completed_row)
+    mock_esl = make_mock_esl()
+
+    app = make_app()
+    app.dependency_overrides[get_esl] = lambda: mock_esl
+
+    with patch("routes.goals.get_db", return_value=mock_conn):
+        response = TestClient(app).post("/api/goals/goal-001/complete")
+
+    assert response.status_code == 200
+    mock_esl.evaluate_action.assert_awaited_once()
+
+
+def test_complete_goal_vetoed_by_esl():
+    """POST /api/goals/{id}/complete → 403 when ESL vetoes."""
+    mock_esl = MagicMock()
+    mock_esl.evaluate_action = AsyncMock(
+        return_value=ESLDecision(
+            status=ESLDecisionStatus.VETOED,
+            reason="Blocked by focus mode",
+            confidence=1.0,
+        )
+    )
+
+    app = make_app()
+    app.dependency_overrides[get_esl] = lambda: mock_esl
+
+    response = TestClient(app).post("/api/goals/goal-001/complete")
+
+    assert response.status_code == 403
+    assert "ESL" in response.json()["detail"]
