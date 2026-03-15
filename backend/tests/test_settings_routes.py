@@ -75,8 +75,10 @@ def test_get_settings_returns_defaults(client):
     data = response.json()
     assert data["status"] == "success"
     assert data["data"]["esl_alerts"] is True
-    assert data["data"]["email_notifications"] is False
     assert data["data"]["pii_protection"] is True
+    assert data["data"]["email_notifications"] is False
+    assert data["data"]["push_notifications"] is False
+    assert data["data"]["share_analytics"] is False
 
 
 def test_get_settings_returns_saved(client):
@@ -89,7 +91,10 @@ def test_get_settings_returns_saved(client):
 
     assert response.status_code == 200
     data = response.json()
+    assert data["status"] == "success"
     assert data["data"]["email_notifications"] is True
+    assert data["data"]["esl_alerts"] is True
+    assert data["data"]["pii_protection"] is True
 
 
 def test_update_settings_success(client):
