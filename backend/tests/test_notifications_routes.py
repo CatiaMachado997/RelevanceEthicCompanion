@@ -1,0 +1,87 @@
+"""Notifications Route Integration Tests — TDD first."""
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from unittest.mock import patch, MagicMock
+from datetime import datetime, UTC
+import pytest
+
+from utils.supabase_auth import get_current_user_id, get_current_read_user_id
+
+TEST_USER_ID = "00000000-0000-0000-0000-000000000000"
+
+
+def make_db_mock(fetchone_result=None, fetchall_result=None):
+    mock_cursor = MagicMock()
+    mock_cursor.fetchone.return_value = fetchone_result
+    mock_cursor.fetchall.return_value = fetchall_result or []
+    mock_conn = MagicMock()
+    mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+    mock_conn.__exit__ = MagicMock(return_value=False)
+    mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+    mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+    return mock_conn, mock_cursor
+
+
+def make_app():
+    from routes.notifications import router as notif_router
+    app = FastAPI()
+    app.include_router(notif_router)
+    app.dependency_overrides[get_current_user_id] = lambda: TEST_USER_ID
+    app.dependency_overrides[get_current_read_user_id] = lambda: TEST_USER_ID
+    return app
+
+
+@pytest.fixture
+def client():
+    return TestClient(make_app())
+
+
+SAMPLE_NOTIF = {
+    "id": "notif-001",
+    "user_id": TEST_USER_ID,
+    "type": "goal_completed",
+    "title": "Goal Completed",
+    "message": "You completed Launch MVP",
+    "read": False,
+    "created_at": datetime(2026, 3, 15, tzinfo=UTC),
+    "metadata": {},
+}
+
+
+def test_list_notifications_returns_data(client):
+    """GET /api/notifications/ → list of notifications."""
+    mock_conn, _ = make_db_mock(fetchall_result=[SAMPLE_NOTIF])
+    with patch("routes.notifications.get_db", return_value=mock_conn):
+        response = client.get("/api/notifications/")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["count"] == 1
+    assert data["notifications"][0]["type"] == "goal_completed"
+
+
+def test_list_notifications_unread_filter(client):
+    """GET /api/notifications/?unread_only=true → only unread."""
+    mock_conn, mock_cursor = make_db_mock(fetchall_result=[SAMPLE_NOTIF])
+    with patch("routes.notifications.get_db", return_value=mock_conn):
+        response = client.get("/api/notifications/?unread_only=true")
+    assert response.status_code == 200
+    mock_cursor.execute.assert_called()
+
+
+def test_mark_one_read(client):
+    """PATCH /api/notifications/{id}/read → marks read."""
+    mock_conn, _ = make_db_mock(fetchone_result={**SAMPLE_NOTIF, "read": True})
+    with patch("routes.notifications.get_db", return_value=mock_conn):
+        response = client.patch("/api/notifications/notif-001/read")
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+
+
+def test_mark_all_read(client):
+    """PATCH /api/notifications/read-all → 200."""
+    mock_conn, _ = make_db_mock()
+    with patch("routes.notifications.get_db", return_value=mock_conn):
+        response = client.patch("/api/notifications/read-all")
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
