@@ -158,11 +158,21 @@ export default function TransparencyPage() {
             animate="visible"
           >
             {/* Header */}
-            <div className="flex flex-col gap-1">
-              <h1 className="text-2xl font-bold tracking-tight text-[#0a0a0a]">Transparency</h1>
-              <p className="text-[#6b6b6b]">
-                See how ESL protects your boundaries
-              </p>
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex flex-col gap-1">
+                <h1 className="text-2xl font-bold tracking-tight text-[#0a0a0a]">Transparency</h1>
+                <p className="text-[#6b6b6b]">See how ESL protects your boundaries</p>
+              </div>
+              <Select value={days} onValueChange={setDays}>
+                <SelectTrigger className="w-[130px] rounded-xl border-[rgba(0,0,0,0.12)] bg-white text-sm text-[#0a0a0a]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="7">Last 7 days</SelectItem>
+                  <SelectItem value="14">Last 14 days</SelectItem>
+                  <SelectItem value="30">Last 30 days</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Stats Grid */}
@@ -275,11 +285,28 @@ export default function TransparencyPage() {
             <motion.div variants={itemVariants}>
               <Card className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
                 <CardHeader>
-                  <div>
-                    <CardTitle className="text-[#0a0a0a]">Audit Log</CardTitle>
-                    <CardDescription className="text-[#6b6b6b]">
-                      Detailed record of all ESL decisions
-                    </CardDescription>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                      <CardTitle className="text-[#0a0a0a]">Audit Log</CardTitle>
+                      <CardDescription className="text-[#6b6b6b]">
+                        Detailed record of all ESL decisions
+                      </CardDescription>
+                    </div>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {([null, 'APPROVED', 'VETOED', 'MODIFIED'] as const).map((s) => (
+                        <button
+                          key={s ?? 'all'}
+                          onClick={() => setStatusFilter(s)}
+                          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                            statusFilter === s
+                              ? 'bg-[#000000] text-white'
+                              : 'border border-[rgba(0,0,0,0.10)] text-[#6b6b6b] hover:bg-[#f5f5f5]'
+                          }`}
+                        >
+                          {s === null ? 'All' : s.charAt(0) + s.slice(1).toLowerCase()}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
