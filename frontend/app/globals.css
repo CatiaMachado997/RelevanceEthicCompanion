@@ -2,37 +2,45 @@
 @plugin "tailwindcss-animate";
 
 :root {
-  --primary: 0 0% 4%;                 /* #0a0a0a near-black */
+  /* Figma design system — warm purple-gray palette */
+  --gray-950: #2a222d;
+  --gray-900: #332b36;
+  --gray-600: #695e6e;
+  --gray-400: #b0a6b4;
+  --gray-200: #e4dee7;
+  --gray-50:  #f9f6fa;
+
+  --primary: 291 10% 19%;             /* #332b36 warm purple-gray */
   --primary-foreground: 0 0% 100%;    /* white */
 
   --background: 0 0% 100%;            /* #ffffff pure white */
-  --foreground: 0 0% 4%;              /* #0a0a0a near-black */
+  --foreground: 291 10% 19%;          /* #332b36 warm purple-gray */
   --card: 0 0% 100%;                  /* #ffffff */
-  --card-foreground: 0 0% 4%;
+  --card-foreground: 291 10% 19%;
   --popover: 0 0% 100%;
-  --popover-foreground: 0 0% 4%;
-  --secondary: 0 0% 96%;              /* light gray — intentionally matches --muted and --accent for B&W theme */
-  --secondary-foreground: 0 0% 4%;
-  --muted: 0 0% 96%;                  /* intentionally matches --secondary */
-  --muted-foreground: 0 0% 42%;       /* #6b6b6b */
-  --accent: 0 0% 96%;                 /* intentionally matches --secondary */
-  --accent-foreground: 0 0% 4%;
+  --popover-foreground: 291 10% 19%;
+  --secondary: 291 11% 95%;           /* #f9f6fa surface tint */
+  --secondary-foreground: 291 10% 19%;
+  --muted: 291 11% 95%;               /* #f9f6fa */
+  --muted-foreground: 291 8% 40%;     /* #695e6e */
+  --accent: 291 11% 95%;              /* #f9f6fa */
+  --accent-foreground: 291 10% 19%;
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 100%;
-  --border: 0 0% 90%;                 /* #e5e5e5 */
-  --input: 0 0% 96%;                  /* #f5f5f5 */
-  --ring: 0 0% 4%;
+  --border: 291 14% 88%;              /* #e4dee7 */
+  --input: 291 14% 88%;               /* #e4dee7 */
+  --ring: 291 10% 19%;                /* #332b36 */
 
   --radius: 0.75rem;
 
-  --sidebar: 0 0% 98%;                /* #fafafa */
-  --sidebar-foreground: 0 0% 42%;
-  --sidebar-primary: 0 0% 4%;
+  --sidebar: 291 11% 95%;             /* #f9f6fa */
+  --sidebar-foreground: 291 8% 40%;   /* #695e6e */
+  --sidebar-primary: 291 10% 19%;     /* #332b36 */
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 0 0% 94%;
-  --sidebar-accent-foreground: 0 0% 4%;
-  --sidebar-border: 0 0% 90%;
-  --sidebar-ring: 0 0% 4%;
+  --sidebar-accent: 291 14% 88%;      /* #e4dee7 */
+  --sidebar-accent-foreground: 291 10% 19%;
+  --sidebar-border: 291 14% 88%;      /* #e4dee7 */
+  --sidebar-ring: 291 10% 19%;        /* #332b36 */
 }
 
 @theme inline {
