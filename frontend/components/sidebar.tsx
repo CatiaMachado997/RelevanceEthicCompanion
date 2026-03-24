@@ -9,6 +9,7 @@ import {
   Target,
   Eye,
   Shield,
+  Plug,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -18,6 +19,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/values", label: "Values", icon: Heart },
   { href: "/dashboard/goals", label: "Goals", icon: Target },
   { href: "/dashboard/transparency", label: "Transparency", icon: Eye },
+  { href: "/dashboard/integrations", label: "Integrations", icon: Plug },
 ]
 
 export function SidebarNav() {
