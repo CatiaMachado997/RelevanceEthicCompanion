@@ -4,7 +4,6 @@ import userEvent from '@testing-library/user-event'
 jest.mock('../lib/supabase', () => ({
   supabase: {
     auth: {
-      getUser: jest.fn(),
       onAuthStateChange: jest.fn(() => ({
         data: { subscription: { unsubscribe: jest.fn() } },
       })),
@@ -37,7 +36,6 @@ function TestComponent() {
 beforeEach(() => jest.resetAllMocks())
 
 test('test_shows_loading_then_unauthenticated', async () => {
-  ;(supabase.auth.getUser as jest.Mock).mockResolvedValue({ data: { user: null }, error: null })
   ;(supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((cb) => {
     cb('INITIAL_SESSION', null)
     return { data: { subscription: { unsubscribe: jest.fn() } } }
@@ -48,7 +46,6 @@ test('test_shows_loading_then_unauthenticated', async () => {
 
 test('test_shows_user_when_authenticated', async () => {
   const mockUser = { id: 'user-1', email: 'jane@example.com' }
-  ;(supabase.auth.getUser as jest.Mock).mockResolvedValue({ data: { user: mockUser }, error: null })
   ;(supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((cb) => {
     cb('SIGNED_IN', { user: mockUser })
     return { data: { subscription: { unsubscribe: jest.fn() } } }
@@ -58,7 +55,6 @@ test('test_shows_user_when_authenticated', async () => {
 })
 
 test('test_signIn_calls_supabase_otp', async () => {
-  ;(supabase.auth.getUser as jest.Mock).mockResolvedValue({ data: { user: null }, error: null })
   ;(supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((cb) => {
     cb('INITIAL_SESSION', null)
     return { data: { subscription: { unsubscribe: jest.fn() } } }
@@ -70,4 +66,17 @@ test('test_signIn_calls_supabase_otp', async () => {
   expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith(
     expect.objectContaining({ email: 'test@example.com' })
   )
+})
+
+test('test_signOut_calls_supabase_signOut', async () => {
+  const mockUser = { id: 'user-1', email: 'jane@example.com' }
+  ;(supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((cb) => {
+    cb('SIGNED_IN', { user: mockUser })
+    return { data: { subscription: { unsubscribe: jest.fn() } } }
+  })
+  ;(supabase.auth.signOut as jest.Mock).mockResolvedValue({ error: null })
+  render(<TestComponent />)
+  await screen.findByText('jane@example.com')
+  await userEvent.click(screen.getByRole('button', { name: 'Sign Out' }))
+  expect(supabase.auth.signOut).toHaveBeenCalledTimes(1)
 })

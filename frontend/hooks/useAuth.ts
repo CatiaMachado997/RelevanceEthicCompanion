@@ -21,16 +21,17 @@ export function useAuth() {
   }, [])
 
   const signIn = useCallback(async (email: string) => {
+    const redirectTo = `${process.env.NEXT_PUBLIC_SITE_URL ?? (typeof window !== 'undefined' ? window.location.origin : '')}/auth/callback`
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      options: { emailRedirectTo: redirectTo },
     })
     if (error) throw error
   }, [])
 
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut()
-    setUser(null)
+    const { error } = await supabase.auth.signOut()
+    if (error) throw error
   }, [])
 
   return {
