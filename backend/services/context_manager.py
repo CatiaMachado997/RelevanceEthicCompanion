@@ -12,7 +12,7 @@ THIS IS 100% YOUR ARCHITECTURE:
 - When you generate embeddings
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Literal
 from datetime import datetime, timedelta, timezone
 import uuid
 import logging
@@ -183,8 +183,11 @@ class ContextManager:
 
     # ==================== M1: Conversation History (PostgreSQL) ====================
 
-    def store_conversation_turn(self, user_id: str, role: str, content: str) -> None:
+    async def store_conversation_turn(self, user_id: str, role: Literal["user", "assistant"], content: str) -> None:
         """Store a single conversation turn in PostgreSQL for reliable ordered retrieval."""
+        if role not in ("user", "assistant"):
+            raise ValueError(f"Invalid role: {role}. Must be 'user' or 'assistant'")
+
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
@@ -193,7 +196,7 @@ class ContextManager:
                 """, (user_id, role, content))
         logger.debug(f"Stored conversation turn ({role}) for user {user_id}")
 
-    def get_conversation_history(self, user_id: str, limit: int = 20) -> list:
+    async def get_conversation_history(self, user_id: str, limit: int = 20) -> List[Dict[str, str]]:
         """
         Retrieve the last N conversation turns in chronological order.
         Returns list of dicts with 'role' and 'content' keys.
