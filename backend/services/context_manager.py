@@ -181,6 +181,39 @@ class ContextManager:
                     logger.debug(f"✅ Deleted user value: {value_id}")
                 return deleted
 
+    # ==================== M1: Conversation History (PostgreSQL) ====================
+
+    def store_conversation_turn(self, user_id: str, role: str, content: str) -> None:
+        """Store a single conversation turn in PostgreSQL for reliable ordered retrieval."""
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO conversation_turns (user_id, role, content)
+                    VALUES (%s, %s, %s)
+                """, (user_id, role, content))
+        logger.debug(f"Stored conversation turn ({role}) for user {user_id}")
+
+    def get_conversation_history(self, user_id: str, limit: int = 20) -> list:
+        """
+        Retrieve the last N conversation turns in chronological order.
+        Returns list of dicts with 'role' and 'content' keys.
+        """
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT role, content
+                    FROM (
+                        SELECT role, content, created_at
+                        FROM conversation_turns
+                        WHERE user_id = %s
+                        ORDER BY created_at DESC
+                        LIMIT %s
+                    ) recent
+                    ORDER BY created_at ASC
+                """, (user_id, limit))
+                rows = cur.fetchall()
+        return [{'role': row['role'], 'content': row['content']} for row in rows]
+
     # ==================== M1: Goals (PostgreSQL) ====================
 
     async def get_active_goals(self, user_id: str) -> List[Goal]:
