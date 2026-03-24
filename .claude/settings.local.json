@@ -19,7 +19,17 @@
       "Bash(ls:*)",
       "Bash(docker exec:*)",
       "Bash(npm install:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(git:*)",
+      "mcp__figma__get_design_context",
+      "mcp__figma__get_screenshot",
+      "Bash(npm run:*)",
+      "Bash(echo EXIT:$?:*)",
+      "Bash(source:*)",
+      "Bash(npx jest:*)",
+      "Bash(pytest tests/test_conversation_history.py -v)",
+      "Bash(pytest tests/test_conversation_history.py -v --tb=short)",
+      "Bash(pytest --no-header -q)"
     ]
   }
 }
