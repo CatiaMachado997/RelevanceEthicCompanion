@@ -246,6 +246,20 @@ CREATE TABLE IF NOT EXISTS context_snapshots (
 CREATE INDEX IF NOT EXISTS idx_context_snapshots_user_id ON context_snapshots(user_id);
 CREATE INDEX IF NOT EXISTS idx_context_snapshots_snapshot_time ON context_snapshots(snapshot_time);
 
+-- ==================== Conversation Turns Table ====================
+-- Reliable ordered history for LLM context (M1 backup for Weaviate)
+
+CREATE TABLE IF NOT EXISTS conversation_turns (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+    content TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_conversation_turns_user_time
+    ON conversation_turns(user_id, created_at DESC);
+
 -- Success message
 DO $$
 BEGIN
