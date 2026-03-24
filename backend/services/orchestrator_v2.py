@@ -193,25 +193,21 @@ Respond in a helpful, direct manner that aligns with the user's stated goals and
 
     async def _get_conversation_history(self, user_id: str, limit: int = 20) -> List:
         """
-        Retrieve recent conversation turns from M2, sorted chronologically.
+        Retrieve recent conversation turns from PostgreSQL (M1), sorted chronologically.
+
+        Falls back to empty list if DB is unavailable.
 
         Returns a list of LangChain HumanMessage/AIMessage objects ready to pass
         to the LLM so it has full conversational context.
         """
         try:
-            entries = await self.context_manager.query_semantic_memory(
-                user_id=user_id,
-                query="",
-                limit=limit
-            )
-            entries.sort(key=lambda e: e.timestamp)
+            turns = await self.context_manager.get_conversation_history(user_id, limit=limit)
             history = []
-            for entry in entries:
-                role = entry.metadata.get("role", "user")
-                if role == "user":
-                    history.append(HumanMessage(content=entry.content))
-                elif role == "assistant":
-                    history.append(AIMessage(content=entry.content))
+            for turn in turns:
+                if turn['role'] == 'user':
+                    history.append(HumanMessage(content=turn['content']))
+                elif turn['role'] == 'assistant':
+                    history.append(AIMessage(content=turn['content']))
             return history
         except Exception as e:
             logger.warning(f"Could not retrieve conversation history: {e}")
@@ -283,6 +279,10 @@ Respond in a helpful, direct manner that aligns with the user's stated goals and
                     metadata={"role": "assistant", "model": "llama-3.3-70b-versatile"}
                 )
             )
+
+            # Also store in M1 for reliable ordered history retrieval
+            await self.context_manager.store_conversation_turn(user_id, 'user', message)
+            await self.context_manager.store_conversation_turn(user_id, 'assistant', generated_response)
 
             # Step 4 & 5: ESL evaluation (MANDATORY - YOUR ethical rules)
             decision_result = await self.decide_action(
