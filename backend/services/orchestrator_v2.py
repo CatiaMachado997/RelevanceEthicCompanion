@@ -191,6 +191,32 @@ Respond in a helpful, direct manner that aligns with the user's stated goals and
             "recent_topics": recent_topics_text
         }
 
+    async def _get_conversation_history(self, user_id: str, limit: int = 20) -> List:
+        """
+        Retrieve recent conversation turns from M2, sorted chronologically.
+
+        Returns a list of LangChain HumanMessage/AIMessage objects ready to pass
+        to the LLM so it has full conversational context.
+        """
+        try:
+            entries = await self.context_manager.query_semantic_memory(
+                user_id=user_id,
+                query="",
+                limit=limit
+            )
+            entries.sort(key=lambda e: e.timestamp)
+            history = []
+            for entry in entries:
+                role = entry.metadata.get("role", "user")
+                if role == "user":
+                    history.append(HumanMessage(content=entry.content))
+                elif role == "assistant":
+                    history.append(AIMessage(content=entry.content))
+            return history
+        except Exception as e:
+            logger.warning(f"Could not retrieve conversation history: {e}")
+            return []
+
     async def handle_user_message(
         self,
         user_id: str,
@@ -224,9 +250,13 @@ Respond in a helpful, direct manner that aligns with the user's stated goals and
             # Step 2: Call Groq LLM (stateless text generation)
             logger.info(f"Generating response for user {user_id}: {message[:50]}...")
 
-            # Convert to LangChain messages format (Groq supports system messages)
+            # Retrieve recent conversation history so the LLM has full context
+            conversation_history = await self._get_conversation_history(user_id)
+
+            # Build messages: system prompt + prior turns + current user message
             lc_messages = [
                 SystemMessage(content=system_prompt),
+                *conversation_history,
                 HumanMessage(content=message)
             ]
 
