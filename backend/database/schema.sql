@@ -229,6 +229,33 @@ CREATE POLICY "Users can update own session"
     ON public.user_sessions FOR UPDATE
     USING (auth.uid() = user_id);
 
+-- ==================== Conversation Turns Table ====================
+-- Reliable ordered history for LLM context (M1 backup for Weaviate)
+
+CREATE TABLE IF NOT EXISTS public.conversation_turns (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+    content TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_conversation_turns_user_time
+    ON public.conversation_turns(user_id, created_at DESC);
+
+-- Enable RLS
+ALTER TABLE public.conversation_turns ENABLE ROW LEVEL SECURITY;
+
+-- Policies
+CREATE POLICY "Users can view own conversation turns"
+    ON public.conversation_turns FOR SELECT
+    USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own conversation turns"
+    ON public.conversation_turns FOR INSERT
+    WITH CHECK (auth.uid() = user_id);
+
 -- ==================== Functions ====================
 
 -- Function to update updated_at timestamp
