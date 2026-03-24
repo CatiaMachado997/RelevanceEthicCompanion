@@ -5,6 +5,7 @@ Endpoints for connecting external data sources (Google Calendar, etc.)
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import RedirectResponse
 from typing import Dict, Any, List
 import logging
 
@@ -80,47 +81,51 @@ async def oauth_callback(
     code: str = Query(..., description="Authorization code from OAuth provider"),
     state: str = Query(..., description="User ID passed in state parameter"),
     ingestion: DataIngestionService = Depends(get_data_ingestion)
-) -> Dict[str, Any]:
+):
     """
     Handle OAuth callback from authorization provider
 
     Args:
-        source_type: Type of source ('google_calendar', etc.)
+        source_type: Type of source ('google_calendar', 'gmail', 'slack', etc.)
         code: Authorization code
-        state: State parameter (contains user_id)
+        state: State parameter (contains signed user_id + source_type)
 
     Returns:
-        Dict with success status and message
+        RedirectResponse to frontend integrations page with success or error query param
 
     Example:
-        GET /api/data-sources/oauth/google_calendar/callback?code=xxx&state=user-id
+        GET /api/data-sources/oauth/google_calendar/callback?code=xxx&state=signed-state
 
-        Response:
-        {
-            "success": true,
-            "message": "google_calendar connected successfully",
-            "source_type": "google_calendar"
-        }
+        Redirects to:
+        http://localhost:3000/dashboard/integrations?connected=google_calendar
     """
     try:
         user_id = validate_signed_state(state=state, expected_source_type=source_type)
-
         result = await ingestion.handle_oauth_callback(
             source_type=source_type,
             authorization_code=code,
             user_id=user_id
         )
-
         if not result["success"]:
-            raise HTTPException(status_code=400, detail=result["message"])
-
-        return result
-
+            return RedirectResponse(
+                url=f"{settings.FRONTEND_URL}/dashboard/integrations?error={source_type}_failed",
+                status_code=302
+            )
+        return RedirectResponse(
+            url=f"{settings.FRONTEND_URL}/dashboard/integrations?connected={source_type}",
+            status_code=302
+        )
     except HTTPException:
-        raise
+        return RedirectResponse(
+            url=f"{settings.FRONTEND_URL}/dashboard/integrations?error=auth_failed",
+            status_code=302
+        )
     except Exception as e:
         logger.error(f"OAuth callback failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to complete authorization")
+        return RedirectResponse(
+            url=f"{settings.FRONTEND_URL}/dashboard/integrations?error=server_error",
+            status_code=302
+        )
 
 
 @router.post("/sync/{source_type}")

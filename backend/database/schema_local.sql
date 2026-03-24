@@ -198,7 +198,7 @@ ON CONFLICT DO NOTHING;
 CREATE TABLE IF NOT EXISTS data_sources (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    source_type TEXT NOT NULL CHECK (source_type IN ('google_calendar', 'gmail', 'notes', 'browsing_history')),
+    source_type TEXT NOT NULL CHECK (source_type IN ('google_calendar', 'gmail', 'slack', 'notes', 'browsing_history')),
     oauth_token_encrypted TEXT,
     oauth_refresh_token_encrypted TEXT,
     token_expires_at TIMESTAMP WITH TIME ZONE,

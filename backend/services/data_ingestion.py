@@ -12,6 +12,8 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 
 from services.google_calendar_sync import GoogleCalendarSync
+from services.gmail_sync import GmailSync
+from services.slack_sync import SlackSync
 from services.context_manager import ContextManager
 from models.context import Event, SemanticMemoryEntry
 from utils.db import get_db_connection
@@ -42,6 +44,8 @@ class DataIngestionService:
 
         # Initialize sync adapters
         self.google_calendar = GoogleCalendarSync()
+        self.gmail = GmailSync()
+        self.slack = SlackSync()
 
         logger.info("✅ DataIngestionService initialized")
 
@@ -61,6 +65,14 @@ class DataIngestionService:
         """
         if source_type == 'google_calendar':
             auth_url = self.google_calendar.get_authorization_url(user_id, oauth_state=oauth_state)
+            logger.info(f"✅ Generated OAuth URL for {source_type}, user {user_id}")
+            return auth_url
+        elif source_type == 'gmail':
+            auth_url = self.gmail.get_authorization_url(user_id, oauth_state=oauth_state)
+            logger.info(f"✅ Generated OAuth URL for {source_type}, user {user_id}")
+            return auth_url
+        elif source_type == 'slack':
+            auth_url = self.slack.get_authorization_url(user_id, oauth_state=oauth_state)
             logger.info(f"✅ Generated OAuth URL for {source_type}, user {user_id}")
             return auth_url
         else:
@@ -89,6 +101,48 @@ class DataIngestionService:
                 tokens = self.google_calendar.exchange_code_for_tokens(authorization_code)
 
                 # Store tokens in database (encrypted in production!)
+                await self._store_data_source(
+                    user_id=user_id,
+                    source_type=source_type,
+                    access_token=tokens['access_token'],
+                    refresh_token=tokens['refresh_token'],
+                    expires_at=tokens['expires_at']
+                )
+
+                logger.info(f"✅ OAuth completed for {source_type}, user {user_id}")
+
+                # Trigger initial sync
+                await self.sync_data_source(user_id, source_type)
+
+                return {
+                    "success": True,
+                    "message": f"{source_type} connected successfully",
+                    "source_type": source_type
+                }
+            elif source_type == 'gmail':
+                tokens = self.gmail.exchange_code_for_tokens(authorization_code)
+
+                await self._store_data_source(
+                    user_id=user_id,
+                    source_type=source_type,
+                    access_token=tokens['access_token'],
+                    refresh_token=tokens['refresh_token'],
+                    expires_at=tokens['expires_at']
+                )
+
+                logger.info(f"✅ OAuth completed for {source_type}, user {user_id}")
+
+                # Trigger initial sync
+                await self.sync_data_source(user_id, source_type)
+
+                return {
+                    "success": True,
+                    "message": f"{source_type} connected successfully",
+                    "source_type": source_type
+                }
+            elif source_type == 'slack':
+                tokens = self.slack.exchange_code_for_tokens(authorization_code)
+
                 await self._store_data_source(
                     user_id=user_id,
                     source_type=source_type,
@@ -210,6 +264,17 @@ class DataIngestionService:
                     access_token=tokens['access_token'],
                     refresh_token=tokens['refresh_token']
                 )
+            elif source_type == 'gmail':
+                items_synced = await self._sync_gmail(
+                    user_id=user_id,
+                    access_token=tokens['access_token'],
+                    refresh_token=tokens['refresh_token']
+                )
+            elif source_type == 'slack':
+                items_synced = await self._sync_slack(
+                    user_id=user_id,
+                    access_token=tokens['access_token']
+                )
             else:
                 raise ValueError(f"Unsupported source type: {source_type}")
 
@@ -307,6 +372,95 @@ class DataIngestionService:
 
             except Exception as e:
                 logger.warning(f"⚠️  Failed to sync event {google_event.get('id')}: {e}")
+                continue
+
+        return items_synced
+
+    async def _sync_gmail(
+        self,
+        user_id: str,
+        access_token: str,
+        refresh_token: str
+    ) -> int:
+        """
+        Sync Gmail messages to M2 (semantic memory)
+
+        Returns:
+            Number of messages synced
+        """
+        messages = self.gmail.fetch_messages(
+            access_token=access_token,
+            refresh_token=refresh_token
+        )
+
+        items_synced = 0
+
+        for message in messages:
+            try:
+                if self.context_manager.weaviate and self.context_manager.embedding_service:
+                    content = f"Email from {message['from']}: {message['subject']}. {message['snippet']}"
+
+                    memory_entry = SemanticMemoryEntry(
+                        user_id=user_id,
+                        content=content,
+                        source='gmail',
+                        timestamp=datetime.now(timezone.utc),
+                        metadata={
+                            'message_id': message['id'],
+                            'subject': message['subject'],
+                            'from': message['from'],
+                            'date': message['date'],
+                        }
+                    )
+
+                    await self.context_manager.store_semantic_memory(memory_entry)
+
+                items_synced += 1
+
+            except Exception as e:
+                logger.warning(f"⚠️  Failed to sync Gmail message {message.get('id')}: {e}")
+                continue
+
+        return items_synced
+
+    async def _sync_slack(
+        self,
+        user_id: str,
+        access_token: str
+    ) -> int:
+        """
+        Sync Slack messages to M2 (semantic memory)
+
+        Returns:
+            Number of messages synced
+        """
+        messages = self.slack.fetch_messages(access_token=access_token)
+
+        items_synced = 0
+
+        for message in messages:
+            try:
+                if self.context_manager.weaviate and self.context_manager.embedding_service:
+                    content = f"Slack #{message['channel']}: {message['text']}"
+
+                    memory_entry = SemanticMemoryEntry(
+                        user_id=user_id,
+                        content=content,
+                        source='slack',
+                        timestamp=datetime.now(timezone.utc),
+                        metadata={
+                            'channel': message['channel'],
+                            'ts': message['ts'],
+                            'user': message['user'],
+                        }
+                    )
+
+                    await self.context_manager.store_semantic_memory(memory_entry)
+
+                items_synced += 1
+
+            except Exception as e:
+                logger.warning(f"⚠️  Failed to sync Slack message {message.get('ts')}: {e}")
                 continue
 
         return items_synced
