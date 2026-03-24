@@ -280,9 +280,8 @@ Respond in a helpful, direct manner that aligns with the user's stated goals and
                 )
             )
 
-            # Also store in M1 for reliable ordered history retrieval
+            # Store user turn unconditionally (user said what they said - fine to record)
             await self.context_manager.store_conversation_turn(user_id, 'user', message)
-            await self.context_manager.store_conversation_turn(user_id, 'assistant', generated_response)
 
             # Step 4 & 5: ESL evaluation (MANDATORY - YOUR ethical rules)
             decision_result = await self.decide_action(
@@ -296,6 +295,18 @@ Respond in a helpful, direct manner that aligns with the user's stated goals and
                     "context": context or {}
                 }
             )
+
+            # Store assistant turn ONLY if ESL approved/executed the response
+            if decision_result.get("executed"):
+                # If modified, store the modified content; if approved, store original
+                assistant_content = generated_response
+                decision = decision_result.get("decision")
+                if decision and hasattr(decision, 'status') and decision.status == "MODIFIED" and decision.modified_action:
+                    # Use modified content if available
+                    modified = decision.modified_action
+                    if hasattr(modified, 'content') and modified.content:
+                        assistant_content = modified.content
+                await self.context_manager.store_conversation_turn(user_id, 'assistant', assistant_content)
 
             # Step 6: Return result
             return {
