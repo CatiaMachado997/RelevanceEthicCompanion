@@ -59,7 +59,15 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
-    
+
+    # Slack OAuth (Phase X: Slack Integration)
+    SLACK_CLIENT_ID: str = ""
+    SLACK_CLIENT_SECRET: str = ""
+    SLACK_REDIRECT_URI: str = ""
+
+    # Frontend URL
+    FRONTEND_URL: str = "http://localhost:3000"
+
     model_config = ConfigDict(env_file=".env", case_sensitive=True)
 
 
