@@ -101,3 +101,21 @@ def test_mark_all_read(client):
         response = client.patch("/api/notifications/read-all")
     assert response.status_code == 200
     assert response.json()["status"] == "success"
+
+
+def test_notification_count_endpoint(client, monkeypatch):
+    """GET /api/notifications/count returns {unread_count: N}."""
+    from unittest.mock import patch, MagicMock
+    mock_row = {"cnt": 3}
+    mock_cur = MagicMock()
+    mock_cur.__enter__ = lambda s: s
+    mock_cur.__exit__ = MagicMock(return_value=False)
+    mock_cur.fetchone.return_value = mock_row
+    mock_conn = MagicMock()
+    mock_conn.__enter__ = lambda s: s
+    mock_conn.__exit__ = MagicMock(return_value=False)
+    mock_conn.cursor.return_value = mock_cur
+    with patch("routes.notifications.get_db", return_value=mock_conn):
+        response = client.get("/api/notifications/count")
+    assert response.status_code == 200
+    assert response.json()["unread_count"] == 3

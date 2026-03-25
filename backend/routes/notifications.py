@@ -66,6 +66,24 @@ async def list_notifications(
         raise HTTPException(status_code=500, detail=f"Error fetching notifications: {str(e)}")
 
 
+@router.get("/count", response_model=dict)
+async def get_unread_count(
+    user_id: str = Depends(get_current_read_user_id),
+):
+    """Lightweight endpoint returning only the unread notification count."""
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT COUNT(*) AS cnt FROM user_notifications WHERE user_id = %s AND read = FALSE",
+                    (str(user_id),),
+                )
+                row = cur.fetchone()
+        return {"unread_count": int(row["cnt"]) if row else 0}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching count: {str(e)}")
+
+
 @router.patch("/read-all", response_model=dict)
 async def mark_all_read(
     user_id: str = Depends(get_current_user_id),
