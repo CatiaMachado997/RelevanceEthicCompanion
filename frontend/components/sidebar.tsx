@@ -4,7 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   LayoutDashboard, MessageSquare, Heart, Target,
-  Eye, Shield, Plug, Settings, LogOut,
+  Eye, Plug, Settings, LogOut, Bell, User,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/useAuth"
@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/goals",        label: "Goals",        icon: Target },
   { href: "/dashboard/transparency", label: "Transparency", icon: Eye },
   { href: "/dashboard/integrations", label: "Integrations", icon: Plug },
+  { href: "/dashboard/notifications",label: "Notifications",icon: Bell },
 ]
 
 interface SidebarNavProps {
@@ -24,7 +25,11 @@ interface SidebarNavProps {
 
 export function SidebarNav({ onClose }: SidebarNavProps = {}) {
   const pathname = usePathname()
-  const { signOut } = useAuth()
+  const { signOut, user } = useAuth()
+
+  const initials = user?.email
+    ? user.email.split('@')[0].substring(0, 2).toUpperCase()
+    : 'U'
 
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname === href || pathname.startsWith(href + "/")
@@ -79,10 +84,16 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
         <Link
           href="/dashboard/settings"
           onClick={onClose}
-          className="flex items-center gap-3 h-9 px-3 rounded-lg text-sm transition-colors hover:bg-[#f5f5f5]"
-          style={{ color: "#6b6b6b" }}
+          className={cn(
+            "flex items-center gap-3 h-9 px-3 rounded-lg text-sm transition-colors duration-100",
+            pathname === "/dashboard/settings" ? "font-medium" : "hover:bg-[#f5f5f5]"
+          )}
+          style={{
+            background: pathname === "/dashboard/settings" ? "#f0f0f0" : undefined,
+            color: pathname === "/dashboard/settings" ? "#1a1a1a" : "#6b6b6b",
+          }}
         >
-          <Settings size={16} strokeWidth={1.8} />
+          <Settings size={16} strokeWidth={pathname === "/dashboard/settings" ? 2.2 : 1.8} />
           Settings
         </Link>
         <button
@@ -94,16 +105,27 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
           Sign out
         </button>
 
-        {/* User row */}
-        <div className="flex items-center gap-2.5 px-3 mt-2 pt-2 border-t" style={{ borderColor: "#e8e8e8" }}>
+        {/* User row — links to profile */}
+        <Link
+          href="/dashboard/profile"
+          onClick={onClose}
+          className="flex items-center gap-2.5 px-3 mt-2 pt-2 border-t transition-opacity hover:opacity-70"
+          style={{ borderColor: "#e8e8e8" }}
+        >
           <div
             className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0"
             style={{ background: "#1a1a1a", color: "#ffffff" }}
           >
-            U
+            {initials}
           </div>
-          <span className="text-xs truncate" style={{ color: "#6b6b6b" }}>My Account</span>
-        </div>
+          <div className="min-w-0">
+            <p className="text-xs truncate" style={{ color: "#1a1a1a" }}>
+              {user?.email?.split('@')[0] ?? 'My Account'}
+            </p>
+            <p className="text-[10px] truncate" style={{ color: "#9e9e9e" }}>View profile</p>
+          </div>
+          <User size={12} className="ml-auto shrink-0" style={{ color: "#c0c0c0" }} />
+        </Link>
       </div>
     </aside>
   )

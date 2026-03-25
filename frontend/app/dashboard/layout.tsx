@@ -15,8 +15,10 @@ const PAGE_META: Record<string, { title: string; subtitle?: string }> = {
   '/dashboard/goals':        { title: 'Goals',        subtitle: 'Track your active goals' },
   '/dashboard/transparency': { title: 'Transparency', subtitle: 'ESL audit and decisions' },
   '/dashboard/integrations': { title: 'Integrations', subtitle: 'Connect your apps' },
-  '/dashboard/settings':     { title: 'Settings' },
-  '/dashboard/profile':      { title: 'Profile' },
+  '/dashboard/settings':      { title: 'Settings',      subtitle: 'Preferences and privacy' },
+  '/dashboard/profile':       { title: 'Profile',       subtitle: 'Your personal information' },
+  '/dashboard/notifications': { title: 'Notifications', subtitle: 'Your activity and alerts' },
+  '/dashboard/search':        { title: 'Search',        subtitle: 'Find anything' },
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

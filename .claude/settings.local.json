@@ -29,7 +29,9 @@
       "Bash(npx jest:*)",
       "Bash(pytest tests/test_conversation_history.py -v)",
       "Bash(pytest tests/test_conversation_history.py -v --tb=short)",
-      "Bash(pytest --no-header -q)"
+      "Bash(pytest --no-header -q)",
+      "mcp__figma__get_metadata",
+      "Bash(pytest tests/test_chat_stream.py -v)"
     ]
   }
 }

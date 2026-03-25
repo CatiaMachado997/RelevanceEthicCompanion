@@ -1,144 +1,267 @@
 'use client'
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { useState, useEffect } from 'react'
+import { goalsApi, valuesApi, transparencyApi } from '@/lib/api'
+import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { User, Mail, Calendar, Shield } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
+import { Shield, User, BarChart3 } from 'lucide-react'
+import { Skeleton } from '@/components/ui/skeleton'
 import { PageHeader } from '@/components/ui/page-header'
+
+const CARD_STYLE = {
+  background: '#ffffff',
+  border: '1px solid rgba(0,0,0,0.08)',
+  borderRadius: '16px',
+  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+}
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 export default function ProfilePage() {
   const { user } = useAuth()
 
-  const getInitials = (email: string) => {
-    return email
-      .split('@')[0]
-      .substring(0, 2)
-      .toUpperCase()
+  const [displayName, setDisplayName] = useState('')
+  const [timezone, setTimezone] = useState('')
+  const [originalName, setOriginalName] = useState('')
+  const [originalTimezone, setOriginalTimezone] = useState('')
+
+  const [valuesCount, setValuesCount] = useState<number | null>(null)
+  const [goalsCount, setGoalsCount] = useState<number | null>(null)
+  const [approvalRate, setApprovalRate] = useState<number | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saveSuccess, setSaveSuccess] = useState(false)
+
+  const initials = user?.email
+    ? user.email.split('@')[0].substring(0, 2).toUpperCase()
+    : 'U'
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [values, goals, report] = await Promise.allSettled([
+          valuesApi.list(),
+          goalsApi.list('active'),
+          transparencyApi.report(),
+        ])
+        if (values.status === 'fulfilled') setValuesCount(values.value.values.length)
+        if (goals.status === 'fulfilled') setGoalsCount(goals.value.goals.length)
+        if (report.status === 'fulfilled') {
+          const rate = report.value?.approval_rate ?? 0
+          setApprovalRate(rate > 1 ? Math.round(rate) : Math.round(rate * 100))
+        }
+
+        // Load profile display_name and timezone from profile API
+        const { data: { session } } = await supabase.auth.getSession()
+        const token = session?.access_token
+        if (token) {
+          const res = await fetch(`${API_URL}/api/profile/`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+          if (res.ok) {
+            const json = await res.json()
+            const profile = json.data ?? {}
+            const name = profile.display_name ?? ''
+            const tz = profile.timezone ?? ''
+            setDisplayName(name)
+            setOriginalName(name)
+            setTimezone(tz)
+            setOriginalTimezone(tz)
+          }
+        }
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [])
+
+  const isDirty = displayName !== originalName || timezone !== originalTimezone
+
+  const handleSave = async () => {
+    if (!isDirty) return
+    setSaving(true)
+    setSaveError(null)
+    setSaveSuccess(false)
+    try {
+      const { data: { session } } = await import('@/lib/supabase').then(m => m.supabase.auth.getSession())
+      const token = session?.access_token
+      const body: Record<string, string> = {}
+      if (displayName !== originalName) body.display_name = displayName
+      if (timezone !== originalTimezone) body.timezone = timezone
+
+      const res = await fetch(`${API_URL}/api/profile/`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.detail ?? 'Failed to save')
+      }
+      const json = await res.json()
+      const updated = json.data ?? {}
+      setOriginalName(updated.display_name ?? displayName)
+      setOriginalTimezone(updated.timezone ?? timezone)
+      setSaveSuccess(true)
+      setTimeout(() => setSaveSuccess(false), 2000)
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
   }
 
+  const handleCancel = () => {
+    setDisplayName(originalName)
+    setTimezone(originalTimezone)
+    setSaveError(null)
+  }
+
+  const stats = [
+    { label: 'Values Set', value: valuesCount },
+    { label: 'Active Goals', value: goalsCount },
+    { label: 'ESL Approval', value: approvalRate !== null ? `${approvalRate}%` : null },
+  ]
+
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="max-w-4xl space-y-5">
       <PageHeader title="Profile" subtitle="Your personal information" />
 
-      {/* Profile Card */}
-      <Card className="border-[#e0e0e0] rounded-2xl">
-        <CardHeader>
-          <div className="flex items-center gap-4">
-            <Avatar className="h-20 w-20">
-              <AvatarFallback className="bg-[#1a1a1a] text-white text-2xl font-semibold">
-                {user?.email ? getInitials(user.email) : 'U'}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1">
-              <CardTitle className="text-[#1a1a1a]">
-                {user?.email?.split('@')[0] || 'User'}
-              </CardTitle>
-              <CardDescription className="text-[#6b6b6b]">
-                {user?.email || 'user@example.com'}
-              </CardDescription>
-              <div className="flex gap-2 mt-2">
-                <Badge variant="outline" className="bg-[#1a1a1a]/10 text-[#1a1a1a] border-[#1a1a1a]/20 rounded-full">
-                  <Shield className="h-3 w-3 mr-1" />
-                  Protected by ESL
-                </Badge>
-              </div>
-            </div>
-            <Button variant="outline" className="rounded-full" disabled>
-              Change Avatar
-            </Button>
+      {/* Identity card */}
+      <div className="rounded-2xl p-6 flex items-center gap-5" style={CARD_STYLE}>
+        <div
+          className="w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-bold shrink-0"
+          style={{ background: '#332b36', color: '#ffffff' }}
+        >
+          {initials}
+        </div>
+        <div className="min-w-0">
+          <p className="text-base font-semibold truncate" style={{ color: '#0a0a0a' }}>
+            {displayName || user?.email?.split('@')[0] || 'User'}
+          </p>
+          <p className="text-sm truncate" style={{ color: '#9e9e9e' }}>{user?.email}</p>
+          <div
+            className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded-full text-xs font-medium"
+            style={{ background: 'rgba(74,124,89,0.10)', color: '#4A7C59', border: '1px solid rgba(74,124,89,0.20)' }}
+          >
+            <Shield size={11} />
+            Protected by ESL
           </div>
-        </CardHeader>
-      </Card>
+        </div>
+      </div>
 
-      {/* Personal Information */}
-      <Card className="border-[#e0e0e0] rounded-2xl">
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <User className="h-4 w-4 text-[#1a1a1a]" />
-            <CardTitle className="text-[#1a1a1a]">Personal Information</CardTitle>
-          </div>
-          <CardDescription className="text-[#6b6b6b]">
-            Update your personal details
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-2">
-            <Label htmlFor="name" className="text-[#1a1a1a]">Full Name</Label>
-            <Input
-              id="name"
-              placeholder="Enter your name"
-              className="rounded-xl"
-              disabled
+      {/* Personal info */}
+      <div className="rounded-2xl p-5" style={CARD_STYLE}>
+        <div className="flex items-center gap-2 mb-4">
+          <User size={15} style={{ color: '#000000' }} />
+          <h3 className="text-sm font-semibold" style={{ color: '#0a0a0a' }}>Personal Information</h3>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: '#6b6b6b' }}>Display Name</label>
+            <input
+              type="text"
+              value={displayName}
+              onChange={e => setDisplayName(e.target.value)}
+              placeholder="Your name"
+              className="w-full px-3 py-2 rounded-xl text-sm outline-none transition-all"
+              style={{
+                background: '#f9f9f9',
+                border: '1px solid rgba(0,0,0,0.10)',
+                color: '#0a0a0a',
+              }}
             />
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="email" className="text-[#1a1a1a]">Email</Label>
-            <div className="flex gap-2">
-              <Input
-                id="email"
-                type="email"
-                value={user?.email || ''}
-                className="rounded-xl"
-                disabled
-              />
-              <Button variant="outline" className="rounded-full" disabled>
-                Verify
-              </Button>
-            </div>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="timezone" className="text-[#1a1a1a]">Timezone</Label>
-            <Input
-              id="timezone"
-              placeholder="UTC-5 (EST)"
-              className="rounded-xl"
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: '#6b6b6b' }}>Email</label>
+            <input
+              type="email"
+              value={user?.email ?? ''}
               disabled
+              className="w-full px-3 py-2 rounded-xl text-sm"
+              style={{
+                background: '#f5f5f5',
+                border: '1px solid rgba(0,0,0,0.06)',
+                color: '#9e9e9e',
+                cursor: 'not-allowed',
+              }}
+            />
+            <p className="text-xs mt-1" style={{ color: '#b0b0b0' }}>Email cannot be changed here</p>
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: '#6b6b6b' }}>Timezone</label>
+            <input
+              type="text"
+              value={timezone}
+              onChange={e => setTimezone(e.target.value)}
+              placeholder="e.g. Europe/Lisbon"
+              className="w-full px-3 py-2 rounded-xl text-sm outline-none transition-all"
+              style={{
+                background: '#f9f9f9',
+                border: '1px solid rgba(0,0,0,0.10)',
+                color: '#0a0a0a',
+              }}
             />
           </div>
-        </CardContent>
-      </Card>
+        </div>
 
-      {/* Account Stats */}
-      <Card className="border-[#e0e0e0] rounded-2xl">
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-[#1a1a1a]" />
-            <CardTitle className="text-[#1a1a1a]">Account Statistics</CardTitle>
-          </div>
-          <CardDescription className="text-[#6b6b6b]">
-            Your activity summary
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="text-center p-4 rounded-2xl bg-[#f5f5f5]">
-              <div className="text-2xl font-bold text-[#1a1a1a]">12</div>
-              <div className="text-sm text-[#6b6b6b] mt-1">Values Set</div>
-            </div>
-            <div className="text-center p-4 rounded-2xl bg-[#f5f5f5]">
-              <div className="text-2xl font-bold text-[#1a1a1a]">5</div>
-              <div className="text-sm text-[#6b6b6b] mt-1">Active Goals</div>
-            </div>
-            <div className="text-center p-4 rounded-2xl bg-[#f5f5f5]">
-              <div className="text-2xl font-bold text-[#1a1a1a]">87%</div>
-              <div className="text-sm text-[#6b6b6b] mt-1">ESL Approval Rate</div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+        {saveError && (
+          <p className="mt-3 text-xs" style={{ color: '#B04A3A' }}>{saveError}</p>
+        )}
+        {saveSuccess && (
+          <p className="mt-3 text-xs" style={{ color: '#4A7C59' }}>Saved successfully</p>
+        )}
 
-      {/* Action Buttons */}
-      <div className="flex gap-3">
-        <Button className="bg-[#1a1a1a] hover:bg-[#333333] rounded-full" disabled>
-          Save Changes
-        </Button>
-        <Button variant="outline" className="rounded-full" disabled>
-          Cancel
-        </Button>
+        {isDirty && (
+          <div className="flex gap-2 mt-4">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-4 py-2 rounded-xl text-sm font-medium transition-opacity disabled:opacity-50"
+              style={{ background: '#000000', color: '#ffffff' }}
+            >
+              {saving ? 'Saving…' : 'Save Changes'}
+            </button>
+            <button
+              onClick={handleCancel}
+              className="px-4 py-2 rounded-xl text-sm font-medium transition-colors hover:bg-[#f0f0f0]"
+              style={{ background: '#f5f5f5', color: '#6b6b6b' }}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Account stats */}
+      <div className="rounded-2xl p-5" style={CARD_STYLE}>
+        <div className="flex items-center gap-2 mb-4">
+          <BarChart3 size={15} style={{ color: '#000000' }} />
+          <h3 className="text-sm font-semibold" style={{ color: '#0a0a0a' }}>Account Statistics</h3>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          {stats.map(({ label, value }) => (
+            <div
+              key={label}
+              className="text-center py-4 rounded-xl"
+              style={{ background: '#f9f9f9' }}
+            >
+              {loading ? (
+                <Skeleton className="h-7 w-12 mx-auto mb-1" />
+              ) : (
+                <p className="text-2xl font-bold" style={{ color: '#0a0a0a' }}>
+                  {value ?? '—'}
+                </p>
+              )}
+              <p className="text-xs mt-1" style={{ color: '#9e9e9e' }}>{label}</p>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )

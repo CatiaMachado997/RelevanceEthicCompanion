@@ -476,6 +476,21 @@ export const transparencyApi = {
     }>('/api/transparency/insights'),
 }
 
+// ==================== Feedback API ====================
+
+export const feedbackApi = {
+  submit: (data: {
+    item_id: string
+    item_type: 'chat_response' | 'search_result' | 'calendar_event' | 'proactive_insight' | 'memory_recall'
+    feedback_type: 'thumbs_up' | 'thumbs_down' | 'not_relevant' | 'value_conflict' | 'inaccurate'
+    additional_notes?: string
+  }) =>
+    apiRequest<{ status: string; data: { success: boolean; feedback_id: string } }>('/api/feedback/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+}
+
 // ==================== Relevance API ====================
 
 export const relevanceApi = {
@@ -491,6 +506,24 @@ export const relevanceApi = {
     }>(`/api/relevance/scan?window_minutes=${windowMinutes}`, {
       method: 'POST',
     }),
+}
+
+// ==================== Events API ====================
+
+export interface CalendarEvent {
+  id: string
+  title: string
+  start_time: string | null
+  end_time: string | null
+  description: string | null
+  source: string
+}
+
+export const eventsApi = {
+  upcoming: (hoursAhead = 24) =>
+    apiRequest<{ status: string; events: CalendarEvent[] }>(
+      `/api/data-sources/events/upcoming?hours_ahead=${hoursAhead}`
+    ),
 }
 
 // ==================== Data Sources API ====================
@@ -613,15 +646,33 @@ export const notificationsApi = {
   },
 }
 
+export interface SearchResult {
+  id: string
+  type: "memory" | "event" | string
+  content: string
+  score: number
+  metadata: Record<string, unknown>
+}
+
+export const searchApi = {
+  async query(q: string, limit = 10): Promise<SearchResult[]> {
+    const params = new URLSearchParams({ q, limit: String(limit) })
+    return apiRequest<SearchResult[]>(`/api/search?${params}`)
+  },
+}
+
 export const api = {
   values: valuesApi,
   chat: chatApi,
   goals: goalsApi,
   transparency: transparencyApi,
   relevance: relevanceApi,
+  feedback: feedbackApi,
+  events: eventsApi,
   dataSources: dataSourcesApi,
   settings: settingsApi,
   notifications: notificationsApi,
+  search: searchApi,
 };
 
 export default api;

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
-import { Send, ChevronDown, ChevronUp, Copy, Bot, Square } from 'lucide-react'
+import { Send, ChevronDown, ChevronUp, Copy, Bot, Square, ThumbsUp, ThumbsDown } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 
 interface Message {
@@ -12,6 +12,7 @@ interface Message {
   content: string
   timestamp: string
   streaming?: boolean
+  feedback?: 'up' | 'down' | null
   esl_decision?: {
     status: 'APPROVED' | 'VETOED' | 'MODIFIED'
     reason: string
@@ -64,6 +65,37 @@ function CopyButton({ content }: { content: string }) {
   )
 }
 
+function FeedbackButtons({
+  messageId,
+  currentFeedback,
+  onFeedback,
+}: {
+  messageId: string
+  currentFeedback: 'up' | 'down' | null | undefined
+  onFeedback: (id: string, type: 'up' | 'down') => void
+}) {
+  return (
+    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+      <button
+        onClick={() => onFeedback(messageId, 'up')}
+        aria-label="Helpful"
+        className="p-1 rounded-md hover:bg-black/5 transition-colors"
+        style={{ color: currentFeedback === 'up' ? '#4A7C59' : '#c0c0c0' }}
+      >
+        <ThumbsUp size={13} fill={currentFeedback === 'up' ? '#4A7C59' : 'none'} />
+      </button>
+      <button
+        onClick={() => onFeedback(messageId, 'down')}
+        aria-label="Not helpful"
+        className="p-1 rounded-md hover:bg-black/5 transition-colors"
+        style={{ color: currentFeedback === 'down' ? '#B04A3A' : '#c0c0c0' }}
+      >
+        <ThumbsDown size={13} fill={currentFeedback === 'down' ? '#B04A3A' : 'none'} />
+      </button>
+    </div>
+  )
+}
+
 function ESLTag({ decision }: { decision: Message['esl_decision'] }) {
   const [expanded, setExpanded] = useState(false)
   if (!decision) return null
@@ -99,6 +131,24 @@ export default function ChatPage() {
   const endRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const streamRef = useRef<{ cancel: () => void } | null>(null)
+
+  const handleFeedback = useCallback(async (messageId: string, type: 'up' | 'down') => {
+    setMessages(prev =>
+      prev.map(m => m.id === messageId ? { ...m, feedback: type } : m)
+    )
+    try {
+      await api.feedback.submit({
+        item_id: messageId,
+        item_type: 'chat_response',
+        feedback_type: type === 'up' ? 'thumbs_up' : 'thumbs_down',
+      })
+    } catch {
+      // revert on failure
+      setMessages(prev =>
+        prev.map(m => m.id === messageId ? { ...m, feedback: null } : m)
+      )
+    }
+  }, [])
 
   // Load history on mount
   useEffect(() => {
@@ -310,7 +360,16 @@ export default function ChatPage() {
                     )}
                     {msg.esl_decision && <ESLTag decision={msg.esl_decision} />}
                   </div>
-                  {!msg.streaming && <CopyButton content={msg.content} />}
+                  {!msg.streaming && (
+                    <div className="flex items-center gap-0.5">
+                      <CopyButton content={msg.content} />
+                      <FeedbackButtons
+                        messageId={msg.id}
+                        currentFeedback={msg.feedback}
+                        onFeedback={handleFeedback}
+                      />
+                    </div>
+                  )}
                 </div>
                 {msg.timestamp && !msg.streaming && (
                   <span className="text-[10px] pl-9" style={{ color: '#b0b0b0' }}>

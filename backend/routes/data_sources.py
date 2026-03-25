@@ -252,6 +252,39 @@ async def disconnect_source(
         raise HTTPException(status_code=500, detail="Failed to disconnect")
 
 
+@router.get("/events/upcoming")
+async def get_upcoming_events(
+    hours_ahead: int = Query(default=24, ge=1, le=168),
+    user_id: str = Depends(get_current_read_user_id),
+) -> Dict[str, Any]:
+    """Get upcoming calendar events for the authenticated user."""
+    try:
+        weaviate_client = get_weaviate_client()
+        embedding_service = EmbeddingService(settings.GEMINI_API_KEY)
+        context_manager = ContextManager(
+            weaviate_client=weaviate_client,
+            embedding_service=embedding_service,
+        )
+        events = await context_manager.get_upcoming_events(str(user_id), hours_ahead=hours_ahead)
+        return {
+            "status": "success",
+            "events": [
+                {
+                    "id": str(e.id),
+                    "title": e.title,
+                    "start_time": e.start_time.isoformat() if e.start_time else None,
+                    "end_time": e.end_time.isoformat() if e.end_time else None,
+                    "description": e.description,
+                    "source": e.source,
+                }
+                for e in events
+            ],
+        }
+    except Exception as e:
+        logger.error(f"Failed to fetch upcoming events: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch events")
+
+
 @router.get("/health")
 async def data_sources_health() -> Dict[str, str]:
     """
