@@ -64,7 +64,7 @@ Frontend (Next.js) ↔️ Backend (FastAPI) ↔️ Supabase
 ```
 /
 ├── backend/          # FastAPI backend with ESL core
-├── frontend/         # Next.js 14 frontend (coming soon)
+├── frontend/         # Next.js 15 frontend
 └── README.md         # This file
 ```
 
