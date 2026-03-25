@@ -1,8 +1,32 @@
 # Ethic Companion
 
-**AI as our Companion in Decision-Making**
+> Personal work orchestration assistant — guided by your values, protected by ESL.
 
-Ethic Companion is an AI assistant built on trust, not engagement. It helps you focus on what matters by filtering noise and respecting your boundaries—always.
+Ethic Companion ingests your calendar, email, and documents, builds a 360° user context, and helps you manage work end-to-end through chat, search, summaries, and proactive nudges. Every action passes through the Ethical Safeguard Layer (ESL) which enforces your values and boundaries.
+
+## Quick Start
+
+**Backend**
+```bash
+cd backend
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env   # fill in GROQ_API_KEY, GEMINI_API_KEY, SUPABASE_* etc.
+docker compose up -d   # Postgres + Weaviate
+python main.py         # → http://localhost:8000/docs
+```
+
+**Frontend**
+```bash
+cd frontend
+npm install
+cp .env.local.example .env.local  # set NEXT_PUBLIC_API_URL=http://localhost:8000
+npm run dev            # → http://localhost:3000
+```
+
+**Auth:** Supabase. Set `ENVIRONMENT=development` in backend `.env` to bypass auth for local dev.
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full architecture details.
 
 ## Purpose
 
