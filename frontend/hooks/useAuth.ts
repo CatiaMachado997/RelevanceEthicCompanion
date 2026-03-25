@@ -11,10 +11,16 @@ export function useAuth() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // Restore session from localStorage on mount (handles page refresh)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+      setLoading(false)
+    })
+
+    // Keep in sync with auth state changes (sign in / sign out / token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setUser(session?.user ?? null)
-        setLoading(false)
       }
     )
     return () => subscription.unsubscribe()
