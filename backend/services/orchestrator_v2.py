@@ -434,7 +434,7 @@ For greetings, general questions, or anything answerable from the context above 
                             )
                             row = cur.fetchone()
                             if row['cnt'] <= 1:  # first message
-                                title = message[:60] + ("\u2026" if len(message) > 60 else "")
+                                title = await self._generate_conversation_title(message)
                                 cur.execute(
                                     "UPDATE conversations SET title = %s, updated_at = NOW() WHERE id = %s",
                                     (title, conversation_id)
@@ -587,6 +587,19 @@ For greetings, general questions, or anything answerable from the context above 
         # Post-stream: store conversation + run ESL advisory (non-blocking)
         await self._post_stream_store(user_id, message, full_response, conversation_id=conversation_id)
 
+    async def _generate_conversation_title(self, user_message: str) -> str:
+        """Use LLM to generate a short conversation title (4–6 words)."""
+        try:
+            prompt = (
+                f'Generate a conversation title of 4–6 words that captures the topic of this message. '
+                f'Reply with the title only, no punctuation at the end.\n\nMessage: "{user_message[:200]}"'
+            )
+            response = await self.llm.ainvoke([HumanMessage(content=prompt)])
+            title = (response.content or "").strip().strip('"').strip("'")
+            return title[:80] if title else user_message[:60]
+        except Exception:
+            return user_message[:60] + ("…" if len(user_message) > 60 else "")
+
     async def _post_stream_store(
         self,
         user_id: str,
@@ -610,7 +623,7 @@ For greetings, general questions, or anything answerable from the context above 
                             )
                             row = cur.fetchone()
                             if row['cnt'] <= 1:  # first message
-                                title = user_msg[:60] + ("\u2026" if len(user_msg) > 60 else "")
+                                title = await self._generate_conversation_title(user_msg)
                                 cur.execute(
                                     "UPDATE conversations SET title = %s, updated_at = NOW() WHERE id = %s",
                                     (title, conversation_id)
