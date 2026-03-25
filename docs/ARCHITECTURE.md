@@ -61,7 +61,7 @@ npm run dev           # http://localhost:3000
 
 ## Two-Memory System
 - **M1 (PostgreSQL)**: Structured data — users, user_values, goals, esl_audit_log, conversation_turns, data_sources, feedback_events
-- **M2 (Weaviate/pgvector)**: Semantic embeddings — conversation history, calendar events, future documents
+- **M2 (Weaviate)**: Semantic embeddings — conversation history, calendar events, documents. pgvector (legacy V1 dependency, not currently used for M2)
 
 ## Frontend Structure
 ```
