@@ -8,10 +8,10 @@ import { dataSourcesApi, DataSource, settingsApi, UserSettings } from '@/lib/api
 import { PageHeader } from '@/components/ui/page-header'
 
 const CARD_STYLE = {
-  background: '#ffffff',
-  border: '1px solid rgba(0,0,0,0.08)',
+  background: 'var(--ec-card-bg)',
+  border: '1px solid var(--ec-card-border)',
   borderRadius: '16px',
-  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+  boxShadow: 'var(--ec-card-shadow)',
 }
 
 const DEFAULT_SETTINGS: UserSettings = {

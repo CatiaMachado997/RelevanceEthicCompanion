@@ -351,7 +351,6 @@ export default function TransparencyPage() {
                 </CardContent>
               </Card>
             </motion.div>
-<<<<<<< Updated upstream
           )}
         </motion.div>
       )}

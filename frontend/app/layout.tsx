@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
 import "./globals.css";
 import { Fraunces } from "next/font/google";
+import { ThemeProvider } from "next-themes";
 
 const fraunces = Fraunces({
   subsets: ["latin"],
@@ -20,11 +21,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${GeistSans.className} ${fraunces.variable}`}>
-      <body
-        className="antialiased bg-background text-foreground"
-      >
-        {children}
+    <html lang="en" className={`${GeistSans.className} ${fraunces.variable}`} suppressHydrationWarning>
+      <body className="antialiased bg-background text-foreground">
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

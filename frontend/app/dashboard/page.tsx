@@ -19,6 +19,13 @@ interface ESLLog {
   timestamp?: string
 }
 
+const CARD_STYLE = {
+  background: 'var(--ec-card-bg)',
+  border: '1px solid var(--ec-card-border)',
+  borderRadius: '16px',
+  boxShadow: 'var(--ec-card-shadow)',
+}
+
 const ESL_COLORS = {
   APPROVED: { bg: 'rgba(74,124,89,0.10)',  text: '#4A7C59', border: 'rgba(74,124,89,0.20)' },
   VETOED:   { bg: 'rgba(176,74,58,0.10)',  text: '#B04A3A', border: 'rgba(176,74,58,0.20)' },

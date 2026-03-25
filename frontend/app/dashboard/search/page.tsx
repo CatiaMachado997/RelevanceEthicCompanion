@@ -191,10 +191,10 @@ export default function SearchPage() {
                       <p className="text-sm text-[#0a0a0a] line-clamp-3">
                         {result.content}
                       </p>
-                      {result.metadata?.timestamp && (
+                      {typeof result.metadata?.timestamp === 'string' && (
                         <div className="flex items-center gap-1 text-xs text-[#9e9e9e]">
                           <Clock className="h-3 w-3" />
-                          {new Date(result.metadata.timestamp as string).toLocaleDateString()}
+                          {new Date(result.metadata.timestamp).toLocaleDateString()}
                         </div>
                       )}
                     </div>
