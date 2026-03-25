@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { transparencyApi } from '@/lib/api'
+import { api } from '@/lib/api'
 import { motion } from 'framer-motion'
 import {
   Activity,
@@ -22,6 +22,20 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { TopHeader } from '@/components/top-header'
+import {
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  BarChart,
+  Bar,
+} from 'recharts'
 
 interface Report {
   total_decisions: number
@@ -38,6 +52,18 @@ interface AuditLog {
   reason: string
   timestamp: string
   confidence_score?: number
+}
+
+interface Stats {
+  decision_breakdown: Record<string, number>
+  most_protected_values: Array<{ value: string; count: number }>
+  most_applied_rules: Array<{ rule: string; count: number }>
+}
+
+const ESL_COLORS = {
+  APPROVED: '#4A7C59',
+  VETOED: '#B04A3A',
+  MODIFIED: '#9B7A3D',
 }
 
 const decisionConfig = {
@@ -58,10 +84,25 @@ const decisionConfig = {
   },
 }
 
+function groupLogsByDay(logs: AuditLog[]) {
+  const map: Record<string, { date: string; approved: number; vetoed: number }> = {}
+  for (const log of logs) {
+    const date = new Date(log.timestamp || Date.now()).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    })
+    if (!map[date]) map[date] = { date, approved: 0, vetoed: 0 }
+    if (log.decision_status === 'APPROVED') map[date].approved++
+    if (log.decision_status === 'VETOED') map[date].vetoed++
+  }
+  return Object.values(map).slice(-7)
+}
+
 export default function TransparencyPage() {
   const [report, setReport] = useState<Report | null>(null)
   const [logs, setLogs] = useState<AuditLog[]>([])
   const [insights, setInsights] = useState<string[]>([])
+  const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
   const [days, setDays] = useState('7')
   const [statusFilter, setStatusFilter] = useState<string | null>(null)
@@ -73,19 +114,22 @@ export default function TransparencyPage() {
   const loadData = async () => {
     setLoading(true)
     try {
-      const [reportData, logsData, insightsData] = await Promise.all([
-        transparencyApi.report(parseInt(days)),
-        transparencyApi.logs(parseInt(days), statusFilter || undefined),
-        transparencyApi.insights(),
+      const [reportData, logsData, insightsData, statsData] = await Promise.all([
+        api.transparency.report(parseInt(days)),
+        api.transparency.logs(parseInt(days), statusFilter || undefined),
+        api.transparency.insights(),
+        api.transparency.stats(),
       ])
       setReport(reportData || null)
       setLogs((logsData?.logs as AuditLog[]) || [])
       setInsights(insightsData?.insights || [])
+      setStats(statsData || null)
     } catch (error) {
       console.error('Failed to load transparency data:', error)
       setReport(null)
       setLogs([])
       setInsights([])
+      setStats(null)
     } finally {
       setLoading(false)
     }
@@ -145,6 +189,16 @@ export default function TransparencyPage() {
       </>
     )
   }
+
+  const donutData = report
+    ? [
+        { name: 'Approved', value: report.approved_count, color: ESL_COLORS.APPROVED },
+        { name: 'Vetoed', value: report.vetoed_count, color: ESL_COLORS.VETOED },
+        { name: 'Modified', value: report.modified_count, color: ESL_COLORS.MODIFIED },
+      ]
+    : []
+
+  const timeData = groupLogsByDay(logs)
 
   return (
     <>
@@ -249,6 +303,76 @@ export default function TransparencyPage() {
                   </Card>
                 </motion.div>
               </div>
+            )}
+
+            {/* Charts Grid */}
+            {report && stats && (
+              <motion.div variants={itemVariants}>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Donut chart — decision breakdown */}
+                  <div className="rounded-2xl p-5" style={{ background: '#ffffff', border: '1px solid #e4dee7' }}>
+                    <p className="text-sm font-medium mb-3" style={{ color: '#332b36' }}>Decision Breakdown</p>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <PieChart>
+                        <Pie
+                          data={donutData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={80}
+                          dataKey="value"
+                        >
+                          {donutData.map((entry, i) => (
+                            <Cell key={i} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value, name) => [value, name]} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Line chart — decisions over time */}
+                  <div className="rounded-2xl p-5" style={{ background: '#ffffff', border: '1px solid #e4dee7' }}>
+                    <p className="text-sm font-medium mb-3" style={{ color: '#332b36' }}>Decisions Over Time</p>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <LineChart data={timeData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
+                        <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#9e9e9e' }} />
+                        <YAxis tick={{ fontSize: 11, fill: '#9e9e9e' }} />
+                        <Tooltip />
+                        <Line
+                          type="monotone"
+                          dataKey="approved"
+                          stroke={ESL_COLORS.APPROVED}
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="vetoed"
+                          stroke={ESL_COLORS.VETOED}
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Bar chart — most protected values */}
+                  <div className="rounded-2xl p-5" style={{ background: '#ffffff', border: '1px solid #e4dee7' }}>
+                    <p className="text-sm font-medium mb-3" style={{ color: '#332b36' }}>Most Protected Values</p>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={stats.most_protected_values}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
+                        <XAxis dataKey="value" tick={{ fontSize: 10, fill: '#9e9e9e' }} />
+                        <YAxis tick={{ fontSize: 11, fill: '#9e9e9e' }} />
+                        <Tooltip />
+                        <Bar dataKey="count" fill={ESL_COLORS.VETOED} radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </motion.div>
             )}
 
             {/* ESL Insights */}
