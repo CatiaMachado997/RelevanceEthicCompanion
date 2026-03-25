@@ -129,11 +129,6 @@ This document tracks the implementation of Ethic Companion V2 MVP - the architec
    - Background task scheduler
    - Auto-sync calendar every 15 minutes
 
-8. **Firebase Authentication**
-   - Replace JWT with Firebase
-   - Add middleware for token verification
-   - Update all routes to use Firebase UID
-
 ### Low Priority (Polish)
 
 9. **Testing**
@@ -247,9 +242,8 @@ Add to `backend/.env`:
 # Gemini API (for embeddings)
 GEMINI_API_KEY=your_gemini_api_key_here
 
-# Firebase (for auth)
-FIREBASE_PROJECT_ID=your_project_id
-FIREBASE_CREDENTIALS_PATH=./firebase-credentials.json
+# Supabase (for auth) - configured in .env
+# SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required
 
 # Google Calendar OAuth
 GOOGLE_OAUTH_CLIENT_ID=your_client_id
@@ -291,11 +285,7 @@ GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8000/api/oauth/callback
 
 ### Medium-term (2-3 weeks)
 
-6. **Firebase Auth**:
-   - Replace JWT with Firebase
-   - Update all routes
-
-7. **Frontend Integration**:
+6. **Frontend Integration**:
    - Connect to V2 backend
    - Add feedback buttons
    - Test end-to-end
@@ -333,7 +323,7 @@ GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8000/api/oauth/callback
 
 1. **Docker not running** - Need to start Docker to test Weaviate
 2. **Gemini API key missing** - Need to add to .env
-3. **Firebase not configured** - Can implement later (use JWT for now)
+3. **Auth**: Supabase is now used for authentication (Firebase removed)
 
 ---
 
