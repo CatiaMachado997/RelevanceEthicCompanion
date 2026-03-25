@@ -6,9 +6,11 @@ All chat interactions go through ESL for ethical protection.
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi.responses import StreamingResponse
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from datetime import datetime, UTC
+import json
 
 from services.orchestrator_v2 import OrchestratorV2
 from services.context_manager import ContextManager
@@ -72,6 +74,31 @@ def get_orchestrator() -> OrchestratorV2:
     """Get OrchestratorV2 instance"""
     context_manager = get_context_manager()
     return OrchestratorV2(context_manager)
+
+@router.get("/stream")
+async def stream_chat(
+    message: str,
+    user_id: str = Depends(get_current_read_user_id),
+    orchestrator: OrchestratorV2 = Depends(get_orchestrator)
+):
+    """Server-Sent Events endpoint for streaming chat responses."""
+    async def event_generator():
+        try:
+            full_response = ""
+            async for token in orchestrator.stream_message(user_id, message):
+                full_response += token
+                data = json.dumps({"token": token, "done": False})
+                yield f"data: {data}\n\n"
+            yield f"data: {json.dumps({'token': '', 'done': True})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    )
+
 
 @router.get("/models", response_model=List[LLMModel])
 async def get_available_llm_models():

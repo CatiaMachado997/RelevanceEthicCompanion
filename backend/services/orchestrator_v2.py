@@ -13,7 +13,7 @@ Every user-facing action MUST flow through ESL:
   User Input → Agent → ProposedAction → ESL.evaluate_action() → Decision → Execute/Block
 """
 
-from typing import Dict, Any, Optional, List
+from typing import AsyncGenerator, Dict, Any, Optional, List
 from datetime import datetime, UTC
 import logging
 
@@ -328,6 +328,42 @@ Respond in a helpful, direct manner that aligns with the user's stated goals and
                 "error": str(e),
                 "timestamp": datetime.now(UTC).isoformat()
             }
+
+    async def stream_message(
+        self,
+        user_id: str,
+        message: str
+    ) -> AsyncGenerator[str, None]:
+        """
+        Yield tokens from the Groq LLM response one at a time via streaming.
+
+        Uses the same context-building and LLM client as handle_user_message.
+        ESL evaluation is skipped during streaming; callers should treat the
+        streamed content as a draft — production callers may wish to run ESL
+        on the aggregated response after streaming completes.
+
+        Args:
+            user_id: User ID
+            message: User's message
+
+        Yields:
+            Individual text tokens from the LLM response.
+        """
+        user_context = await self._get_user_context_text(user_id)
+        system_prompt = self._build_system_prompt(user_context)
+
+        conversation_history = await self._get_conversation_history(user_id)
+
+        lc_messages = [
+            SystemMessage(content=system_prompt),
+            *conversation_history,
+            HumanMessage(content=message)
+        ]
+
+        async for chunk in self.llm.astream(lc_messages):
+            token = chunk.content
+            if token:
+                yield token
 
     async def decide_action(
         self,
