@@ -631,13 +631,50 @@ For greetings, general questions, or anything answerable from the context above 
             ]:
                 await self.context_manager.store_semantic_memory(entry)
             # Advisory ESL — logs only, never blocks the already-delivered response
-            await self.decide_action(
+            advisory_result = await self.decide_action(
                 user_id=user_id,
                 action_type=ActionType.CHAT_RESPONSE,
                 content=assistant_msg,
                 urgency=UrgencyLevel.LOW,
                 metadata={"advisory_only": True}
             )
+            # If ESL vetoed or modified, create a user-visible notification so the
+            # user knows what happened.  Failures here must never surface to the user.
+            try:
+                decision = advisory_result.get("decision")
+                if decision and hasattr(decision, "status") and decision.status in (
+                    ESLDecisionStatus.VETOED,
+                    ESLDecisionStatus.MODIFIED,
+                ):
+                    notif_type = (
+                        "esl_block" if decision.status == ESLDecisionStatus.VETOED
+                        else "warning"
+                    )
+                    notif_title = (
+                        "ESL blocked a response"
+                        if decision.status == ESLDecisionStatus.VETOED
+                        else "ESL modified a response"
+                    )
+                    reason = (getattr(decision, "reason", None) or "No details available.")[:300]
+                    import json as _json
+                    with get_db_connection() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                "INSERT INTO user_notifications"
+                                " (user_id, type, title, message, metadata)"
+                                " VALUES (%s, %s, %s, %s, %s)",
+                                (
+                                    str(user_id),
+                                    notif_type,
+                                    notif_title,
+                                    reason,
+                                    _json.dumps(
+                                        {"applied_rules": getattr(decision, "applied_rules", [])}
+                                    ),
+                                ),
+                            )
+            except Exception as e:
+                logger.warning(f"Could not create ESL notification: {e}")
         except Exception as e:
             logger.warning(f"Post-stream store failed: {e}")
 

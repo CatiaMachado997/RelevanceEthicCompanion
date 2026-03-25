@@ -119,3 +119,28 @@ def test_notification_count_endpoint(client, monkeypatch):
         response = client.get("/api/notifications/count")
     assert response.status_code == 200
     assert response.json()["unread_count"] == 3
+
+
+def test_esl_veto_creates_notification(client, monkeypatch):
+    """create_notification helper writes to user_notifications with correct shape."""
+    from routes.notifications import create_notification
+    from unittest.mock import MagicMock
+
+    mock_cur = MagicMock()
+    mock_cur.__enter__ = lambda s: s
+    mock_cur.__exit__ = MagicMock(return_value=False)
+    mock_conn = MagicMock()
+    mock_conn.cursor.return_value = mock_cur
+
+    create_notification(
+        mock_conn,
+        user_id="00000000-0000-0000-0000-000000000000",
+        type="esl_block",
+        title="ESL blocked a response",
+        message="Time-based boundary: no work notifications after 7pm",
+    )
+
+    mock_cur.execute.assert_called_once()
+    args = mock_cur.execute.call_args[0]
+    assert "INSERT INTO user_notifications" in args[0]
+    assert "esl_block" in args[1]
