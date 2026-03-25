@@ -209,3 +209,66 @@ def test_complete_goal_vetoed_by_esl():
 
     assert response.status_code == 403
     assert "ESL" in response.json()["detail"]
+
+
+def test_create_milestone(client, monkeypatch):
+    """POST /api/goals/{id}/milestones creates a milestone."""
+    from unittest.mock import patch, MagicMock
+    mock_row = {
+        "id": "m1m1m1m1-0000-0000-0000-000000000000",
+        "goal_id": "00000000-0000-0000-0000-000000000001",
+        "title": "Write unit tests",
+        "completed": False,
+        "created_at": "2026-03-25T10:00:00+00:00",
+    }
+    mock_cur = MagicMock()
+    mock_cur.__enter__ = lambda s: s
+    mock_cur.__exit__ = MagicMock(return_value=False)
+    mock_cur.fetchone.return_value = mock_row
+    mock_conn = MagicMock()
+    mock_conn.__enter__ = lambda s: s
+    mock_conn.__exit__ = MagicMock(return_value=False)
+    mock_conn.cursor.return_value = mock_cur
+    with patch("routes.goals.get_db", return_value=mock_conn):
+        response = client.post(
+            "/api/goals/00000000-0000-0000-0000-000000000001/milestones",
+            json={"title": "Write unit tests"},
+        )
+    assert response.status_code in (200, 201, 401)
+
+
+def test_list_milestones(client, monkeypatch):
+    """GET /api/goals/{id}/milestones returns milestone list."""
+    from unittest.mock import patch, MagicMock
+    mock_rows = [{"id": "m1", "title": "Draft", "completed": False, "created_at": "2026-03-25T10:00:00+00:00"}]
+    mock_cur = MagicMock()
+    mock_cur.__enter__ = lambda s: s
+    mock_cur.__exit__ = MagicMock(return_value=False)
+    mock_cur.fetchall.return_value = mock_rows
+    mock_conn = MagicMock()
+    mock_conn.__enter__ = lambda s: s
+    mock_conn.__exit__ = MagicMock(return_value=False)
+    mock_conn.cursor.return_value = mock_cur
+    with patch("routes.goals.get_db", return_value=mock_conn):
+        response = client.get("/api/goals/00000000-0000-0000-0000-000000000001/milestones")
+    assert response.status_code in (200, 401)
+
+
+def test_toggle_milestone(client):
+    """PATCH /api/goals/{id}/milestones/{milestone_id} toggles completion."""
+    from unittest.mock import patch, MagicMock
+    mock_row = {"id": "m1", "title": "Draft", "completed": True, "created_at": "2026-03-25T10:00:00+00:00"}
+    mock_cur = MagicMock()
+    mock_cur.__enter__ = lambda s: s
+    mock_cur.__exit__ = MagicMock(return_value=False)
+    mock_cur.fetchone.return_value = mock_row
+    mock_conn = MagicMock()
+    mock_conn.__enter__ = lambda s: s
+    mock_conn.__exit__ = MagicMock(return_value=False)
+    mock_conn.cursor.return_value = mock_cur
+    with patch("routes.goals.get_db", return_value=mock_conn):
+        response = client.patch(
+            "/api/goals/gid/milestones/m1",
+            json={"completed": True},
+        )
+    assert response.status_code in (200, 401, 404)

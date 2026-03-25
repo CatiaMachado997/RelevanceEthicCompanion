@@ -435,3 +435,117 @@ async def delete_goal(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting goal: {str(e)}")
+
+
+# ==================== Milestones ====================
+
+class MilestoneCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+
+
+@router.get("/{goal_id}/milestones", response_model=dict)
+async def list_milestones(
+    goal_id: str,
+    user_id: str = Depends(get_current_read_user_id),
+):
+    """List all milestones for a goal."""
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, goal_id, title, completed, created_at
+                    FROM goal_milestones
+                    WHERE goal_id = %s AND user_id = %s
+                    ORDER BY created_at ASC
+                    """,
+                    (goal_id, str(user_id)),
+                )
+                rows = cur.fetchall()
+        return {"milestones": [serialize_row(r) for r in rows]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching milestones: {str(e)}")
+
+
+@router.post("/{goal_id}/milestones", response_model=dict)
+async def create_milestone(
+    goal_id: str,
+    body: MilestoneCreate,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Create a milestone for a goal."""
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO goal_milestones (goal_id, user_id, title)
+                    VALUES (%s, %s, %s)
+                    RETURNING id, goal_id, title, completed, created_at
+                    """,
+                    (goal_id, str(user_id), body.title),
+                )
+                row = cur.fetchone()
+        return {"milestone": serialize_row(row)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating milestone: {str(e)}")
+
+
+@router.patch("/{goal_id}/milestones/{milestone_id}", response_model=dict)
+async def toggle_milestone(
+    goal_id: str,
+    milestone_id: str,
+    body: dict,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Toggle completion or rename a milestone."""
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                updates = []
+                params = []
+                if "completed" in body:
+                    updates.append("completed = %s")
+                    params.append(bool(body["completed"]))
+                if "title" in body:
+                    updates.append("title = %s")
+                    params.append(str(body["title"])[:200])
+                if not updates:
+                    raise HTTPException(status_code=400, detail="Nothing to update")
+                updates.append("updated_at = NOW()")
+                params.extend([milestone_id, str(user_id)])
+                cur.execute(
+                    f"""
+                    UPDATE goal_milestones SET {', '.join(updates)}
+                    WHERE id = %s AND user_id = %s
+                    RETURNING id, goal_id, title, completed, created_at
+                    """,
+                    params,
+                )
+                row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Milestone not found")
+        return {"milestone": serialize_row(row)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating milestone: {str(e)}")
+
+
+@router.delete("/{goal_id}/milestones/{milestone_id}", response_model=dict)
+async def delete_milestone(
+    goal_id: str,
+    milestone_id: str,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Delete a milestone."""
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM goal_milestones WHERE id = %s AND user_id = %s",
+                    (milestone_id, str(user_id)),
+                )
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting milestone: {str(e)}")
