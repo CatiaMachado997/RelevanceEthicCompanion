@@ -155,7 +155,7 @@ export default function GoalsPage() {
         <div className="relative">
           <button
             onClick={e => { e.stopPropagation(); setOpenMenu(openMenu === goal.id ? null : goal.id) }}
-            className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-black/5 transition-colors"
+            className="w-11 h-11 rounded-lg flex items-center justify-center hover:bg-black/5 transition-colors"
             aria-label="Goal actions"
           >
             <MoreHorizontal size={15} style={{ color: '#6b6b6b' }} />
