@@ -5,6 +5,12 @@ import { transparencyApi, goalsApi, valuesApi, type Goal } from '@/lib/api'
 import Link from 'next/link'
 import { MessageSquare, Heart, Shield, ArrowRight, Target } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+} from 'recharts'
 
 interface ESLLog {
   id?: string
@@ -29,6 +35,7 @@ export default function DashboardPage() {
   const [goalCount, setGoalCount] = useState<number | null>(null)
   const [valueCount, setValueCount] = useState<number | null>(null)
   const [eslCount, setEslCount] = useState<number | null>(null)
+  const [approvalRate, setApprovalRate] = useState<number | null>(null)
   const [recentGoals, setRecentGoals] = useState<Goal[]>([])
   const [eslActivity, setEslActivity] = useState<ESLLog[]>([])
   const [loading, setLoading] = useState(true)
@@ -48,7 +55,11 @@ export default function DashboardPage() {
           setRecentGoals(g.slice(0, 3) as Goal[])
         }
         if (values.status === 'fulfilled') setValueCount((values.value?.values ?? []).length)
-        if (report.status === 'fulfilled') setEslCount(report.value?.total_decisions ?? 0)
+        if (report.status === 'fulfilled') {
+          setEslCount(report.value?.total_decisions ?? 0)
+          const rate = report.value?.approval_rate ?? 0
+          setApprovalRate(rate > 1 ? rate : rate * 100)
+        }
         if (logs.status === 'fulfilled') setEslActivity((logs.value?.logs ?? []).slice(0, 5) as unknown as ESLLog[])
       } finally {
         setLoading(false)
@@ -153,6 +164,33 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* ESL Approval Rate sparkline */}
+      {!loading && approvalRate !== null && (
+        <div className="rounded-2xl p-4" style={{ background: '#ffffff', border: '1px solid #e4dee7' }}>
+          <p className="text-xs font-medium mb-2" style={{ color: '#695e6e' }}>ESL Approval Rate</p>
+          <div className="flex items-center gap-3">
+            <ResponsiveContainer width={60} height={60}>
+              <PieChart>
+                <Pie
+                  data={[{ value: approvalRate }, { value: 100 - approvalRate }]}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={20}
+                  outerRadius={28}
+                  dataKey="value"
+                  startAngle={90}
+                  endAngle={-270}
+                >
+                  <Cell fill="#4A7C59" />
+                  <Cell fill="#f5f5f5" />
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+            <span className="text-2xl font-bold" style={{ color: '#332b36' }}>{approvalRate.toFixed(0)}%</span>
+          </div>
+        </div>
+      )}
 
       {/* ESL activity strip */}
       <div className="rounded-2xl p-5" style={CARD_STYLE}>
