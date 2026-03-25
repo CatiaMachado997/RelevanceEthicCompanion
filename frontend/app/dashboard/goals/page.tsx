@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { goalsApi, type Goal } from '@/lib/api'
+import { goalsApi, api, type Goal, type Milestone } from '@/lib/api'
 import { Plus, MoreHorizontal, Check, X, ChevronDown, ChevronRight } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card } from '@/components/ui/card'
@@ -48,9 +48,25 @@ export default function GoalsPage() {
   const [formDate, setFormDate] = useState('')
   const [saving, setSaving] = useState(false)
 
+  const [milestones, setMilestones] = useState<Record<string, Milestone[]>>({})
+  const [milestoneInput, setMilestoneInput] = useState<Record<string, string>>({})
+
+  const loadMilestones = async (goalId: string) => {
+    try {
+      const { milestones: data } = await api.goals.milestones.list(goalId)
+      setMilestones(prev => ({ ...prev, [goalId]: data }))
+    } catch {}
+  }
+
   useEffect(() => {
     goalsApi.list()
-      .then(r => setGoals(r.goals ?? []))
+      .then(r => {
+        const fetchedGoals = r.goals ?? []
+        setGoals(fetchedGoals)
+        fetchedGoals
+          .filter(g => g.status === 'active' || g.status === 'paused')
+          .forEach(g => loadMilestones(g.id))
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [])
@@ -159,6 +175,81 @@ export default function GoalsPage() {
               </div>
             </div>
           )}
+          {/* Milestones */}
+          <div className="mt-3 pt-3 border-t border-[rgba(0,0,0,0.06)]">
+            <p className="text-xs font-medium mb-2" style={{ color: '#695e6e' }}>
+              Milestones
+              {milestones[goal.id] && (
+                <span className="ml-1" style={{ color: '#9e9e9e' }}>
+                  ({milestones[goal.id].filter(m => m.completed).length}/{milestones[goal.id].length})
+                </span>
+              )}
+            </p>
+            <ul className="space-y-1.5 mb-2">
+              {(milestones[goal.id] ?? []).map(m => (
+                <li key={m.id} className="flex items-center gap-2">
+                  <button
+                    onClick={async () => {
+                      await api.goals.milestones.toggle(goal.id, m.id, !m.completed)
+                      loadMilestones(goal.id)
+                    }}
+                    className="w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors"
+                    style={{
+                      background: m.completed ? '#4A7C59' : 'transparent',
+                      borderColor: m.completed ? '#4A7C59' : '#d4d0d6',
+                    }}
+                  >
+                    {m.completed && <Check size={10} color="#fff" />}
+                  </button>
+                  <span
+                    className="text-xs flex-1"
+                    style={{
+                      color: m.completed ? '#9e9e9e' : '#1c1520',
+                      textDecoration: m.completed ? 'line-through' : 'none',
+                    }}
+                  >
+                    {m.title}
+                  </span>
+                  <button
+                    onClick={async () => {
+                      await api.goals.milestones.delete(goal.id, m.id)
+                      loadMilestones(goal.id)
+                    }}
+                  >
+                    <X size={11} style={{ color: '#9e9e9e' }} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {/* Add milestone input */}
+            <form
+              className="flex items-center gap-1.5"
+              onSubmit={async e => {
+                e.preventDefault()
+                const title = (milestoneInput[goal.id] || '').trim()
+                if (!title) return
+                await api.goals.milestones.create(goal.id, title)
+                setMilestoneInput(prev => ({ ...prev, [goal.id]: '' }))
+                loadMilestones(goal.id)
+              }}
+            >
+              <input
+                type="text"
+                value={milestoneInput[goal.id] ?? ''}
+                onChange={e => setMilestoneInput(prev => ({ ...prev, [goal.id]: e.target.value }))}
+                placeholder="Add milestone…"
+                className="flex-1 text-xs px-2 py-1 rounded-lg outline-none"
+                style={{ background: '#f5f2ef', color: '#1c1520', border: '1px solid transparent' }}
+              />
+              <button
+                type="submit"
+                className="text-xs px-2 py-1 rounded-lg"
+                style={{ background: '#000', color: '#fff' }}
+              >
+                Add
+              </button>
+            </form>
+          </div>
         </div>
         {goal.target_date && (
           <span className="text-xs shrink-0 hidden sm:block" style={{ color: '#9e9e9e' }}>

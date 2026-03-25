@@ -406,6 +406,14 @@ export interface Goal {
   metadata?: Record<string, unknown>
 }
 
+export interface Milestone {
+  id: string
+  goal_id: string
+  title: string
+  completed: boolean
+  created_at: string
+}
+
 export const goalsApi = {
   /**
    * Get all goals
@@ -490,6 +498,27 @@ export const goalsApi = {
     })
 
     return response
+  },
+
+  milestones: {
+    list: async (goalId: string): Promise<{ milestones: Milestone[] }> =>
+      apiRequest<{ milestones: Milestone[] }>(`/api/goals/${goalId}/milestones`),
+
+    create: async (goalId: string, title: string): Promise<{ milestone: Milestone }> =>
+      apiRequest<{ milestone: Milestone }>(`/api/goals/${goalId}/milestones`, {
+        method: 'POST',
+        body: JSON.stringify({ title }),
+      }),
+
+    toggle: async (goalId: string, milestoneId: string, completed: boolean): Promise<{ milestone: Milestone }> =>
+      apiRequest<{ milestone: Milestone }>(`/api/goals/${goalId}/milestones/${milestoneId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ completed }),
+      }),
+
+    delete: async (goalId: string, milestoneId: string): Promise<void> => {
+      await apiRequest(`/api/goals/${goalId}/milestones/${milestoneId}`, { method: 'DELETE' })
+    },
   },
 }
 
