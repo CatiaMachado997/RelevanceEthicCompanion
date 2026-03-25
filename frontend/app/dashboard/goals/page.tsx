@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { goalsApi, type Goal } from '@/lib/api'
 import { Plus, MoreHorizontal, Check, X, ChevronDown, ChevronRight } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Card } from '@/components/ui/card'
+import { FilterChips } from '@/components/ui/filter-chips'
 
 type GoalStatus = 'active' | 'completed' | 'paused' | 'archived'
 
@@ -15,12 +17,6 @@ const STATUS_COLORS: Record<GoalStatus, { bg: string; text: string; border: stri
 }
 
 const PRIORITY_COLORS = ['#000000', '#9B7A3D', '#5B7FA6', '#4A7C59', '#9e9e9e']
-
-const CARD_STYLE = {
-  background: '#ffffff',
-  border: '1px solid rgba(0,0,0,0.08)',
-  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-}
 
 function StatusBadge({ status }: { status: GoalStatus }) {
   const c = STATUS_COLORS[status] ?? STATUS_COLORS.active
@@ -34,10 +30,13 @@ function StatusBadge({ status }: { status: GoalStatus }) {
   )
 }
 
+type StatusFilter = 'active' | 'paused' | 'completed' | 'archived'
+
 export default function GoalsPage() {
   const [goals, setGoals] = useState<Goal[]>([])
   const [loading, setLoading] = useState(true)
   const [showCompleted, setShowCompleted] = useState(false)
+  const [statusFilter, setStatusFilter] = useState<StatusFilter | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null)
   const [openMenu, setOpenMenu] = useState<string | null>(null)
@@ -201,7 +200,7 @@ export default function GoalsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold" style={{ color: '#0a0a0a' }}>Your Goals</h2>
+          <h2 className="text-base font-semibold" style={{ color: '#1a1a1a' }}>Your Goals</h2>
           <p className="text-sm mt-0.5" style={{ color: '#6b6b6b' }}>
             Goals inform ESL about your priorities.
           </p>
@@ -216,8 +215,21 @@ export default function GoalsPage() {
         </button>
       </div>
 
+      {/* Filter chips */}
+      <FilterChips<StatusFilter>
+        chips={[
+          { value: null, label: 'All', count: goals.length },
+          { value: 'active', label: 'Active', count: goals.filter(g => g.status === 'active').length },
+          { value: 'paused', label: 'Paused', count: goals.filter(g => g.status === 'paused').length },
+          { value: 'completed', label: 'Completed', count: completedGoals.length },
+        ]}
+        selected={statusFilter}
+        onChange={setStatusFilter}
+      />
+
       {/* Active goals section */}
-      <div className="rounded-2xl overflow-hidden" style={CARD_STYLE}>
+      {(!statusFilter || statusFilter === 'active' || statusFilter === 'paused') && (
+      <Card className="rounded-2xl overflow-hidden border border-[rgba(0,0,0,0.08)] shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
         <div className="px-5 py-3 border-b border-black/5">
           <h3 className="text-xs font-medium uppercase tracking-wide" style={{ color: '#6b6b6b' }}>
             Active &amp; Paused
@@ -226,19 +238,20 @@ export default function GoalsPage() {
         <div className="p-3 space-y-2">
           {loading ? (
             [1, 2, 3].map(i => <Skeleton key={i} className="h-14 rounded-xl" />)
-          ) : activeGoals.length === 0 ? (
+          ) : activeGoals.filter(g => !statusFilter || g.status === statusFilter).length === 0 ? (
             <p className="px-2 py-4 text-sm text-center" style={{ color: '#9e9e9e' }}>
               No active goals. Add one to get started.
             </p>
           ) : (
-            activeGoals.map(g => <GoalRow key={g.id} goal={g} />)
+            activeGoals.filter(g => !statusFilter || g.status === statusFilter).map(g => <GoalRow key={g.id} goal={g} />)
           )}
         </div>
-      </div>
+      </Card>
+      )}
 
       {/* Completed / archived section */}
-      {completedGoals.length > 0 && (
-        <div className="rounded-2xl overflow-hidden" style={CARD_STYLE}>
+      {completedGoals.length > 0 && (!statusFilter || statusFilter === 'completed' || statusFilter === 'archived') && (
+        <Card className="rounded-2xl overflow-hidden border border-[rgba(0,0,0,0.08)] shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
           <button
             onClick={e => { e.stopPropagation(); setShowCompleted(v => !v) }}
             className="w-full flex items-center justify-between px-5 py-3 border-b border-black/5 hover:bg-black/[0.02] transition-colors"
@@ -253,10 +266,10 @@ export default function GoalsPage() {
           </button>
           {showCompleted && (
             <div className="p-3 space-y-2">
-              {completedGoals.map(g => <GoalRow key={g.id} goal={g} />)}
+              {completedGoals.filter(g => !statusFilter || g.status === statusFilter).map(g => <GoalRow key={g.id} goal={g} />)}
             </div>
           )}
-        </div>
+        </Card>
       )}
 
       {/* Slide-over sheet */}

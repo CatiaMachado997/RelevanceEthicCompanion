@@ -5,6 +5,7 @@ import { transparencyApi, goalsApi, valuesApi, type Goal } from '@/lib/api'
 import Link from 'next/link'
 import { MessageSquare, Heart, Shield, ArrowRight, Target } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Card } from '@/components/ui/card'
 import {
   PieChart,
   Pie,
@@ -22,13 +23,6 @@ const ESL_COLORS = {
   APPROVED: { bg: 'rgba(74,124,89,0.10)',  text: '#4A7C59', border: 'rgba(74,124,89,0.20)' },
   VETOED:   { bg: 'rgba(176,74,58,0.10)',  text: '#B04A3A', border: 'rgba(176,74,58,0.20)' },
   MODIFIED: { bg: 'rgba(155,122,61,0.10)', text: '#9B7A3D', border: 'rgba(155,122,61,0.20)' },
-}
-
-const CARD_STYLE = {
-  background: '#ffffff',
-  border: '1px solid rgba(0,0,0,0.08)',
-  borderRadius: '16px',
-  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
 }
 
 export default function DashboardPage() {
@@ -83,10 +77,10 @@ export default function DashboardPage() {
     <div className="space-y-5">
 
       {/* Greeting card */}
-      <div className="rounded-2xl p-6" style={CARD_STYLE}>
+      <Card className="rounded-2xl p-6 border border-[rgba(0,0,0,0.08)] shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
         <p className="text-sm mb-1" style={{ color: '#6b6b6b' }}>{dateStr}</p>
         <h2 className="text-2xl font-semibold" style={{ color: '#0a0a0a' }}>{greeting}</h2>
-      </div>
+      </Card>
 
       {/* Stats row */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -94,8 +88,7 @@ export default function DashboardPage() {
           <Link
             key={label}
             href={href}
-            className="rounded-2xl p-5 flex items-center gap-4 transition-shadow duration-150 hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)]"
-            style={CARD_STYLE}
+            className="rounded-2xl p-5 flex items-center gap-4 transition-shadow duration-150 hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)] bg-white border border-[rgba(0,0,0,0.08)] shadow-[0_1px_3px_rgba(0,0,0,0.08)]"
           >
             <div className="w-10 h-10 rounded-xl bg-[#f5f5f5] flex items-center justify-center shrink-0">
               <Icon size={18} style={{ color: '#000000' }} />
@@ -118,7 +111,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 gap-4">
 
         {/* Chat shortcut */}
-        <div className="rounded-2xl p-5 flex flex-col justify-between" style={CARD_STYLE}>
+        <Card className="rounded-2xl p-5 flex flex-col justify-between border border-[rgba(0,0,0,0.08)] shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
           <div className="flex items-center gap-2 mb-3">
             <MessageSquare size={16} style={{ color: '#000000' }} />
             <h3 className="text-sm font-semibold" style={{ color: '#0a0a0a' }}>Chat</h3>
@@ -133,10 +126,10 @@ export default function DashboardPage() {
           >
             Open chat <ArrowRight size={14} />
           </Link>
-        </div>
+        </Card>
 
         {/* Active goals */}
-        <div className="rounded-2xl p-5" style={CARD_STYLE}>
+        <Card className="rounded-2xl p-5 border border-[rgba(0,0,0,0.08)] shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Target size={16} style={{ color: '#000000' }} />
@@ -162,7 +155,7 @@ export default function DashboardPage() {
               ))}
             </ul>
           )}
-        </div>
+        </Card>
       </div>
 
       {/* ESL Approval Rate sparkline */}
@@ -193,7 +186,7 @@ export default function DashboardPage() {
       )}
 
       {/* ESL activity strip */}
-      <div className="rounded-2xl p-5" style={CARD_STYLE}>
+      <Card className="rounded-2xl p-5 border border-[rgba(0,0,0,0.08)] shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Shield size={16} style={{ color: '#000000' }} />
@@ -227,7 +220,7 @@ export default function DashboardPage() {
             })}
           </div>
         )}
-      </div>
+      </Card>
     </div>
   )
 }
