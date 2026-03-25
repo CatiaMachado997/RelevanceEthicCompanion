@@ -3,7 +3,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
-import { Send, ChevronDown, ChevronUp, Copy, Bot, Square, ThumbsUp, ThumbsDown } from 'lucide-react'
+import {
+  Send, ChevronDown, ChevronUp, Copy, Square,
+  ThumbsUp, ThumbsDown, RotateCcw, Plus,
+} from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 
 interface Message {
@@ -19,99 +22,65 @@ interface Message {
   }
 }
 
-const ESL_COLORS: Record<string, { bg: string; text: string; border: string; leftBorder: string }> = {
-  APPROVED: { bg: 'rgba(74,124,89,0.10)',  text: '#4A7C59', border: 'rgba(74,124,89,0.25)',  leftBorder: '#4A7C59' },
-  VETOED:   { bg: 'rgba(176,74,58,0.10)',  text: '#B04A3A', border: 'rgba(176,74,58,0.25)',  leftBorder: '#B04A3A' },
-  MODIFIED: { bg: 'rgba(155,122,61,0.10)', text: '#9B7A3D', border: 'rgba(155,122,61,0.25)', leftBorder: '#9B7A3D' },
+const ESL_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  APPROVED: { bg: 'rgba(74,124,89,0.08)',  text: '#4A7C59', border: 'rgba(74,124,89,0.20)' },
+  VETOED:   { bg: 'rgba(176,74,58,0.08)',  text: '#B04A3A', border: 'rgba(176,74,58,0.20)' },
+  MODIFIED: { bg: 'rgba(155,122,61,0.08)', text: '#9B7A3D', border: 'rgba(155,122,61,0.20)' },
 }
 
 const EXAMPLE_PROMPTS = [
   "What's on my agenda today?",
   "Help me prioritize my goals",
   "Summarize my week",
+  "How are my values being respected?",
 ]
 
 function formatTime(iso: string): string {
   try {
-    const d = new Date(iso)
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
-  } catch {
-    return ''
-  }
+    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+  } catch { return '' }
 }
 
-function CopyButton({ content }: { content: string }) {
+/* ─── Copy button ─── */
+function CopyButton({ content, size = 14 }: { content: string; size?: number }) {
   const [copied, setCopied] = useState(false)
-
   const handleCopy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(content)
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
-    } catch {
-      // clipboard unavailable
-    }
+    } catch { /* ignore */ }
   }, [content])
-
   return (
     <button
       onClick={handleCopy}
-      aria-label="Copy message"
-      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md hover:bg-black/5"
-      style={{ color: copied ? '#4A7C59' : '#9e9e9e' }}
+      aria-label={copied ? 'Copied' : 'Copy'}
+      title={copied ? 'Copied!' : 'Copy'}
+      className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors hover:bg-black/6"
+      style={{ color: copied ? '#4A7C59' : '#a0a0a0' }}
     >
-      <Copy size={13} />
+      <Copy size={size} />
     </button>
   )
 }
 
-function FeedbackButtons({
-  messageId,
-  currentFeedback,
-  onFeedback,
-}: {
-  messageId: string
-  currentFeedback: 'up' | 'down' | null | undefined
-  onFeedback: (id: string, type: 'up' | 'down') => void
-}) {
-  return (
-    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-      <button
-        onClick={() => onFeedback(messageId, 'up')}
-        aria-label="Helpful"
-        className="p-1 rounded-md hover:bg-black/5 transition-colors"
-        style={{ color: currentFeedback === 'up' ? '#4A7C59' : '#c0c0c0' }}
-      >
-        <ThumbsUp size={13} fill={currentFeedback === 'up' ? '#4A7C59' : 'none'} />
-      </button>
-      <button
-        onClick={() => onFeedback(messageId, 'down')}
-        aria-label="Not helpful"
-        className="p-1 rounded-md hover:bg-black/5 transition-colors"
-        style={{ color: currentFeedback === 'down' ? '#B04A3A' : '#c0c0c0' }}
-      >
-        <ThumbsDown size={13} fill={currentFeedback === 'down' ? '#B04A3A' : 'none'} />
-      </button>
-    </div>
-  )
-}
-
+/* ─── ESL badge ─── */
 function ESLTag({ decision }: { decision: Message['esl_decision'] }) {
-  const [expanded, setExpanded] = useState(false)
+  const [open, setOpen] = useState(false)
   if (!decision) return null
   const c = ESL_COLORS[decision.status] ?? ESL_COLORS.APPROVED
   return (
-    <div className="mt-2">
+    <div className="mt-3 inline-flex flex-col items-start">
       <button
-        onClick={() => setExpanded(v => !v)}
-        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium transition-opacity hover:opacity-80"
+        onClick={() => setOpen(v => !v)}
+        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium tracking-wide uppercase transition-opacity hover:opacity-75"
         style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}
       >
-        ESL: {decision.status}
-        {expanded ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+        ESL · {decision.status}
+        {open ? <ChevronUp size={9} /> : <ChevronDown size={9} />}
       </button>
-      {expanded && (
-        <p className="mt-1.5 text-xs px-2" style={{ color: '#6b6b6b' }}>
+      {open && (
+        <p className="mt-1.5 text-xs leading-relaxed" style={{ color: '#6b6b6b', maxWidth: '480px' }}>
           {decision.reason}
         </p>
       )}
@@ -119,83 +88,155 @@ function ESLTag({ decision }: { decision: Message['esl_decision'] }) {
   )
 }
 
+/* ─── Message action row (copy / thumbs / regenerate) ─── */
+function AssistantActions({
+  msg,
+  onFeedback,
+  onRegenerate,
+}: {
+  msg: Message
+  onFeedback: (id: string, type: 'up' | 'down') => void
+  onRegenerate?: () => void
+}) {
+  return (
+    <div className="flex items-center gap-0.5 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+      <CopyButton content={msg.content} />
+      <button
+        onClick={() => onFeedback(msg.id, 'up')}
+        aria-label="Helpful"
+        title="Helpful"
+        className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors hover:bg-black/6"
+        style={{ color: msg.feedback === 'up' ? '#4A7C59' : '#a0a0a0' }}
+      >
+        <ThumbsUp size={14} fill={msg.feedback === 'up' ? '#4A7C59' : 'none'} />
+      </button>
+      <button
+        onClick={() => onFeedback(msg.id, 'down')}
+        aria-label="Not helpful"
+        title="Not helpful"
+        className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors hover:bg-black/6"
+        style={{ color: msg.feedback === 'down' ? '#B04A3A' : '#a0a0a0' }}
+      >
+        <ThumbsDown size={14} fill={msg.feedback === 'down' ? '#B04A3A' : 'none'} />
+      </button>
+      {onRegenerate && (
+        <button
+          onClick={onRegenerate}
+          aria-label="Regenerate"
+          title="Regenerate response"
+          className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors hover:bg-black/6"
+          style={{ color: '#a0a0a0' }}
+        >
+          <RotateCcw size={13} />
+        </button>
+      )}
+    </div>
+  )
+}
+
+/* ─── EC companion avatar (shown once, at the top of each assistant turn) ─── */
+function CompanionAvatar() {
+  return (
+    <div
+      className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 select-none"
+      style={{ background: 'var(--ec-text)', color: 'var(--ec-sidebar-bg)' }}
+      aria-hidden="true"
+    >
+      EC
+    </div>
+  )
+}
+
+/* ─── Streaming cursor ─── */
+function Cursor() {
+  return (
+    <span
+      className="inline-block w-[2px] h-[1em] ml-0.5 align-[-0.05em] animate-pulse rounded-sm"
+      style={{ background: '#1a1a1a', animationDuration: '800ms' }}
+      aria-hidden
+    />
+  )
+}
+
+/* ═══════════════════════════════════════════════════ */
 export default function ChatPage() {
   const { user } = useAuth()
   const initials = user?.email?.split('@')[0].substring(0, 2).toUpperCase() ?? 'U'
+
   const [messages, setMessages] = useState<Message[]>([])
-  const [input, setInput] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
+  const [input, setInput]       = useState('')
+  const [isLoading, setIsLoading]       = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [userScrolled, setUserScrolled] = useState(false)
 
-  const endRef = useRef<HTMLDivElement>(null)
+  const endRef       = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const streamRef = useRef<{ cancel: () => void } | null>(null)
+  const textareaRef  = useRef<HTMLTextAreaElement>(null)
+  const streamRef    = useRef<{ cancel: () => void } | null>(null)
 
+  /* feedback */
   const handleFeedback = useCallback(async (messageId: string, type: 'up' | 'down') => {
-    setMessages(prev =>
-      prev.map(m => m.id === messageId ? { ...m, feedback: type } : m)
-    )
+    setMessages(prev => prev.map(m => m.id === messageId ? { ...m, feedback: type } : m))
     try {
       await api.feedback.submit({
-        item_id: messageId,
-        item_type: 'chat_response',
+        item_id:       messageId,
+        item_type:     'chat_response',
         feedback_type: type === 'up' ? 'thumbs_up' : 'thumbs_down',
       })
     } catch {
-      // revert on failure
-      setMessages(prev =>
-        prev.map(m => m.id === messageId ? { ...m, feedback: null } : m)
-      )
+      setMessages(prev => prev.map(m => m.id === messageId ? { ...m, feedback: null } : m))
     }
   }, [])
 
-  // Load history on mount
+  /* history */
   useEffect(() => {
     api.chat.history()
       .then(h => {
-        const msgs = (h.messages ?? []).map((m, i) => ({
-          id: `h-${i}`,
-          role: m.role as 'user' | 'assistant',
-          content: m.content,
+        setMessages((h.messages ?? []).map((m, i) => ({
+          id:        `h-${i}`,
+          role:      m.role as 'user' | 'assistant',
+          content:   m.content,
           timestamp: m.timestamp ?? '',
-        }))
-        setMessages(msgs)
+        })))
       })
       .catch(console.error)
       .finally(() => setLoadingHistory(false))
   }, [])
 
-  // Auto-scroll: only when user hasn't manually scrolled up
+  /* auto-scroll */
   useEffect(() => {
-    if (!userScrolled) {
-      endRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }
+    if (!userScrolled) endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, userScrolled])
 
-  // Detect manual scroll
   const handleScroll = useCallback(() => {
     const el = containerRef.current
     if (!el) return
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-    setUserScrolled(distanceFromBottom > 80)
+    setUserScrolled(el.scrollHeight - el.scrollTop - el.clientHeight > 80)
   }, [])
 
+  /* resize textarea */
+  const resizeTextarea = useCallback(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = Math.min(el.scrollHeight, 140) + 'px'
+  }, [])
+
+  /* send */
   const handleSend = async (text?: string) => {
     const userMessage = (text ?? input).trim()
     if (!userMessage || isLoading) return
 
     setInput('')
+    if (textareaRef.current) textareaRef.current.style.height = 'auto'
     setIsLoading(true)
     setUserScrolled(false)
 
-    // Add user message immediately
     setMessages(prev => [
       ...prev,
       { id: `u-${Date.now()}`, role: 'user', content: userMessage, timestamp: new Date().toISOString() },
     ])
 
-    // Add empty assistant message for streaming
     const assistantId = `a-${Date.now()}`
     setMessages(prev => [
       ...prev,
@@ -203,39 +244,31 @@ export default function ChatPage() {
     ])
 
     try {
-      const streamPromise = api.chat.stream(userMessage, (token) => {
+      const s = api.chat.stream(userMessage, (token) => {
         setMessages(prev => {
           const msgs = [...prev]
           const last = msgs[msgs.length - 1]
-          if (last && last.streaming) {
-            msgs[msgs.length - 1] = { ...last, content: last.content + token }
-          }
+          if (last?.streaming) msgs[msgs.length - 1] = { ...last, content: last.content + token }
           return msgs
         })
       })
-
-      streamRef.current = streamPromise
-
-      await streamPromise
-
-      // Mark streaming complete
+      streamRef.current = s
+      await s
       setMessages(prev => {
         const msgs = [...prev]
         const last = msgs[msgs.length - 1]
-        if (last && last.streaming) {
+        if (last?.streaming) {
           const { streaming: _s, ...rest } = last
           msgs[msgs.length - 1] = rest
         }
         return msgs
       })
     } catch (e) {
-      // On cancellation or error, finalise the partial message
       setMessages(prev => {
         const msgs = [...prev]
         const last = msgs[msgs.length - 1]
-        if (last && last.streaming) {
+        if (last?.streaming) {
           const { streaming: _s, ...rest } = last
-          // If nothing was received, show a fallback
           msgs[msgs.length - 1] = {
             ...rest,
             content: rest.content || 'Something went wrong. Please try again.',
@@ -243,194 +276,238 @@ export default function ChatPage() {
         }
         return msgs
       })
-      if (e instanceof Error && e.message !== 'Stream cancelled') {
-        console.error(e)
-      }
+      if (e instanceof Error && e.message !== 'Stream cancelled') console.error(e)
     } finally {
       streamRef.current = null
       setIsLoading(false)
     }
   }
 
-  const handleStop = () => {
-    if (streamRef.current) {
-      streamRef.current.cancel()
-    }
-  }
+  const handleStop = () => streamRef.current?.cancel()
 
   const isEmpty = !loadingHistory && messages.length === 0
 
   return (
     <div
-      className="flex flex-col rounded-2xl overflow-hidden"
-      style={{
-        background: '#ffffff',
-        border: '1px solid rgba(0,0,0,0.08)',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-        height: 'calc(100vh - 56px - 48px - 24px)',
-      }}
+      className="flex flex-col"
+      style={{ height: 'calc(100vh - 56px - 48px - 24px)' }}
     >
-      {/* Messages */}
+      {/* ── Messages ── */}
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-6 py-4 space-y-4"
+        className="flex-1 overflow-y-auto"
       >
-        {loadingHistory && (
-          <div className="space-y-3">
-            {[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-3/4" />)}
-          </div>
-        )}
+        <div className="mx-auto max-w-[720px] px-4 py-8 space-y-8">
 
-        {isEmpty && (
-          <div className="flex flex-col items-center justify-center h-full gap-4">
-            <p className="text-sm" style={{ color: '#9e9e9e' }}>
-              Ask your companion anything
-            </p>
-            <div className="flex flex-wrap gap-2 justify-center">
-              {EXAMPLE_PROMPTS.map(p => (
-                <button
-                  key={p}
-                  onClick={() => handleSend(p)}
-                  className="px-3 py-1.5 rounded-full text-sm transition-colors hover:bg-[#f5f5f5]"
-                  style={{ border: '1px solid rgba(0,0,0,0.10)', color: '#6b6b6b' }}
-                >
-                  {p}
-                </button>
+          {loadingHistory && (
+            <div className="space-y-5">
+              {[120, 80, 160].map((w, i) => (
+                <Skeleton key={i} className="h-4 rounded-full" style={{ width: `${w}px` }} />
               ))}
             </div>
-          </div>
-        )}
+          )}
 
-        {messages.map(msg => (
-          <div key={msg.id} className={`flex group ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            {msg.role === 'user' ? (
-              <div className="flex flex-col items-end gap-1 max-w-[70%]">
-                <div className="flex items-end gap-1.5">
-                  <CopyButton content={msg.content} />
-                  <div
-                    className="px-4 py-2.5 rounded-2xl rounded-br-sm text-sm"
-                    style={{ background: 'rgba(0,0,0,0.06)', color: '#0a0a0a' }}
-                  >
-                    {msg.content}
-                  </div>
-                  {/* User avatar */}
-                  <div
-                    className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0"
-                    style={{ background: '#332b36', color: '#ffffff' }}
-                    aria-label="User"
-                  >
-                    {initials}
-                  </div>
+          {/* Empty state */}
+          {isEmpty && (
+            <div className="flex flex-col items-center justify-center gap-6 pt-20 text-center">
+              <div>
+                <div
+                  className="w-11 h-11 rounded-2xl flex items-center justify-center text-sm font-bold mx-auto mb-5"
+                  style={{ background: 'var(--ec-text)', color: 'var(--ec-sidebar-bg)' }}
+                >
+                  EC
                 </div>
-                {msg.timestamp && (
-                  <span className="text-[10px] pr-9" style={{ color: '#b0b0b0' }}>
-                    {formatTime(msg.timestamp)}
-                  </span>
-                )}
+                <p className="text-base font-medium" style={{ color: '#1a1a1a' }}>
+                  How can I help you today?
+                </p>
+                <p className="text-sm mt-1" style={{ color: '#9e9e9e' }}>
+                  Your companion is ready — protected by ESL.
+                </p>
               </div>
-            ) : (
-              <div className="flex flex-col items-start gap-1 max-w-[70%]">
-                <div className="flex items-end gap-1.5">
-                  {/* Bot avatar */}
-                  <div
-                    className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
-                    style={{ background: '#f0ecf3', color: '#695e6e' }}
-                    aria-label="Assistant"
-                  >
-                    <Bot size={14} />
-                  </div>
-                  <div
-                    className="px-4 py-2.5 rounded-2xl rounded-bl-sm text-sm border-l-2"
+              <div className="flex flex-wrap gap-2 justify-center max-w-[520px]">
+                {EXAMPLE_PROMPTS.map(p => (
+                  <button
+                    key={p}
+                    onClick={() => handleSend(p)}
+                    className="px-3.5 py-1.5 rounded-full text-sm transition-colors hover:bg-[#f0f0f0]"
                     style={{
-                      background: '#f9f9f9',
-                      color: '#0a0a0a',
-                      borderLeftColor: msg.esl_decision
-                        ? (ESL_COLORS[msg.esl_decision.status]?.leftBorder ?? '#E5E5E5')
-                        : '#E5E5E5',
+                      border: '1px solid rgba(0,0,0,0.10)',
+                      color: '#6b6b6b',
+                      background: '#fafafa',
                     }}
                   >
-                    {msg.content}
-                    {msg.streaming && (
-                      <span
-                        className="inline-block w-0.5 h-3.5 ml-0.5 align-middle animate-pulse"
-                        style={{ background: '#695e6e' }}
-                        aria-hidden="true"
-                      />
-                    )}
-                    {msg.esl_decision && <ESLTag decision={msg.esl_decision} />}
-                  </div>
-                  {!msg.streaming && (
-                    <div className="flex items-center gap-0.5">
-                      <CopyButton content={msg.content} />
-                      <FeedbackButtons
-                        messageId={msg.id}
-                        currentFeedback={msg.feedback}
-                        onFeedback={handleFeedback}
-                      />
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Message list */}
+          {messages.map((msg, idx) => {
+            const isLast = idx === messages.length - 1
+
+            if (msg.role === 'user') {
+              return (
+                <div key={msg.id} className="flex justify-end group">
+                  <div className="flex flex-col items-end gap-1 max-w-[80%]">
+                    <div className="flex items-center gap-2">
+                      <CopyButton content={msg.content} size={13} />
+                      <div
+                        className="px-4 py-2.5 rounded-2xl rounded-tr-sm text-sm leading-relaxed"
+                        style={{
+                          background: 'rgba(0,0,0,0.06)',
+                          color: '#0a0a0a',
+                        }}
+                      >
+                        {msg.content}
+                      </div>
+                      {/* User avatar */}
+                      <div
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold shrink-0"
+                        style={{ background: '#332b36', color: '#ffffff' }}
+                        aria-label="You"
+                      >
+                        {initials}
+                      </div>
                     </div>
+                    {msg.timestamp && (
+                      <span className="text-[10px] pr-9" style={{ color: '#c0c0c0' }}>
+                        {formatTime(msg.timestamp)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )
+            }
+
+            /* assistant */
+            return (
+              <div key={msg.id} className="flex flex-col items-start group">
+                {/* Avatar + timestamp header */}
+                <div className="flex items-center gap-2 mb-2">
+                  <CompanionAvatar />
+                  {msg.timestamp && !msg.streaming && (
+                    <span className="text-[10px]" style={{ color: '#c0c0c0' }}>
+                      {formatTime(msg.timestamp)}
+                    </span>
                   )}
                 </div>
-                {msg.timestamp && !msg.streaming && (
-                  <span className="text-[10px] pl-9" style={{ color: '#b0b0b0' }}>
-                    {formatTime(msg.timestamp)}
-                  </span>
+
+                {/* Message body */}
+                <div
+                  className="pl-9 text-sm leading-[1.75] w-full"
+                  style={{ color: '#1a1a1a' }}
+                >
+                  {msg.content || (msg.streaming && (
+                    <span className="inline-block" style={{ color: '#9e9e9e' }}>…</span>
+                  ))}
+                  {msg.streaming && <Cursor />}
+                  {msg.esl_decision && <ESLTag decision={msg.esl_decision} />}
+                </div>
+
+                {/* Action row — only after streaming done */}
+                {!msg.streaming && (
+                  <div className="pl-9 mt-0.5">
+                    <AssistantActions
+                      msg={msg}
+                      onFeedback={handleFeedback}
+                      onRegenerate={isLast && !isLoading ? () => {
+                        // find last user message and re-send
+                        const lastUser = [...messages].reverse().find(m => m.role === 'user')
+                        if (lastUser) handleSend(lastUser.content)
+                      } : undefined}
+                    />
+                  </div>
                 )}
               </div>
-            )}
-          </div>
-        ))}
+            )
+          })}
 
-        <div ref={endRef} />
+          <div ref={endRef} />
+        </div>
       </div>
 
-      {/* Input bar */}
-      <div className="px-4 py-3 border-t border-[rgba(0,0,0,0.08)]" style={{ background: '#fafafa' }}>
-        <div className="flex items-end gap-2">
-          <textarea
-            value={input}
-            onChange={e => {
-              setInput(e.target.value)
-              e.target.style.height = 'auto'
-              e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
-            }}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                handleSend()
-              }
-            }}
-            placeholder="Message your companion…"
-            rows={1}
-            className="flex-1 resize-none rounded-xl px-4 py-2.5 text-sm outline-none"
-            style={{
-              background: '#ffffff',
-              border: '1px solid rgba(0,0,0,0.10)',
-              color: '#0a0a0a',
-              maxHeight: '120px',
-              overflowY: 'auto',
-            }}
-          />
-          {isLoading ? (
+      {/* ── Input card ── */}
+      <div className="shrink-0 px-4 pb-4">
+        <div
+          className="mx-auto max-w-[720px] rounded-2xl overflow-hidden"
+          style={{
+            background: '#ffffff',
+            border: '1px solid rgba(0,0,0,0.12)',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+          }}
+        >
+          {/* Textarea */}
+          <div className="px-4 pt-3.5 pb-1">
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={e => { setInput(e.target.value); resizeTextarea() }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  handleSend()
+                }
+              }}
+              placeholder="Reply…"
+              rows={1}
+              className="w-full resize-none text-sm outline-none bg-transparent leading-relaxed"
+              style={{ color: '#0a0a0a', maxHeight: '140px', overflowY: 'auto' }}
+            />
+          </div>
+
+          {/* Bottom bar */}
+          <div className="flex items-center justify-between px-3 pb-2.5 pt-1">
+            {/* Left: attach */}
             <button
-              onClick={handleStop}
-              aria-label="Stop generation"
-              className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-opacity hover:opacity-80"
-              style={{ background: '#332b36' }}
+              className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors hover:bg-black/5"
+              aria-label="Attach"
+              title="Attach file"
+              style={{ color: '#9e9e9e' }}
             >
-              <Square size={13} color="#FFFFFF" fill="#FFFFFF" />
+              <Plus size={16} />
             </button>
-          ) : (
-            <button
-              onClick={() => handleSend()}
-              disabled={!input.trim() || isLoading}
-              className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-opacity disabled:opacity-40"
-              style={{ background: '#000000' }}
-              aria-label="Send message"
-            >
-              <Send size={15} color="#FFFFFF" />
-            </button>
-          )}
+
+            {/* Right: model chip + send/stop */}
+            <div className="flex items-center gap-2">
+              {/* Model indicator */}
+              <div
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium"
+                style={{
+                  background: 'rgba(0,0,0,0.04)',
+                  color: '#6b6b6b',
+                  border: '1px solid rgba(0,0,0,0.06)',
+                }}
+              >
+                Ethic Companion
+                <ChevronDown size={10} />
+              </div>
+
+              {/* Send / Stop */}
+              {isLoading ? (
+                <button
+                  onClick={handleStop}
+                  aria-label="Stop generation"
+                  className="w-8 h-8 rounded-xl flex items-center justify-center transition-opacity hover:opacity-80"
+                  style={{ background: '#1a1a1a' }}
+                >
+                  <Square size={12} color="#fff" fill="#fff" />
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleSend()}
+                  disabled={!input.trim()}
+                  aria-label="Send"
+                  className="w-8 h-8 rounded-xl flex items-center justify-center transition-opacity disabled:opacity-30"
+                  style={{ background: '#1a1a1a' }}
+                >
+                  <Send size={13} color="#fff" />
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

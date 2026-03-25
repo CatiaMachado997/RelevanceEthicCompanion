@@ -323,6 +323,7 @@ export interface Goal {
   description: string | null
   status: 'active' | 'completed' | 'paused' | 'archived'
   priority: number
+  progress?: number
   target_date: string | null
   created_at: string
   completed_at: string | null
@@ -354,6 +355,7 @@ export const goalsApi = {
     title: string
     description?: string
     priority: number
+    progress?: number
     target_date?: string
   }) => {
     const response = await apiRequest<{

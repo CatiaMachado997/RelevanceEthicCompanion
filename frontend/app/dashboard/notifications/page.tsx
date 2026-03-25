@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Bell, CheckCircle2, Info, AlertTriangle, ShieldAlert } from 'lucide-react'
@@ -26,6 +27,13 @@ function iconForType(type: string) {
   if (type.includes('esl') || type.includes('block') || type.includes('shield')) return ShieldAlert
   if (type === 'warning') return AlertTriangle
   return Info
+}
+
+function getNotificationHref(type: string): string | null {
+  if (type === 'goal_completed') return '/dashboard/goals'
+  if (type.includes('esl') || type.includes('block') || type.includes('shield')) return '/dashboard/transparency'
+  if (type === 'warning') return '/dashboard/transparency'
+  return null
 }
 
 export default function NotificationsPage() {
@@ -123,33 +131,40 @@ export default function NotificationsPage() {
         <div className="space-y-3">
           {displayedNotifications.map((notification) => {
             const Icon = iconForType(notification.type)
-            return (
-              <Card
-                key={notification.id}
-                className={`border-[#e0e0e0] rounded-2xl transition-all hover:shadow-md cursor-pointer ${
-                  !notification.read ? 'bg-[#f5f5f5]' : ''
-                }`}
-                onClick={() => !notification.read && handleMarkRead(notification.id)}
-              >
-                <CardHeader className="pb-3">
-                  <div className="flex items-start gap-4">
-                    <div className={`mt-1 ${notification.read ? 'text-[#6b6b6b]' : 'text-[#1a1a1a]'}`}>
-                      <Icon className="h-4 w-4" />
-                    </div>
-                    <div className="flex-1 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <CardTitle className="text-base text-[#1a1a1a]">
-                          {notification.title}
-                        </CardTitle>
-                        {!notification.read && (
-                          <div className="h-2 w-2 rounded-full bg-[#1a1a1a]" />
-                        )}
-                      </div>
-                      <p className="text-sm text-[#6b6b6b]">{notification.message}</p>
-                      <p className="text-xs text-[#9e9e9e]">{timeAgo(notification.created_at)}</p>
-                    </div>
+            const href = getNotificationHref(notification.type)
+            const cardClass = `border-[#e0e0e0] rounded-2xl transition-all hover:shadow-md cursor-pointer ${!notification.read ? 'bg-[#f5f5f5]' : ''}`
+            const handleClick = () => !notification.read && handleMarkRead(notification.id)
+            const inner = (
+              <CardHeader className="pb-3">
+                <div className="flex items-start gap-4">
+                  <div className={`mt-1 ${notification.read ? 'text-[#6b6b6b]' : 'text-[#1a1a1a]'}`}>
+                    <Icon className="h-4 w-4" />
                   </div>
-                </CardHeader>
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="text-base text-[#1a1a1a]">
+                        {notification.title}
+                      </CardTitle>
+                      {!notification.read && (
+                        <div className="h-2 w-2 rounded-full bg-[#1a1a1a]" />
+                      )}
+                    </div>
+                    <p className="text-sm text-[#6b6b6b]">{notification.message}</p>
+                    <p className="text-xs text-[#9e9e9e]">{timeAgo(notification.created_at)}</p>
+                  </div>
+                </div>
+              </CardHeader>
+            )
+            if (href) {
+              return (
+                <Link key={notification.id} href={href} className="block" onClick={handleClick}>
+                  <Card className={cardClass}>{inner}</Card>
+                </Link>
+              )
+            }
+            return (
+              <Card key={notification.id} className={cardClass} onClick={handleClick}>
+                {inner}
               </Card>
             )
           })}

@@ -44,6 +44,7 @@ export default function GoalsPage() {
   const [formTitle, setFormTitle] = useState('')
   const [formDesc, setFormDesc] = useState('')
   const [formPriority, setFormPriority] = useState(5)
+  const [formProgress, setFormProgress] = useState(0)
   const [formDate, setFormDate] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -62,6 +63,7 @@ export default function GoalsPage() {
     setFormTitle('')
     setFormDesc('')
     setFormPriority(5)
+    setFormProgress(0)
     setFormDate('')
     setSheetOpen(true)
   }
@@ -71,6 +73,7 @@ export default function GoalsPage() {
     setFormTitle(g.title)
     setFormDesc(g.description ?? '')
     setFormPriority(g.priority)
+    setFormProgress(g.progress ?? 0)
     setFormDate(g.target_date ?? '')
     setOpenMenu(null)
     setSheetOpen(true)
@@ -85,6 +88,7 @@ export default function GoalsPage() {
           title: formTitle,
           description: formDesc || undefined,
           priority: formPriority,
+          progress: formProgress,
           target_date: formDate || undefined,
         })
         setGoals(prev => prev.map(g => g.id === editingGoal.id ? updated : g))
@@ -93,6 +97,7 @@ export default function GoalsPage() {
           title: formTitle,
           description: formDesc || undefined,
           priority: formPriority,
+          progress: formProgress,
           target_date: formDate || undefined,
         })
         if (created) setGoals(prev => [...prev, created])
@@ -143,6 +148,16 @@ export default function GoalsPage() {
           </p>
           {goal.description && (
             <p className="text-xs mt-0.5 truncate" style={{ color: '#9e9e9e' }}>{goal.description}</p>
+          )}
+          {goal.progress !== undefined && goal.progress > 0 && (
+            <div className="mt-2">
+              <div className="flex justify-between text-xs mb-1" style={{ color: '#9e9e9e' }}>
+                <span>Progress</span><span>{goal.progress}%</span>
+              </div>
+              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#f0f0f0' }}>
+                <div className="h-full rounded-full transition-all" style={{ width: `${goal.progress}%`, background: '#1a1a1a' }} />
+              </div>
+            </div>
           )}
         </div>
         {goal.target_date && (
@@ -317,6 +332,15 @@ export default function GoalsPage() {
                   onChange={e => setFormPriority(Number(e.target.value))}
                   className="w-full rounded-xl px-3 py-2 text-sm outline-none"
                   style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.10)', color: '#0a0a0a' }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#6b6b6b' }}>Progress ({formProgress}%)</label>
+                <input
+                  type="range" min={0} max={100}
+                  value={formProgress}
+                  onChange={e => setFormProgress(Number(e.target.value))}
+                  className="w-full accent-[#1a1a1a]"
                 />
               </div>
               <div>

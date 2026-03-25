@@ -195,18 +195,71 @@ export default function ProfilePage() {
           </div>
           <div>
             <label className="block text-xs font-medium mb-1.5" style={{ color: '#6b6b6b' }}>Timezone</label>
-            <input
-              type="text"
+            <select
               value={timezone}
               onChange={e => setTimezone(e.target.value)}
-              placeholder="e.g. Europe/Lisbon"
               className="w-full px-3 py-2 rounded-xl text-sm outline-none transition-all"
               style={{
                 background: '#f9f9f9',
                 border: '1px solid rgba(0,0,0,0.10)',
-                color: '#0a0a0a',
+                color: timezone ? '#0a0a0a' : '#9e9e9e',
               }}
-            />
+            >
+              <option value="">Select timezone…</option>
+              <optgroup label="Africa">
+                <option value="Africa/Cairo">Africa/Cairo</option>
+                <option value="Africa/Johannesburg">Africa/Johannesburg</option>
+                <option value="Africa/Lagos">Africa/Lagos</option>
+              </optgroup>
+              <optgroup label="America">
+                <option value="America/Anchorage">America/Anchorage</option>
+                <option value="America/Bogota">America/Bogota</option>
+                <option value="America/Chicago">America/Chicago</option>
+                <option value="America/Denver">America/Denver</option>
+                <option value="America/Los_Angeles">America/Los_Angeles</option>
+                <option value="America/Mexico_City">America/Mexico_City</option>
+                <option value="America/New_York">America/New_York</option>
+                <option value="America/Phoenix">America/Phoenix</option>
+                <option value="America/Sao_Paulo">America/Sao_Paulo</option>
+                <option value="America/Toronto">America/Toronto</option>
+                <option value="America/Vancouver">America/Vancouver</option>
+              </optgroup>
+              <optgroup label="Asia">
+                <option value="Asia/Bangkok">Asia/Bangkok</option>
+                <option value="Asia/Dubai">Asia/Dubai</option>
+                <option value="Asia/Hong_Kong">Asia/Hong_Kong</option>
+                <option value="Asia/Jakarta">Asia/Jakarta</option>
+                <option value="Asia/Kolkata">Asia/Kolkata</option>
+                <option value="Asia/Seoul">Asia/Seoul</option>
+                <option value="Asia/Shanghai">Asia/Shanghai</option>
+                <option value="Asia/Singapore">Asia/Singapore</option>
+                <option value="Asia/Tokyo">Asia/Tokyo</option>
+              </optgroup>
+              <optgroup label="Australia">
+                <option value="Australia/Melbourne">Australia/Melbourne</option>
+                <option value="Australia/Perth">Australia/Perth</option>
+                <option value="Australia/Sydney">Australia/Sydney</option>
+              </optgroup>
+              <optgroup label="Europe">
+                <option value="Europe/Amsterdam">Europe/Amsterdam</option>
+                <option value="Europe/Berlin">Europe/Berlin</option>
+                <option value="Europe/Istanbul">Europe/Istanbul</option>
+                <option value="Europe/Lisbon">Europe/Lisbon</option>
+                <option value="Europe/London">Europe/London</option>
+                <option value="Europe/Madrid">Europe/Madrid</option>
+                <option value="Europe/Moscow">Europe/Moscow</option>
+                <option value="Europe/Paris">Europe/Paris</option>
+                <option value="Europe/Rome">Europe/Rome</option>
+                <option value="Europe/Zurich">Europe/Zurich</option>
+              </optgroup>
+              <optgroup label="Pacific">
+                <option value="Pacific/Auckland">Pacific/Auckland</option>
+                <option value="Pacific/Honolulu">Pacific/Honolulu</option>
+              </optgroup>
+              <optgroup label="UTC">
+                <option value="UTC">UTC</option>
+              </optgroup>
+            </select>
           </div>
         </div>
 

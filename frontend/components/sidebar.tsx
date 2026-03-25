@@ -4,7 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   LayoutDashboard, MessageSquare, Heart, Target,
-  Eye, Plug, Settings, LogOut, Bell, User, Sun, Moon,
+  Eye, Plug, Settings, LogOut, Bell, User, Sun, Moon, Search,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/useAuth"
@@ -19,6 +19,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/transparency", label: "Transparency", icon: Eye },
   { href: "/dashboard/integrations", label: "Integrations", icon: Plug },
   { href: "/dashboard/notifications",label: "Notifications",icon: Bell },
+  { href: "/dashboard/search",       label: "Search",        icon: Search },
 ]
 
 interface SidebarNavProps {
