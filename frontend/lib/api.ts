@@ -727,6 +727,10 @@ export const notificationsApi = {
   markAllRead: async (): Promise<void> => {
     await apiRequest('/api/notifications/read-all', { method: 'PATCH' })
   },
+
+  count: async (): Promise<{ unread_count: number }> => {
+    return apiRequest<{ unread_count: number }>('/api/notifications/count')
+  },
 }
 
 export interface SearchResult {

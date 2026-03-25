@@ -66,6 +66,7 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
+  const [unreadNotifications, setUnreadNotifications] = useState(0)
 
   useEffect(() => { setMounted(true) }, [])
 
@@ -73,6 +74,21 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
     api.chat.conversations.list()
       .then(r => setConversations(r.conversations))
       .catch(() => {})
+  }, [pathname])
+
+  useEffect(() => {
+    const fetchCount = () => {
+      api.notifications.count()
+        .then(r => setUnreadNotifications(r.unread_count))
+        .catch(() => {})
+    }
+    fetchCount()
+    const interval = setInterval(fetchCount, 60_000)
+    return () => clearInterval(interval)
+  }, [])
+
+  useEffect(() => {
+    if (pathname.includes('/notifications')) setUnreadNotifications(0)
   }, [pathname])
 
   const handleNewChat = () => {
@@ -139,7 +155,17 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
                 fontWeight: active ? 500 : undefined,
               }}
             >
-              <Icon size={16} strokeWidth={active ? 2.2 : 1.8} />
+              <span className="relative">
+                <Icon size={16} strokeWidth={active ? 2.2 : 1.8} />
+                {href === '/dashboard/notifications' && unreadNotifications > 0 && (
+                  <span
+                    className="absolute -top-1.5 -right-1.5 min-w-[14px] h-[14px] rounded-full flex items-center justify-center text-[9px] font-bold leading-none px-0.5"
+                    style={{ background: '#B04A3A', color: '#fff' }}
+                  >
+                    {unreadNotifications > 9 ? '9+' : unreadNotifications}
+                  </span>
+                )}
+              </span>
               {label}
             </Link>
           )
