@@ -15,6 +15,7 @@ Every user-facing action MUST flow through ESL:
 
 from typing import AsyncGenerator, Dict, Any, Optional, List
 from datetime import datetime, UTC
+import json
 import logging
 import re
 
@@ -656,7 +657,6 @@ For greetings, general questions, or anything answerable from the context above 
                         else "ESL modified a response"
                     )
                     reason = (getattr(decision, "reason", None) or "No details available.")[:300]
-                    import json as _json
                     with get_db_connection() as conn:
                         with conn.cursor() as cur:
                             cur.execute(
@@ -668,7 +668,7 @@ For greetings, general questions, or anything answerable from the context above 
                                     notif_type,
                                     notif_title,
                                     reason,
-                                    _json.dumps(
+                                    json.dumps(
                                         {"applied_rules": getattr(decision, "applied_rules", [])}
                                     ),
                                 ),
