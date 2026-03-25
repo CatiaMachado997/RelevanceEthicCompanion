@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '@/lib/api'
+import { useAuth } from '@/hooks/useAuth'
 import { Send, ChevronDown, ChevronUp, Copy, Bot, Square } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 
@@ -87,6 +88,8 @@ function ESLTag({ decision }: { decision: Message['esl_decision'] }) {
 }
 
 export default function ChatPage() {
+  const { user } = useAuth()
+  const initials = user?.email?.split('@')[0].substring(0, 2).toUpperCase() ?? 'U'
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -267,7 +270,7 @@ export default function ChatPage() {
                     style={{ background: '#332b36', color: '#ffffff' }}
                     aria-label="User"
                   >
-                    U
+                    {initials}
                   </div>
                 </div>
                 {msg.timestamp && (

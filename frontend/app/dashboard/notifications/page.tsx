@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
-import { TopHeader } from '@/components/top-header'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Bell, CheckCircle2, Info, AlertTriangle, ShieldAlert } from 'lucide-react'
 import { notificationsApi, Notification } from '@/lib/api'
+import { PageHeader } from '@/components/ui/page-header'
+import { FilterChips } from '@/components/ui/filter-chips'
+
+type ReadFilter = 'unread' | 'read'
 
 function timeAgo(isoString: string): string {
   const diff = Date.now() - new Date(isoString).getTime()
@@ -32,6 +34,7 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true)
   const [markingAll, setMarkingAll] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [readFilter, setReadFilter] = useState<ReadFilter | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -69,94 +72,93 @@ export default function NotificationsPage() {
     }
   }
 
+  const displayedNotifications = readFilter
+    ? notifications.filter(n => readFilter === 'unread' ? !n.read : n.read)
+    : notifications
+
   return (
-    <>
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <TopHeader />
-        <div className="flex-1 overflow-y-auto p-6 bg-white">
-          <div className="max-w-4xl space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-              <div className="flex flex-col gap-1">
-                <h1 className="text-2xl font-bold tracking-tight text-[#171717]">Notifications</h1>
-                <p className="text-[#525252]">Stay updated with your activity and ESL decisions</p>
-              </div>
-              <div className="flex items-center gap-3">
-                {unreadCount > 0 && (
-                  <Badge variant="outline" className="bg-[#171717]/10 text-[#171717] border-[#171717]/20 rounded-full">
-                    {unreadCount} unread
-                  </Badge>
-                )}
-                {unreadCount > 0 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="rounded-lg"
-                    disabled={markingAll}
-                    onClick={handleMarkAllRead}
-                  >
-                    {markingAll ? 'Marking…' : 'Mark all read'}
-                  </Button>
-                )}
-              </div>
+    <div className="max-w-4xl space-y-5">
+      <PageHeader
+        title="Notifications"
+        subtitle="Stay updated with your activity and ESL decisions"
+        action={
+          unreadCount > 0 ? (
+            <div className="flex items-center gap-3">
+              <Badge variant="outline" className="bg-[#1a1a1a]/10 text-[#1a1a1a] border-[#1a1a1a]/20 rounded-full">
+                {unreadCount} unread
+              </Badge>
+              <button
+                className="px-4 py-1.5 rounded-full text-sm font-medium border border-[#e0e0e0] text-[#6b6b6b] hover:bg-[#f5f5f5] transition-colors disabled:opacity-50"
+                disabled={markingAll}
+                onClick={handleMarkAllRead}
+              >
+                {markingAll ? 'Marking…' : 'Mark all read'}
+              </button>
             </div>
+          ) : undefined
+        }
+      />
 
-            {error && <p className="text-sm text-[#DC2626]">{error}</p>}
+      <FilterChips<ReadFilter>
+        chips={[
+          { value: null, label: 'All', count: notifications.length },
+          { value: 'unread', label: 'Unread', count: unreadCount },
+          { value: 'read', label: 'Read', count: notifications.length - unreadCount },
+        ]}
+        selected={readFilter}
+        onChange={setReadFilter}
+      />
 
-            {/* Loading */}
-            {loading && (
-              <p className="text-sm text-[#525252]">Loading notifications…</p>
-            )}
+      {error && <p className="text-sm text-[#DC2626]">{error}</p>}
 
-            {/* Notifications List */}
-            {!loading && notifications.length > 0 && (
-              <div className="space-y-3">
-                {notifications.map((notification) => {
-                  const Icon = iconForType(notification.type)
-                  return (
-                    <Card
-                      key={notification.id}
-                      className={`border-[#E5E5E5] rounded-lg shadow-md transition-all hover:shadow-md cursor-pointer ${
-                        !notification.read ? 'bg-[#FAFAFA]' : ''
-                      }`}
-                      onClick={() => !notification.read && handleMarkRead(notification.id)}
-                    >
-                      <CardHeader className="pb-3">
-                        <div className="flex items-start gap-4">
-                          <div className={`mt-1 ${notification.read ? 'text-[#525252]' : 'text-[#171717]'}`}>
-                            <Icon className="h-4 w-4" />
-                          </div>
-                          <div className="flex-1 space-y-1">
-                            <div className="flex items-center gap-2">
-                              <CardTitle className="text-base text-[#171717]">
-                                {notification.title}
-                              </CardTitle>
-                              {!notification.read && (
-                                <div className="h-2 w-2 rounded-full bg-[#171717]" />
-                              )}
-                            </div>
-                            <p className="text-sm text-[#525252]">{notification.message}</p>
-                            <p className="text-xs text-[#A3A3A3]">{timeAgo(notification.created_at)}</p>
-                          </div>
-                        </div>
-                      </CardHeader>
-                    </Card>
-                  )
-                })}
-              </div>
-            )}
+      {loading && (
+        <p className="text-sm text-[#6b6b6b]">Loading notifications…</p>
+      )}
 
-            {/* Empty state */}
-            {!loading && notifications.length === 0 && (
-              <Card className="border-[#E5E5E5] rounded-lg shadow-md p-12 text-center">
-                <Bell className="h-10 w-10 mx-auto text-[#A3A3A3]" />
-                <h3 className="font-semibold mt-4 text-lg text-[#171717]">All caught up!</h3>
-                <p className="text-[#525252] mt-2">You have no notifications</p>
+      {!loading && displayedNotifications.length > 0 && (
+        <div className="space-y-3">
+          {displayedNotifications.map((notification) => {
+            const Icon = iconForType(notification.type)
+            return (
+              <Card
+                key={notification.id}
+                className={`border-[#e0e0e0] rounded-2xl transition-all hover:shadow-md cursor-pointer ${
+                  !notification.read ? 'bg-[#f5f5f5]' : ''
+                }`}
+                onClick={() => !notification.read && handleMarkRead(notification.id)}
+              >
+                <CardHeader className="pb-3">
+                  <div className="flex items-start gap-4">
+                    <div className={`mt-1 ${notification.read ? 'text-[#6b6b6b]' : 'text-[#1a1a1a]'}`}>
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <CardTitle className="text-base text-[#1a1a1a]">
+                          {notification.title}
+                        </CardTitle>
+                        {!notification.read && (
+                          <div className="h-2 w-2 rounded-full bg-[#1a1a1a]" />
+                        )}
+                      </div>
+                      <p className="text-sm text-[#6b6b6b]">{notification.message}</p>
+                      <p className="text-xs text-[#9e9e9e]">{timeAgo(notification.created_at)}</p>
+                    </div>
+                  </div>
+                </CardHeader>
               </Card>
-            )}
-          </div>
+            )
+          })}
         </div>
-      </main>
-    </>
+      )}
+
+      {!loading && displayedNotifications.length === 0 && (
+        <Card className="border-[#e0e0e0] rounded-2xl p-12 text-center">
+          <Bell className="h-10 w-10 mx-auto text-[#9e9e9e]" />
+          <h3 className="font-semibold mt-4 text-lg text-[#1a1a1a]">All caught up!</h3>
+          <p className="text-[#6b6b6b] mt-2">You have no notifications</p>
+        </Card>
+      )}
+    </div>
   )
 }

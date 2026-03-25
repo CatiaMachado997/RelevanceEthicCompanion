@@ -26,6 +26,10 @@ function makeMockStream(tokens: string[] = ['Hello from AI']) {
   return promise
 }
 
+jest.mock('@/hooks/useAuth', () => ({
+  useAuth: () => ({ user: null }),
+}))
+
 jest.mock('../lib/api', () => ({
   __esModule: true,
   default: {

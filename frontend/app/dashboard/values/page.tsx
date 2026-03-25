@@ -7,6 +7,7 @@ import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } 
 import { CSS } from '@dnd-kit/utilities'
 import { Plus, GripVertical, Pencil, Trash2, X, Check } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
+import { FilterChips } from '@/components/ui/filter-chips'
 
 type ValueType = 'boundary' | 'preference' | 'topic_filter' | 'time_window'
 
@@ -134,6 +135,7 @@ function SortableValueCard({ value, onEdit, onDelete }: SortableCardProps) {
 export default function ValuesPage() {
   const [values, setValues] = useState<AnimatedValue[]>([])
   const [loading, setLoading] = useState(true)
+  const [typeFilter, setTypeFilter] = useState<ValueType | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editingValue, setEditingValue] = useState<UserValue | null>(null)
 
@@ -248,7 +250,7 @@ export default function ValuesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold" style={{ color: '#0a0a0a' }}>Your Values</h2>
+          <h2 className="text-base font-semibold" style={{ color: '#1a1a1a' }}>Your Values</h2>
           <p className="text-sm mt-0.5" style={{ color: '#6b6b6b' }}>
             Define the boundaries ESL protects for you.
           </p>
@@ -263,36 +265,52 @@ export default function ValuesPage() {
         </button>
       </div>
 
+      {/* Filter chips */}
+      <FilterChips<ValueType>
+        chips={[
+          { value: null, label: 'All', count: values.length },
+          { value: 'boundary', label: 'Boundary', count: values.filter(v => v.type === 'boundary').length },
+          { value: 'preference', label: 'Preference', count: values.filter(v => v.type === 'preference').length },
+          { value: 'topic_filter', label: 'Topic Filter', count: values.filter(v => v.type === 'topic_filter').length },
+          { value: 'time_window', label: 'Time Window', count: values.filter(v => v.type === 'time_window').length },
+        ]}
+        selected={typeFilter}
+        onChange={setTypeFilter}
+      />
+
       {/* Grid */}
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-28 rounded-2xl" />)}
         </div>
-      ) : values.length === 0 ? (
-        <div
-          className="rounded-2xl p-10 text-center"
-          style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}
-        >
-          <p className="text-sm" style={{ color: '#9e9e9e' }}>
-            No values yet. Add your first boundary or preference.
-          </p>
-        </div>
-      ) : (
-        <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={values.map(v => v.id)} strategy={verticalListSortingStrategy}>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {values.map(v => (
-                <SortableValueCard
-                  key={v.id}
-                  value={v}
-                  onEdit={openEdit}
-                  onDelete={handleDelete}
-                />
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
-      )}
+      ) : (() => {
+        const displayedValues = typeFilter ? values.filter(v => v.type === typeFilter) : values
+        return displayedValues.length === 0 ? (
+          <div
+            className="rounded-2xl p-10 text-center"
+            style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}
+          >
+            <p className="text-sm" style={{ color: '#9e9e9e' }}>
+              No values yet. Add your first boundary or preference.
+            </p>
+          </div>
+        ) : (
+          <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={displayedValues.map(v => v.id)} strategy={verticalListSortingStrategy}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {displayedValues.map(v => (
+                  <SortableValueCard
+                    key={v.id}
+                    value={v}
+                    onEdit={openEdit}
+                    onDelete={handleDelete}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+        )
+      })()}
 
       {/* Slide-over sheet */}
       {sheetOpen && (
