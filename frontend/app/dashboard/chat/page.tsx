@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import ReactMarkdown from 'react-markdown'
 import api from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
 import {
@@ -166,6 +167,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput]       = useState('')
   const [isLoading, setIsLoading]       = useState(false)
+  const [isThinking, setIsThinking]     = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [userScrolled, setUserScrolled] = useState(false)
 
@@ -230,6 +232,7 @@ export default function ChatPage() {
     setInput('')
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
     setIsLoading(true)
+    setIsThinking(true)
     setUserScrolled(false)
 
     setMessages(prev => [
@@ -245,6 +248,7 @@ export default function ChatPage() {
 
     try {
       const s = api.chat.stream(userMessage, (token) => {
+        setIsThinking(false)
         setMessages(prev => {
           const msgs = [...prev]
           const last = msgs[msgs.length - 1]
@@ -254,6 +258,7 @@ export default function ChatPage() {
       })
       streamRef.current = s
       await s
+      setIsThinking(false)
       setMessages(prev => {
         const msgs = [...prev]
         const last = msgs[msgs.length - 1]
@@ -264,6 +269,7 @@ export default function ChatPage() {
         return msgs
       })
     } catch (e) {
+      setIsThinking(false)
       setMessages(prev => {
         const msgs = [...prev]
         const last = msgs[msgs.length - 1]
@@ -400,10 +406,20 @@ export default function ChatPage() {
                   className="pl-9 text-sm leading-[1.75] w-full"
                   style={{ color: '#1a1a1a' }}
                 >
-                  {msg.content || (msg.streaming && (
-                    <span className="inline-block" style={{ color: '#9e9e9e' }}>…</span>
-                  ))}
-                  {msg.streaming && <Cursor />}
+                  {msg.streaming && isThinking && !msg.content ? (
+                    <div className="flex gap-1 items-center h-5">
+                      {[0,1,2].map(i => (
+                        <span key={i} className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: `${i * 0.15}s`, color: '#9e9e9e' }} />
+                      ))}
+                    </div>
+                  ) : msg.content ? (
+                    <>
+                      <div className="chat-prose">
+                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      </div>
+                      {msg.streaming && <Cursor />}
+                    </>
+                  ) : null}
                   {msg.esl_decision && <ESLTag decision={msg.esl_decision} />}
                 </div>
 
