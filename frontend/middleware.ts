@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function middleware(request: NextRequest) {
+  // Skip auth in development
+  if (process.env.NEXT_PUBLIC_ENVIRONMENT === 'development') {
+    return NextResponse.next()
+  }
+
   // Only protect /dashboard routes
   if (!request.nextUrl.pathname.startsWith('/dashboard')) {
     return NextResponse.next()
