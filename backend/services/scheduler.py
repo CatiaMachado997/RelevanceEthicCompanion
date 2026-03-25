@@ -74,6 +74,16 @@ class BackgroundScheduler:
             replace_existing=True
         )
 
+        # Weekly digest — every Monday at 8 AM
+        self.scheduler.add_job(
+            func=self._generate_weekly_digest,
+            trigger=CronTrigger(day_of_week='mon', hour=8, minute=0),
+            id='weekly_digest',
+            name='Generate weekly AI digest for all users',
+            replace_existing=True,
+            max_instances=1,
+        )
+
         # Start scheduler
         self.scheduler.start()
         self._running = True
@@ -82,6 +92,7 @@ class BackgroundScheduler:
         logger.info("   - Calendar sync: Every 15 minutes")
         logger.info("   - Token cleanup: Daily at 3 AM")
         logger.info("   - Health check: Every hour")
+        logger.info("   - Weekly digest: Every Monday at 8 AM")
 
     def stop(self):
         """Stop all background tasks"""
@@ -196,6 +207,72 @@ class BackgroundScheduler:
 
         except Exception as e:
             logger.error(f"❌ Error during token cleanup: {e}", exc_info=True)
+
+    async def _generate_weekly_digest(self):
+        """
+        Generate a weekly digest notification for all users.
+        Runs Monday at 8 AM. Creates a notification summarising the week.
+        """
+        logger.info("[Scheduler] Generating weekly digest notifications...")
+        try:
+            from utils.db import get_db_connection
+            from routes.notifications import create_notification
+            from services.context_manager import ContextManager
+            from langchain_core.messages import HumanMessage
+            from langchain_groq import ChatGroq
+            from config import settings
+
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT id FROM users LIMIT 100")
+                    users = cur.fetchall()
+
+            for user_row in users:
+                user_id = str(user_row["id"])
+                try:
+                    ctx = ContextManager()
+                    goals = await ctx.get_active_goals(user_id)
+                    values = await ctx.get_user_values(user_id)
+
+                    if not goals and not values:
+                        continue  # Skip users with no data
+
+                    goal_text = "\n".join(f"- {g.get('title', g) if isinstance(g, dict) else g.title}" for g in goals[:5])
+                    value_text = "\n".join(f"- {v.get('value', v) if isinstance(v, dict) else v.value}" for v in values[:3])
+
+                    prompt = f"""Write a short weekly check-in message (2–3 sentences) for a user.
+Active goals:
+{goal_text or "None"}
+
+Values:
+{value_text or "None"}
+
+Be encouraging and specific. Suggest one concrete action for the week ahead."""
+
+                    llm = ChatGroq(
+                        model="llama-3.1-8b-instant",
+                        groq_api_key=settings.GROQ_API_KEY,
+                        temperature=0.7,
+                    )
+                    response = await llm.ainvoke([HumanMessage(content=prompt)])
+                    content = (response.content or "").strip()
+
+                    if content:
+                        with get_db_connection() as conn:
+                            create_notification(
+                                conn,
+                                user_id=user_id,
+                                type="info",
+                                title="Your weekly companion check-in",
+                                message=content[:500],
+                                metadata={"source": "weekly_digest"},
+                            )
+
+                except Exception as e:
+                    logger.warning(f"[Scheduler] Weekly digest failed for user {user_id}: {e}")
+
+        except Exception as e:
+            logger.error(f"[Scheduler] Weekly digest job failed: {e}")
 
     async def _health_check(self):
         """
