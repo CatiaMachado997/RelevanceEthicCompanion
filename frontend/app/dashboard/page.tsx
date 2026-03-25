@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { transparencyApi, goalsApi, valuesApi, eventsApi, type Goal, type CalendarEvent } from '@/lib/api'
+import { transparencyApi, goalsApi, valuesApi, eventsApi, insightApi, type Goal, type CalendarEvent } from '@/lib/api'
 import Link from 'next/link'
 import { MessageSquare, Heart, Shield, ArrowRight, Target, Calendar, Clock, Info } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -41,6 +41,8 @@ export default function DashboardPage() {
   const [eslActivity, setEslActivity] = useState<ESLLog[]>([])
   const [upcomingEvents, setUpcomingEvents] = useState<CalendarEvent[]>([])
   const [loading, setLoading] = useState(true)
+  const [dailyInsight, setDailyInsight] = useState<string | null>(null)
+  const [insightLoading, setInsightLoading] = useState(true)
 
   useEffect(() => {
     const load = async () => {
@@ -68,6 +70,13 @@ export default function DashboardPage() {
       } finally {
         setLoading(false)
       }
+
+      // Fetch daily insight separately (can take longer due to LLM)
+      try {
+        const insightData = await insightApi.daily()
+        setDailyInsight(insightData?.insight ?? null)
+      } catch {}
+      setInsightLoading(false)
     }
     load()
   }, [])
@@ -103,6 +112,31 @@ export default function DashboardPage() {
         <p className="text-sm mb-1" style={{ color: '#6b6b6b' }}>{dateStr}</p>
         <h2 className="text-2xl font-semibold" style={{ color: '#0a0a0a' }}>{greeting}</h2>
       </Card>
+
+      {/* Daily insight */}
+      {(insightLoading || dailyInsight) && (
+        <div
+          className="rounded-2xl p-5 border border-[rgba(0,0,0,0.08)] shadow-[0_1px_3px_rgba(0,0,0,0.08)]"
+          style={{ background: 'linear-gradient(135deg, #f9f6fa 0%, #ffffff 100%)' }}
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-sm" style={{ color: '#695e6e' }}>✦</span>
+            <p className="text-xs font-medium" style={{ color: '#695e6e' }}>
+              Today&apos;s insight from your companion
+            </p>
+          </div>
+          {insightLoading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-3/4" />
+            </div>
+          ) : (
+            <p className="text-sm leading-relaxed" style={{ color: '#1c1520' }}>
+              {dailyInsight}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Stats row */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
