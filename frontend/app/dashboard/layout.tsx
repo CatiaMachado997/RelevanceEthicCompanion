@@ -50,7 +50,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => { setSidebarOpen(false) }, [pathname])
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: '#f5f5f5' }}>
+    <div className="flex h-screen overflow-hidden" style={{ background: 'var(--ec-page-bg)' }}>
 
       {/* Mobile overlay */}
       {sidebarOpen && (
@@ -82,7 +82,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Top bar */}
         <header
           className="flex items-center gap-3 h-14 px-4 lg:px-6 shrink-0 border-b"
-          style={{ background: '#ffffff', borderColor: '#e8e8e8' }}
+          style={{ background: 'var(--ec-card-bg)', borderColor: 'var(--ec-sidebar-border)' }}
         >
           {/* Mobile hamburger */}
           <button
@@ -94,18 +94,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </button>
 
           <div className="flex-1 min-w-0">
-            <h1 className="text-sm font-semibold leading-none truncate" style={{ color: '#1a1a1a' }}>
+            <h1 className="text-sm font-semibold leading-none truncate" style={{ color: 'var(--ec-text)' }}>
               {meta.title}
             </h1>
             {meta.subtitle && (
-              <p className="text-xs mt-0.5 truncate" style={{ color: '#9e9e9e' }}>{meta.subtitle}</p>
+              <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--ec-text-subtle)' }}>{meta.subtitle}</p>
             )}
           </div>
 
           {/* ESL shield badge */}
           <div
             className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
-            style={{ background: '#f0f0f0', color: '#6b6b6b', border: '1px solid #e0e0e0' }}
+            style={{ background: 'var(--ec-surface-2)', color: 'var(--ec-text-muted)', border: '1px solid var(--ec-card-border)' }}
           >
             <span className="w-1.5 h-1.5 rounded-full bg-[#4A7C59]" />
             ESL Active

@@ -81,6 +81,71 @@
   --esl-modified: #9B7A3D;
 }
 
+/* ── Theme-aware card & surface tokens ── */
+:root {
+  --ec-page-bg:      #f5f5f5;
+  --ec-card-bg:      #ffffff;
+  --ec-card-border:  rgba(0,0,0,0.08);
+  --ec-card-shadow:  0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+  --ec-surface:      #f9f9f9;
+  --ec-surface-2:    #f0f0f0;
+  --ec-border:       rgba(0,0,0,0.10);
+  --ec-text:         #0a0a0a;
+  --ec-text-muted:   #6b6b6b;
+  --ec-text-subtle:  #9e9e9e;
+  --ec-sidebar-bg:   #ffffff;
+  --ec-sidebar-border: #e8e8e8;
+  --ec-sidebar-active: #f0f0f0;
+  --ec-sidebar-text: #1a1a1a;
+  --ec-sidebar-muted: #6b6b6b;
+}
+
+.dark {
+  --background: 0 0% 8%;
+  --foreground: 0 0% 95%;
+  --card: 0 0% 12%;
+  --card-foreground: 0 0% 95%;
+  --popover: 0 0% 12%;
+  --popover-foreground: 0 0% 95%;
+  --primary: 0 0% 95%;
+  --primary-foreground: 0 0% 8%;
+  --secondary: 0 0% 16%;
+  --secondary-foreground: 0 0% 85%;
+  --muted: 0 0% 16%;
+  --muted-foreground: 0 0% 55%;
+  --accent: 0 0% 16%;
+  --accent-foreground: 0 0% 90%;
+  --destructive: 0 63% 55%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 0 0% 20%;
+  --input: 0 0% 20%;
+  --ring: 0 0% 80%;
+  --sidebar: 0 0% 10%;
+  --sidebar-foreground: 0 0% 70%;
+  --sidebar-primary: 0 0% 90%;
+  --sidebar-primary-foreground: 0 0% 8%;
+  --sidebar-accent: 0 0% 16%;
+  --sidebar-accent-foreground: 0 0% 90%;
+  --sidebar-border: 0 0% 18%;
+  --sidebar-ring: 0 0% 80%;
+
+  --ec-page-bg:      #141414;
+  --ec-card-bg:      #1e1e1e;
+  --ec-card-border:  rgba(255,255,255,0.08);
+  --ec-card-shadow:  0 1px 3px rgba(0,0,0,0.3), 0 4px 16px rgba(0,0,0,0.2);
+  --ec-surface:      #242424;
+  --ec-surface-2:    #2a2a2a;
+  --ec-border:       rgba(255,255,255,0.10);
+  --ec-text:         #f0f0f0;
+  --ec-text-muted:   #a0a0a0;
+  --ec-text-subtle:  #707070;
+  --ec-sidebar-bg:   #171717;
+  --ec-sidebar-border: #2a2a2a;
+  --ec-sidebar-active: #2a2a2a;
+  --ec-sidebar-text: #f0f0f0;
+  --ec-sidebar-muted: #909090;
+}
+
 @keyframes shimmer {
   0%   { transform: translateX(-100%); }
   100% { transform: translateX(100%); }
