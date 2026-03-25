@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react"
 import { Search, X, MessageSquare, Clock, Zap, Calendar } from "lucide-react"
 import { searchApi, SearchResult } from "@/lib/api"
+import { PageHeader } from "@/components/ui/page-header"
+import { FilterChips } from "@/components/ui/filter-chips"
 
 type FilterType = "all" | "memory" | "event"
 
@@ -94,15 +96,8 @@ export default function SearchPage() {
     filterType === "all" ? results : results.filter((r) => r.type === filterType)
 
   return (
-    <div className="flex-1 overflow-auto bg-white p-4 md:p-6">
-      <div className="mx-auto max-w-4xl space-y-4 md:space-y-6">
-        {/* Header */}
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight text-[#0a0a0a]">Search</h1>
-          <p className="text-sm text-[#6b6b6b]">
-            Semantic search across your conversation memories
-          </p>
-        </div>
+    <div className="space-y-4 md:space-y-6">
+      <PageHeader title="Search" subtitle="Semantic search across your conversation memories" />
 
         {/* Search Input */}
         <div className="relative">
@@ -127,25 +122,20 @@ export default function SearchPage() {
           )}
         </div>
 
-        {/* Filter Buttons */}
-        <div className="flex gap-2 flex-wrap">
-          {(["all", "memory", "event"] as FilterType[]).map((filter) => (
-            <button
-              key={filter}
-              onClick={() => {
-                setFilterType(filter)
-                if (query) performSearch(query)
-              }}
-              className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-                filterType === filter
-                  ? "bg-[#000000] text-white"
-                  : "border border-[rgba(0,0,0,0.10)] text-[#6b6b6b] bg-white hover:bg-[#f5f5f5]"
-              }`}
-            >
-              {filter.charAt(0).toUpperCase() + filter.slice(1)}
-            </button>
-          ))}
-        </div>
+        {/* Filter Chips */}
+        <FilterChips<FilterType>
+          chips={[
+            { value: null, label: 'All' },
+            { value: 'memory', label: 'Memory' },
+            { value: 'event', label: 'Event' },
+          ]}
+          selected={filterType === 'all' ? null : filterType}
+          onChange={(f) => {
+            const v = (f ?? 'all') as FilterType
+            setFilterType(v)
+            if (query) performSearch(query)
+          }}
+        />
 
         {/* Error state */}
         {error && (
@@ -248,7 +238,6 @@ export default function SearchPage() {
             </p>
           </div>
         )}
-      </div>
     </div>
   )
 }
