@@ -387,6 +387,18 @@ CREATE TABLE IF NOT EXISTS public.slack_messages (
 
 CREATE INDEX IF NOT EXISTS idx_slack_messages_user_created ON public.slack_messages(user_id, created_at DESC);
 
+-- Daily AI insights (one per user per day, cached)
+CREATE TABLE IF NOT EXISTS public.daily_insights (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  date DATE NOT NULL DEFAULT CURRENT_DATE,
+  generated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_daily_insights_user_date ON public.daily_insights(user_id, date);
+
 -- ==================== Helpful Queries ====================
 
 -- Get user's boundaries

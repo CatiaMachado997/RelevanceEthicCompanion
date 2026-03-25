@@ -353,6 +353,18 @@ CREATE INDEX IF NOT EXISTS idx_slack_messages_user_created ON slack_messages(use
 -- The local schema feedback table may need additional_notes column
 ALTER TABLE relevance_feedback ADD COLUMN IF NOT EXISTS additional_notes TEXT;
 
+-- Daily AI insights (one per user per day, cached)
+CREATE TABLE IF NOT EXISTS daily_insights (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  date DATE NOT NULL DEFAULT CURRENT_DATE,
+  generated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_daily_insights_user_date ON daily_insights(user_id, date);
+
 -- Success message
 DO $$
 BEGIN

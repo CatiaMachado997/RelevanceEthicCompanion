@@ -39,6 +39,52 @@ async def lifespan(app: FastAPI):
     print("⚖️  Ethical Safeguard Layer: ACTIVE")
     print("🎯 Mission: Trust over Engagement")
 
+    # Auto-migrate: ensure weight columns exist in user_settings (added in V2 sprint)
+    try:
+        from utils.db import get_db_connection
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                for col in ("weight_goal_alignment", "weight_time_sensitivity",
+                            "weight_personal_values", "weight_context_relevance"):
+                    cur.execute(
+                        f"ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS {col} FLOAT DEFAULT 1.0"
+                    )
+        logger.debug("user_settings weight columns verified")
+    except Exception as e:
+        logger.warning(f"Could not verify weight columns (DB may be unavailable): {e}")
+
+    # Auto-migrate V4 tables
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS daily_insights (
+                      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                      content TEXT NOT NULL,
+                      date DATE NOT NULL DEFAULT CURRENT_DATE,
+                      generated_at TIMESTAMPTZ DEFAULT NOW(),
+                      UNIQUE(user_id, date)
+                    )
+                """)
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS goal_milestones (
+                      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                      goal_id UUID NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+                      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                      title TEXT NOT NULL,
+                      completed BOOLEAN DEFAULT FALSE,
+                      created_at TIMESTAMPTZ DEFAULT NOW(),
+                      updated_at TIMESTAMPTZ DEFAULT NOW()
+                    )
+                """)
+                cur.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_goal_milestones_goal ON goal_milestones(goal_id)"
+                )
+        logger.debug("V4 tables verified")
+    except Exception as e:
+        logger.warning(f"Could not verify V4 tables: {e}")
+
     if settings.ENVIRONMENT != "development":
         if not settings.AUTH_ENFORCEMENT_ENABLED:
             logger.warning(
@@ -147,6 +193,7 @@ async def health():
 # Import routers
 from routes import auth, values, chat, goals, transparency, relevance, data_sources, profile, notifications, feedback, search
 from routes import settings as settings_router
+from routes.insight import router as insight_router
 
 # Register routers
 app.include_router(auth.router)
@@ -161,6 +208,7 @@ app.include_router(notifications.router)
 app.include_router(settings_router.router)
 app.include_router(feedback.router)
 app.include_router(search.router)
+app.include_router(insight_router)
 
 
 if __name__ == "__main__":
