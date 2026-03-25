@@ -1,7 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { valuesApi, type UserValue } from '@/lib/api'
+import { useState, useEffect, useRef } from 'react'
+import { api, type UserValue } from '@/lib/api'
+import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { Plus, GripVertical, Pencil, Trash2, X, Check } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 
@@ -14,33 +17,122 @@ const TYPE_LABELS: Record<ValueType, string> = {
   time_window: 'Time Window',
 }
 
-const TYPE_COLORS: Record<ValueType, { bg: string; text: string; border: string }> = {
-  boundary:     { bg: 'rgba(0,0,0,0.06)',        text: '#000000', border: 'rgba(0,0,0,0.15)' },
-  preference:   { bg: 'rgba(74,124,89,0.10)',   text: '#4A7C59', border: 'rgba(74,124,89,0.25)' },
-  topic_filter: { bg: 'rgba(155,122,61,0.10)',  text: '#9B7A3D', border: 'rgba(155,122,61,0.25)' },
-  time_window:  { bg: 'rgba(91,127,166,0.10)',  text: '#5B7FA6', border: 'rgba(91,127,166,0.25)' },
+const TYPE_COLORS: Record<string, { bg: string; text: string; badge: string }> = {
+  boundary:     { bg: '#0a0a0a',  text: '#ffffff', badge: 'bg-black text-white' },
+  preference:   { bg: '#f0f7f2',  text: '#0a0a0a', badge: 'bg-[#4A7C59]/10 text-[#4A7C59]' },
+  topic_filter: { bg: '#fdf8ee',  text: '#0a0a0a', badge: 'bg-[#9B7A3D]/10 text-[#9B7A3D]' },
+  time_window:  { bg: '#eef4fb',  text: '#0a0a0a', badge: 'bg-[#5B7FA6]/10 text-[#5B7FA6]' },
 }
 
-const CARD_STYLE = {
-  background: '#ffffff',
+const DEFAULT_COLORS = { bg: '#ffffff', text: '#0a0a0a', badge: 'bg-black/10 text-black' }
+
+const CARD_BASE = {
   border: '1px solid rgba(0,0,0,0.08)',
   boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
 }
 
-function TypeBadge({ type }: { type: ValueType }) {
-  const c = TYPE_COLORS[type] ?? TYPE_COLORS.preference
+function TypeBadge({ type }: { type: string }) {
+  const c = TYPE_COLORS[type] ?? DEFAULT_COLORS
+  const isDark = type === 'boundary'
   return (
     <span
       className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-      style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}
+      style={{
+        background: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.10)',
+        color: c.text,
+      }}
     >
-      {TYPE_LABELS[type] ?? type}
+      {TYPE_LABELS[type as ValueType] ?? type}
     </span>
   )
 }
 
+interface AnimatedValue extends UserValue {
+  mounted?: boolean
+  removing?: boolean
+}
+
+interface SortableCardProps {
+  value: AnimatedValue
+  onEdit: (v: UserValue) => void
+  onDelete: (id: string) => void
+}
+
+function SortableValueCard({ value, onEdit, onDelete }: SortableCardProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: value.id })
+  const c = TYPE_COLORS[value.type] ?? DEFAULT_COLORS
+
+  const dragStyle = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 10 : undefined,
+    opacity: isDragging ? 0.85 : 1,
+  }
+
+  const animClass = value.removing
+    ? 'opacity-0 scale-95'
+    : value.mounted
+    ? 'opacity-100 scale-100'
+    : 'opacity-0 scale-95'
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ ...dragStyle }}
+      data-value-type={value.type}
+    >
+      <div
+        className={`rounded-2xl p-5 group transition-all duration-200 ease-out hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)] ${animClass}`}
+        style={{
+          ...CARD_BASE,
+          background: c.bg,
+          color: c.text,
+        }}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <div
+              {...attributes}
+              {...listeners}
+              className="shrink-0 opacity-0 group-hover:opacity-40 transition-opacity cursor-grab"
+            >
+              <GripVertical
+                size={14}
+                style={{ color: value.type === 'boundary' ? '#ffffff' : '#9e9e9e' }}
+              />
+            </div>
+            <TypeBadge type={value.type} />
+          </div>
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+            <button
+              onClick={() => onEdit(value)}
+              className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
+              style={{ background: value.type === 'boundary' ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.05)' }}
+              aria-label="Edit value"
+            >
+              <Pencil size={13} style={{ color: value.type === 'boundary' ? '#ffffff' : '#6b6b6b' }} />
+            </button>
+            <button
+              onClick={() => onDelete(value.id)}
+              className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
+              style={{ background: value.type === 'boundary' ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.05)' }}
+              aria-label="Delete value"
+            >
+              <Trash2 size={13} style={{ color: value.type === 'boundary' ? '#ff8080' : '#B04A3A' }} />
+            </button>
+          </div>
+        </div>
+        <p className="mt-3 text-sm font-medium" style={{ color: c.text }}>{value.value}</p>
+        <p className="mt-1 text-xs" style={{ color: value.type === 'boundary' ? 'rgba(255,255,255,0.5)' : '#9e9e9e' }}>
+          Priority {value.priority}
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export default function ValuesPage() {
-  const [values, setValues] = useState<UserValue[]>([])
+  const [values, setValues] = useState<AnimatedValue[]>([])
   const [loading, setLoading] = useState(true)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editingValue, setEditingValue] = useState<UserValue | null>(null)
@@ -50,11 +142,25 @@ export default function ValuesPage() {
   const [formPriority, setFormPriority] = useState(5)
   const [saving, setSaving] = useState(false)
 
+  const removeTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+
   useEffect(() => {
-    valuesApi.list()
-      .then(r => setValues(r.values ?? []))
+    api.values.list()
+      .then((r: UserValue[] | { values?: UserValue[] }) => {
+        const items = Array.isArray(r) ? r : (r as { values?: UserValue[] }).values ?? []
+        // Mount animation: set mounted=false first, then true on next tick
+        const withMount = items.map((v: UserValue) => ({ ...v, mounted: false }))
+        setValues(withMount)
+        requestAnimationFrame(() => {
+          setValues(prev => prev.map(v => ({ ...v, mounted: true })))
+        })
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
+
+    return () => {
+      removeTimers.current.forEach(t => clearTimeout(t))
+    }
   }, [])
 
   const openCreate = () => {
@@ -78,18 +184,24 @@ export default function ValuesPage() {
     setSaving(true)
     try {
       if (editingValue) {
-        const updated = await valuesApi.update(editingValue.id, {
+        const updated = await api.values.update(editingValue.id, {
           value: formValue,
           priority: formPriority,
         })
-        setValues(prev => prev.map(v => v.id === editingValue.id ? updated : v))
+        setValues(prev => prev.map(v => v.id === editingValue.id ? { ...updated, mounted: true } : v))
       } else {
-        const created = await valuesApi.create({
+        const created = await api.values.create({
           type: formType,
           value: formValue,
           priority: formPriority,
         })
-        if (created) setValues(prev => [...prev, created])
+        if (created) {
+          // Add with mounted=false, then animate in
+          setValues(prev => [...prev, { ...created, mounted: false }])
+          requestAnimationFrame(() => {
+            setValues(prev => prev.map(v => v.id === created.id ? { ...v, mounted: true } : v))
+          })
+        }
       }
       setSheetOpen(false)
     } catch (e) {
@@ -100,9 +212,31 @@ export default function ValuesPage() {
   }
 
   const handleDelete = async (id: string) => {
+    // Animate out first, then remove
+    setValues(prev => prev.map(v => v.id === id ? { ...v, removing: true } : v))
+    const timer = setTimeout(async () => {
+      try {
+        await api.values.delete(id)
+        setValues(prev => prev.filter(v => v.id !== id))
+      } catch (e) {
+        // Revert animation on error
+        setValues(prev => prev.map(v => v.id === id ? { ...v, removing: false } : v))
+        console.error(e)
+      }
+      removeTimers.current.delete(id)
+    }, 200)
+    removeTimers.current.set(id, timer)
+  }
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = values.findIndex(v => v.id === active.id)
+    const newIndex = values.findIndex(v => v.id === over.id)
+    const reordered = arrayMove(values, oldIndex, newIndex)
+    setValues(reordered)
     try {
-      await valuesApi.delete(id)
-      setValues(prev => prev.filter(v => v.id !== id))
+      await api.values.reorder(reordered.map(v => v.id))
     } catch (e) {
       console.error(e)
     }
@@ -131,50 +265,33 @@ export default function ValuesPage() {
 
       {/* Grid */}
       {loading ? (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-28 rounded-2xl" />)}
         </div>
       ) : values.length === 0 ? (
-        <div className="rounded-2xl p-10 text-center" style={CARD_STYLE}>
+        <div
+          className="rounded-2xl p-10 text-center"
+          style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}
+        >
           <p className="text-sm" style={{ color: '#9e9e9e' }}>
             No values yet. Add your first boundary or preference.
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-4">
-          {values.map(v => (
-            <div key={v.id} className="rounded-2xl p-5 group transition-shadow duration-150 hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)]" style={CARD_STYLE}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-2 min-w-0">
-                  <GripVertical
-                    size={14}
-                    className="shrink-0 opacity-0 group-hover:opacity-40 transition-opacity cursor-grab"
-                    style={{ color: '#9e9e9e' }}
-                  />
-                  <TypeBadge type={v.type as ValueType} />
-                </div>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                  <button
-                    onClick={() => openEdit(v)}
-                    className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-black/5 transition-colors"
-                    aria-label="Edit value"
-                  >
-                    <Pencil size={13} style={{ color: '#6b6b6b' }} />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(v.id)}
-                    className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-black/5 transition-colors"
-                    aria-label="Delete value"
-                  >
-                    <Trash2 size={13} style={{ color: '#B04A3A' }} />
-                  </button>
-                </div>
-              </div>
-              <p className="mt-3 text-sm font-medium" style={{ color: '#0a0a0a' }}>{v.value}</p>
-              <p className="mt-1 text-xs" style={{ color: '#9e9e9e' }}>Priority {v.priority}</p>
+        <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={values.map(v => v.id)} strategy={verticalListSortingStrategy}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {values.map(v => (
+                <SortableValueCard
+                  key={v.id}
+                  value={v}
+                  onEdit={openEdit}
+                  onDelete={handleDelete}
+                />
+              ))}
             </div>
-          ))}
-        </div>
+          </SortableContext>
+        </DndContext>
       )}
 
       {/* Slide-over sheet */}

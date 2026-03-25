@@ -613,7 +613,7 @@ export const notificationsApi = {
   },
 }
 
-const api = {
+export const api = {
   values: valuesApi,
   chat: chatApi,
   goals: goalsApi,
