@@ -1,20 +1,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Search, X, Shield, Target, MessageSquare, Clock, TrendingUp } from "lucide-react"
-import { valuesApi, goalsApi, chatApi } from "@/lib/api"
+import { Search, X, MessageSquare, Clock, Zap, Calendar } from "lucide-react"
+import { searchApi, SearchResult } from "@/lib/api"
 
-type SearchResult = {
-  id: string
-  type: "value" | "goal" | "chat"
-  title: string
-  description?: string
-  content?: string
-  created_at?: string
-  status?: string
-}
-
-type FilterType = "all" | "values" | "goals" | "chat"
+type FilterType = "all" | "memory" | "event"
 
 export default function SearchPage() {
   const [query, setQuery] = useState("")
@@ -22,24 +12,23 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false)
   const [recentSearches, setRecentSearches] = useState<string[]>([])
   const [filterType, setFilterType] = useState<FilterType>("all")
+  const [error, setError] = useState<string | null>(null)
 
-  // Load recent searches from localStorage
   useEffect(() => {
     const saved = localStorage.getItem("recentSearches")
     if (saved) {
-      setRecentSearches(JSON.parse(saved))
+      try {
+        setRecentSearches(JSON.parse(saved))
+      } catch {}
     }
   }, [])
 
-  // Save recent searches to localStorage
   const saveRecentSearch = (searchQuery: string) => {
     if (!searchQuery.trim()) return
-
     const updated = [
       searchQuery,
       ...recentSearches.filter((s) => s !== searchQuery),
-    ].slice(0, 5) // Keep only 5 recent searches
-
+    ].slice(0, 5)
     setRecentSearches(updated)
     localStorage.setItem("recentSearches", JSON.stringify(updated))
   }
@@ -49,69 +38,17 @@ export default function SearchPage() {
       setResults([])
       return
     }
-
     setLoading(true)
+    setError(null)
     try {
-      const searchResults: SearchResult[] = []
-
-      // Search values
-      if (filterType === "all" || filterType === "values") {
-        const valuesData = await valuesApi.list()
-        const matchedValues = valuesData.values.filter((value) =>
-          value.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          value.value.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-        searchResults.push(
-          ...matchedValues.map((v) => ({
-            id: v.id,
-            type: "value" as const,
-            title: v.type,
-            description: v.value,
-            content: undefined,
-            created_at: v.created_at,
-          }))
-        )
-      }
-
-      // Search goals
-      if (filterType === "all" || filterType === "goals") {
-        const goalsData = await goalsApi.list()
-        const matchedGoals = goalsData.goals.filter((goal) =>
-          goal.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          goal.description?.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-        searchResults.push(
-          ...matchedGoals.map((g) => ({
-            id: g.id,
-            type: "goal" as const,
-            title: g.title,
-            description: g.description ?? undefined,
-            created_at: g.created_at,
-            status: g.status,
-          }))
-        )
-      }
-
-      // Search chat history
-      if (filterType === "all" || filterType === "chat") {
-        const chatData = await chatApi.history()
-        const matchedChats = chatData.messages.filter((msg) =>
-          msg.content.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-        searchResults.push(
-          ...matchedChats.slice(0, 10).map((c, idx) => ({
-            id: String(idx),
-            type: "chat" as const,
-            title: c.content.substring(0, 60) + (c.content.length > 60 ? "..." : ""),
-            content: c.content,
-            created_at: c.timestamp,
-          }))
-        )
-      }
-
-      setResults(searchResults)
-    } catch (error) {
-      console.error("Search error:", error)
+      const raw = await searchApi.query(searchQuery, 20)
+      const filtered =
+        filterType === "all" ? raw : raw.filter((r) => r.type === filterType)
+      setResults(filtered)
+    } catch (err) {
+      console.error("Search error:", err)
+      setError("Search unavailable — Weaviate may not be running locally.")
+      setResults([])
     } finally {
       setLoading(false)
     }
@@ -126,6 +63,7 @@ export default function SearchPage() {
   const handleClear = () => {
     setQuery("")
     setResults([])
+    setError(null)
   }
 
   const handleRecentClick = (search: string) => {
@@ -135,18 +73,25 @@ export default function SearchPage() {
 
   const getIcon = (type: string) => {
     switch (type) {
-      case "value":
-        return <Shield className="h-4 w-4" />
-      case "goal":
-        return <Target className="h-4 w-4" />
-      case "chat":
+      case "memory":
         return <MessageSquare className="h-4 w-4" />
+      case "event":
+        return <Calendar className="h-4 w-4" />
       default:
-        return null
+        return <Zap className="h-4 w-4" />
     }
   }
 
-  const getTypeColor = () => "bg-[#f5f5f5] text-[#0a0a0a]"
+  const getTypeLabel = (type: string) => {
+    switch (type) {
+      case "memory": return "Memory"
+      case "event": return "Event"
+      default: return type
+    }
+  }
+
+  const filteredResults =
+    filterType === "all" ? results : results.filter((r) => r.type === filterType)
 
   return (
     <div className="flex-1 overflow-auto bg-white p-4 md:p-6">
@@ -155,7 +100,7 @@ export default function SearchPage() {
         <div className="space-y-1">
           <h1 className="text-2xl font-bold tracking-tight text-[#0a0a0a]">Search</h1>
           <p className="text-sm text-[#6b6b6b]">
-            Search across your values, goals, and chat history
+            Semantic search across your conversation memories
           </p>
         </div>
 
@@ -167,11 +112,9 @@ export default function SearchPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                handleSearch(query)
-              }
+              if (e.key === "Enter") handleSearch(query)
             }}
-            placeholder="Search..."
+            placeholder="Search your memories..."
             className="h-11 w-full rounded-xl border border-[rgba(0,0,0,0.12)] bg-white pl-10 pr-10 text-sm text-[#0a0a0a] placeholder:text-[#9e9e9e] focus:border-[#0a0a0a] focus:outline-none focus:ring-1 focus:ring-[#0a0a0a]"
           />
           {query && (
@@ -186,7 +129,7 @@ export default function SearchPage() {
 
         {/* Filter Buttons */}
         <div className="flex gap-2 flex-wrap">
-          {(["all", "values", "goals", "chat"] as FilterType[]).map((filter) => (
+          {(["all", "memory", "event"] as FilterType[]).map((filter) => (
             <button
               key={filter}
               onClick={() => {
@@ -204,58 +147,54 @@ export default function SearchPage() {
           ))}
         </div>
 
+        {/* Error state */}
+        {error && (
+          <div className="rounded-xl border border-[rgba(239,68,68,0.2)] bg-[rgba(239,68,68,0.05)] px-4 py-3 text-sm text-red-600">
+            {error}
+          </div>
+        )}
+
         {/* Results */}
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-[rgba(0,0,0,0.08)] border-t-[#0a0a0a]" />
-          </div>
-        ) : results.length > 0 ? (
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">
-                {results.length} result{results.length !== 1 ? "s" : ""}
-              </p>
-            </div>
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="h-20 animate-pulse rounded-2xl border border-[rgba(0,0,0,0.08)] bg-[#f5f5f5]"
+              />
+            ))}
+          </div>
+        ) : filteredResults.length > 0 ? (
+          <div className="space-y-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">
+              {filteredResults.length} result{filteredResults.length !== 1 ? "s" : ""}
+            </p>
             <div className="space-y-2">
-              {results.map((result) => (
+              {filteredResults.map((result) => (
                 <div
-                  key={`${result.type}-${result.id}`}
+                  key={result.id}
                   className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-shadow hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)]"
                 >
                   <div className="flex items-start gap-3">
                     <div className="mt-0.5 text-[#6b6b6b]">
                       {getIcon(result.type)}
                     </div>
-                    <div className="flex-1 space-y-1">
+                    <div className="flex-1 space-y-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span
-                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${getTypeColor()}`}
-                        >
-                          {result.type}
+                        <span className="inline-flex items-center rounded-full bg-[#f5f5f5] px-2.5 py-0.5 text-xs font-medium text-[#0a0a0a]">
+                          {getTypeLabel(result.type)}
                         </span>
-                        {result.status && (
-                          <span className="text-xs text-[#9e9e9e]">
-                            {result.status}
-                          </span>
-                        )}
+                        <span className="text-xs text-[#9e9e9e]">
+                          {Math.round(result.score * 100)}% match
+                        </span>
                       </div>
-                      <h3 className="font-medium text-[#0a0a0a]">
-                        {result.title}
-                      </h3>
-                      {result.description && (
-                        <p className="text-sm text-[#6b6b6b] line-clamp-2">
-                          {result.description}
-                        </p>
-                      )}
-                      {result.content && result.type === "chat" && (
-                        <p className="text-sm text-[#6b6b6b] line-clamp-2">
-                          {result.content}
-                        </p>
-                      )}
-                      {result.created_at && (
+                      <p className="text-sm text-[#0a0a0a] line-clamp-3">
+                        {result.content}
+                      </p>
+                      {result.metadata?.timestamp && (
                         <div className="flex items-center gap-1 text-xs text-[#9e9e9e]">
                           <Clock className="h-3 w-3" />
-                          {new Date(result.created_at).toLocaleDateString()}
+                          {new Date(result.metadata.timestamp as string).toLocaleDateString()}
                         </div>
                       )}
                     </div>
@@ -264,14 +203,12 @@ export default function SearchPage() {
               ))}
             </div>
           </div>
-        ) : query ? (
+        ) : query && !loading ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <Search className="mb-3 h-8 w-8 text-[#9e9e9e]" />
-            <p className="text-sm font-medium text-[#0a0a0a]">
-              No results found
-            </p>
+            <p className="text-sm font-medium text-[#0a0a0a]">No results found</p>
             <p className="text-xs text-[#9e9e9e]">
-              Try adjusting your search or filters
+              Try a different query — memories are stored after chat conversations
             </p>
           </div>
         ) : null}
@@ -304,10 +241,10 @@ export default function SearchPage() {
               <Search className="h-8 w-8 text-[#9e9e9e]" />
             </div>
             <h3 className="mb-1 text-sm font-medium text-[#0a0a0a]">
-              Start searching
+              Semantic search
             </h3>
             <p className="text-xs text-[#6b6b6b]">
-              Search across all your values, goals, and chat history
+              Search your AI conversation memories by meaning, not just keywords
             </p>
           </div>
         )}

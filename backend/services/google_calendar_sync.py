@@ -35,14 +35,15 @@ class GoogleCalendarSync:
     # OAuth scopes - read-only calendar access
     SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
 
-    def __init__(self, redirect_uri: str = "http://localhost:8000/api/oauth/google-calendar/callback"):
+    def __init__(self, redirect_uri: str = None):
         """
         Initialize Google Calendar sync
 
         Args:
-            redirect_uri: OAuth redirect URI (must match Google Console config)
+            redirect_uri: OAuth redirect URI (must match Google Console config).
+                          Defaults to settings.GOOGLE_OAUTH_REDIRECT_URI.
         """
-        self.redirect_uri = redirect_uri
+        self.redirect_uri = redirect_uri or settings.GOOGLE_OAUTH_REDIRECT_URI
         self.client_config = self._load_client_config()
 
     def _load_client_config(self) -> Dict[str, Any]:

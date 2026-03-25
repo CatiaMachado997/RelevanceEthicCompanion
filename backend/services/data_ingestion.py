@@ -17,6 +17,7 @@ from services.slack_sync import SlackSync
 from services.context_manager import ContextManager
 from models.context import Event, SemanticMemoryEntry
 from utils.db import get_db_connection
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +43,9 @@ class DataIngestionService:
         """
         self.context_manager = context_manager
 
-        # Initialize sync adapters
-        self.google_calendar = GoogleCalendarSync()
-        self.gmail = GmailSync()
+        # Initialize sync adapters with redirect URIs from config
+        self.google_calendar = GoogleCalendarSync(redirect_uri=settings.GOOGLE_OAUTH_REDIRECT_URI)
+        self.gmail = GmailSync(redirect_uri=settings.GMAIL_OAUTH_REDIRECT_URI)
         self.slack = SlackSync()
 
         logger.info("✅ DataIngestionService initialized")

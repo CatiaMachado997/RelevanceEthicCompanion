@@ -1,22 +1,18 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
+import { Bell, Lock, Calendar, CheckCircle2, XCircle, RefreshCw } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
-import {
-  Bell,
-  Lock,
-  Palette,
-  Database,
-  Calendar,
-  CheckCircle2,
-  XCircle,
-  RefreshCw,
-} from 'lucide-react'
+import { Label } from '@/components/ui/label'
 import { dataSourcesApi, DataSource, settingsApi, UserSettings } from '@/lib/api'
 import { PageHeader } from '@/components/ui/page-header'
+
+const CARD_STYLE = {
+  background: '#ffffff',
+  border: '1px solid rgba(0,0,0,0.08)',
+  borderRadius: '16px',
+  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+}
 
 const DEFAULT_SETTINGS: UserSettings = {
   email_notifications: false,
@@ -26,9 +22,30 @@ const DEFAULT_SETTINGS: UserSettings = {
   pii_protection: true,
 }
 
+function ToggleRow({
+  label,
+  description,
+  checked,
+  onCheckedChange,
+}: {
+  label: string
+  description: string
+  checked: boolean
+  onCheckedChange: (v: boolean) => void
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div>
+        <Label className="text-sm font-medium" style={{ color: '#0a0a0a' }}>{label}</Label>
+        <p className="text-xs mt-0.5" style={{ color: '#9e9e9e' }}>{description}</p>
+      </div>
+      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+    </div>
+  )
+}
+
 export default function SettingsPage() {
   const [dataSources, setDataSources] = useState<DataSource[]>([])
-  const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState<string | null>(null)
 
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS)
@@ -38,29 +55,9 @@ export default function SettingsPage() {
   const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(() => {
-    loadDataSources()
-    loadSettings()
+    dataSourcesApi.list().then(({ sources }) => setDataSources(sources)).catch(console.error)
+    settingsApi.get().then(setSettings).catch(console.error)
   }, [])
-
-  const loadDataSources = async () => {
-    try {
-      const { sources } = await dataSourcesApi.list()
-      setDataSources(sources)
-    } catch (error) {
-      console.error('Failed to load data sources:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadSettings = async () => {
-    try {
-      const data = await settingsApi.get()
-      setSettings(data)
-    } catch (error) {
-      console.error('Failed to load settings:', error)
-    }
-  }
 
   const handleToggle = (key: keyof UserSettings) => (checked: boolean) => {
     setSettings(prev => ({ ...prev, [key]: checked }))
@@ -72,14 +69,14 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setSaving(true)
     setSaveError(null)
-    setSaveSuccess(false)
     try {
       const { email_notifications, push_notifications, esl_alerts, share_analytics, pii_protection } = settings
       await settingsApi.update({ email_notifications, push_notifications, esl_alerts, share_analytics, pii_protection })
       setDirty(false)
       setSaveSuccess(true)
-    } catch (error) {
-      setSaveError(error instanceof Error ? error.message : 'Failed to save settings')
+      setTimeout(() => setSaveSuccess(false), 2000)
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'Failed to save')
     } finally {
       setSaving(false)
     }
@@ -89,27 +86,29 @@ export default function SettingsPage() {
     try {
       const { authorization_url } = await dataSourcesApi.getAuthUrl(sourceType)
       window.location.href = authorization_url
-    } catch (error) {
-      console.error('Failed to get auth URL:', error)
+    } catch (e) {
+      console.error(e)
     }
   }
 
   const handleDisconnect = async (sourceType: string) => {
     try {
       await dataSourcesApi.disconnect(sourceType)
-      await loadDataSources()
-    } catch (error) {
-      console.error('Failed to disconnect:', error)
+      const { sources } = await dataSourcesApi.list()
+      setDataSources(sources)
+    } catch (e) {
+      console.error(e)
     }
   }
 
   const handleSync = async (sourceType: string) => {
+    setSyncing(sourceType)
     try {
-      setSyncing(sourceType)
       await dataSourcesApi.sync(sourceType)
-      await loadDataSources()
-    } catch (error) {
-      console.error('Failed to sync:', error)
+      const { sources } = await dataSourcesApi.list()
+      setDataSources(sources)
+    } catch (e) {
+      console.error(e)
     } finally {
       setSyncing(null)
     }
@@ -122,216 +121,139 @@ export default function SettingsPage() {
       <PageHeader title="Settings" subtitle="Preferences and privacy" />
 
       {/* Connected Data Sources */}
-      <Card className="border-[#e0e0e0] rounded-2xl">
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Database className="h-4 w-4 text-[#1a1a1a]" />
-            <CardTitle className="text-[#1a1a1a]">Connected Data Sources</CardTitle>
-          </div>
-          <CardDescription className="text-[#6b6b6b]">
-            Connect external services to enhance your experience
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f5f5f5]">
-                <Calendar className="h-4 w-4 text-[#1a1a1a]" />
+      <div className="rounded-2xl p-5" style={CARD_STYLE}>
+        <div className="flex items-center gap-2 mb-4">
+          <Calendar size={15} style={{ color: '#000000' }} />
+          <h3 className="text-sm font-semibold" style={{ color: '#0a0a0a' }}>Connected Data Sources</h3>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: '#f5f5f5' }}>
+              <Calendar size={16} style={{ color: '#000000' }} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium" style={{ color: '#0a0a0a' }}>Google Calendar</p>
+                {calendarSource && (
+                  <span
+                    className="inline-flex items-center gap-1 text-[10px] font-medium"
+                    style={{ color: calendarSource.status === 'connected' ? '#4A7C59' : '#B04A3A' }}
+                  >
+                    {calendarSource.status === 'connected'
+                      ? <><CheckCircle2 size={10} />Connected</>
+                      : <><XCircle size={10} />Disconnected</>
+                    }
+                  </span>
+                )}
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <Label className="text-[#1a1a1a]">Google Calendar</Label>
-                  {calendarSource && (
-                    <div className={`flex items-center gap-1 text-xs ${
-                      calendarSource.status === 'connected' ? 'text-[#6b6b6b]' : 'text-[#DC2626]'
-                    }`}>
-                      {calendarSource.status === 'connected' ? (
-                        <><CheckCircle2 className="h-3 w-3" />Connected</>
-                      ) : (
-                        <><XCircle className="h-3 w-3" />Disconnected</>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <p className="text-sm text-[#6b6b6b]">
-                  {calendarSource
-                    ? `Last synced: ${calendarSource.last_sync ? new Date(calendarSource.last_sync).toLocaleString() : 'Never'}`
-                    : 'Sync your calendar events for better context'}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {calendarSource?.status === 'connected' ? (
-                <>
-                  <Button variant="outline" size="sm" className="rounded-full"
-                    onClick={() => handleSync(calendarSource.source_type)}
-                    disabled={syncing === calendarSource.source_type}>
-                    {syncing === calendarSource.source_type
-                      ? <RefreshCw className="h-4 w-4 animate-spin" />
-                      : <><RefreshCw className="h-4 w-4 mr-1" />Sync</>}
-                  </Button>
-                  <Button variant="outline" size="sm" className="rounded-full"
-                    onClick={() => handleDisconnect(calendarSource.source_type)}>
-                    Disconnect
-                  </Button>
-                </>
-              ) : (
-                <Button variant="default" size="sm"
-                  className="rounded-full bg-[#1a1a1a] hover:bg-[#333333]"
-                  onClick={() => handleConnect('google_calendar')}>
-                  Connect
-                </Button>
-              )}
+              <p className="text-xs mt-0.5" style={{ color: '#9e9e9e' }}>
+                {calendarSource?.last_sync
+                  ? `Last synced ${new Date(calendarSource.last_sync).toLocaleString()}`
+                  : 'Sync events for better context'}
+              </p>
             </div>
           </div>
-        </CardContent>
-      </Card>
+          <div className="flex items-center gap-2 shrink-0">
+            {calendarSource?.status === 'connected' ? (
+              <>
+                <button
+                  onClick={() => handleSync(calendarSource.source_type)}
+                  disabled={syncing === calendarSource.source_type}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 hover:bg-[#f0f0f0]"
+                  style={{ border: '1px solid rgba(0,0,0,0.10)', color: '#0a0a0a' }}
+                >
+                  <RefreshCw size={12} className={syncing === calendarSource.source_type ? 'animate-spin' : ''} />
+                  Sync
+                </button>
+                <button
+                  onClick={() => handleDisconnect(calendarSource.source_type)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors hover:bg-[#f0f0f0]"
+                  style={{ border: '1px solid rgba(0,0,0,0.10)', color: '#6b6b6b' }}
+                >
+                  Disconnect
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => handleConnect('google_calendar')}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium transition-opacity hover:opacity-80"
+                style={{ background: '#000000', color: '#ffffff' }}
+              >
+                Connect
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
 
-      {/* Notifications Settings */}
-      <Card className="border-[#e0e0e0] rounded-2xl">
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Bell className="h-4 w-4 text-[#1a1a1a]" />
-            <CardTitle className="text-[#1a1a1a]">Notifications</CardTitle>
-          </div>
-          <CardDescription className="text-[#6b6b6b]">
-            Configure how you receive notifications
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <Label className="text-[#1a1a1a]">Email Notifications</Label>
-              <p className="text-sm text-[#6b6b6b]">Receive updates via email</p>
-            </div>
-            <Switch
-              checked={settings.email_notifications}
-              onCheckedChange={handleToggle('email_notifications')}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <Label className="text-[#1a1a1a]">Push Notifications</Label>
-              <p className="text-sm text-[#6b6b6b]">Receive browser notifications</p>
-            </div>
-            <Switch
-              checked={settings.push_notifications}
-              onCheckedChange={handleToggle('push_notifications')}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <Label className="text-[#1a1a1a]">ESL Alerts</Label>
-              <p className="text-sm text-[#6b6b6b]">Get notified when ESL blocks an action</p>
-            </div>
-            <Switch
-              checked={settings.esl_alerts}
-              onCheckedChange={handleToggle('esl_alerts')}
-            />
-          </div>
-        </CardContent>
-      </Card>
+      {/* Notifications */}
+      <div className="rounded-2xl p-5" style={CARD_STYLE}>
+        <div className="flex items-center gap-2 mb-4">
+          <Bell size={15} style={{ color: '#000000' }} />
+          <h3 className="text-sm font-semibold" style={{ color: '#0a0a0a' }}>Notifications</h3>
+        </div>
+        <div className="space-y-4">
+          <ToggleRow
+            label="Email Notifications"
+            description="Receive updates via email"
+            checked={settings.email_notifications}
+            onCheckedChange={handleToggle('email_notifications')}
+          />
+          <ToggleRow
+            label="Push Notifications"
+            description="Receive browser notifications"
+            checked={settings.push_notifications}
+            onCheckedChange={handleToggle('push_notifications')}
+          />
+          <ToggleRow
+            label="ESL Alerts"
+            description="Get notified when ESL blocks an action"
+            checked={settings.esl_alerts}
+            onCheckedChange={handleToggle('esl_alerts')}
+          />
+        </div>
+      </div>
 
-      {/* Privacy Settings */}
-      <Card className="border-[#e0e0e0] rounded-2xl">
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Lock className="h-4 w-4 text-[#1a1a1a]" />
-            <CardTitle className="text-[#1a1a1a]">Privacy &amp; Security</CardTitle>
-          </div>
-          <CardDescription className="text-[#6b6b6b]">
-            Manage your privacy settings and data
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <Label className="text-[#1a1a1a]">Share Usage Analytics</Label>
-              <p className="text-sm text-[#6b6b6b]">Help improve the app by sharing anonymous usage data</p>
-            </div>
-            <Switch
-              checked={settings.share_analytics}
-              onCheckedChange={handleToggle('share_analytics')}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <Label className="text-[#1a1a1a]">PII Protection</Label>
-              <p className="text-sm text-[#6b6b6b]">Auto-redact sensitive information</p>
-            </div>
-            <Switch
-              checked={settings.pii_protection}
-              onCheckedChange={handleToggle('pii_protection')}
-            />
-          </div>
+      {/* Privacy & Security */}
+      <div className="rounded-2xl p-5" style={CARD_STYLE}>
+        <div className="flex items-center gap-2 mb-4">
+          <Lock size={15} style={{ color: '#000000' }} />
+          <h3 className="text-sm font-semibold" style={{ color: '#0a0a0a' }}>Privacy & Security</h3>
+        </div>
+        <div className="space-y-4">
+          <ToggleRow
+            label="Share Usage Analytics"
+            description="Help improve the app with anonymous usage data"
+            checked={settings.share_analytics}
+            onCheckedChange={handleToggle('share_analytics')}
+          />
+          <ToggleRow
+            label="PII Protection"
+            description="Auto-redact sensitive personal information from AI context"
+            checked={settings.pii_protection}
+            onCheckedChange={handleToggle('pii_protection')}
+          />
+        </div>
+      </div>
 
-          {saveSuccess && (
-            <p className="text-sm text-[#6b6b6b]">Settings saved.</p>
-          )}
-          {saveError && (
-            <p className="text-sm text-[#DC2626]">{saveError}</p>
-          )}
+      {/* Save bar */}
+      {dirty && (
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-4 py-2 rounded-xl text-sm font-medium transition-opacity disabled:opacity-50"
+            style={{ background: '#000000', color: '#ffffff' }}
+          >
+            {saving ? 'Saving…' : 'Save Settings'}
+          </button>
+          {saveError && <p className="text-xs" style={{ color: '#B04A3A' }}>{saveError}</p>}
+        </div>
+      )}
+      {saveSuccess && (
+        <p className="text-xs" style={{ color: '#4A7C59' }}>Settings saved</p>
+      )}
 
-          <div className="flex justify-end pt-2">
-            <Button
-              className="rounded-full bg-[#1a1a1a] hover:bg-[#333333]"
-              disabled={!dirty || saving}
-              onClick={handleSave}
-            >
-              {saving ? 'Saving…' : 'Save Settings'}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Appearance Settings */}
-      <Card className="border-[#e0e0e0] rounded-2xl">
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Palette className="h-4 w-4 text-[#1a1a1a]" />
-            <CardTitle className="text-[#1a1a1a]">Appearance</CardTitle>
-          </div>
-          <CardDescription className="text-[#6b6b6b]">Customize the look and feel</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <Label className="text-[#1a1a1a]">Theme</Label>
-            <p className="text-sm text-[#6b6b6b] mb-2">Coming soon: Dark mode support</p>
-            <div className="flex gap-2">
-              <Button variant="outline" className="rounded-full" disabled>Light</Button>
-              <Button variant="outline" className="rounded-full" disabled>Dark</Button>
-              <Button variant="outline" className="rounded-full" disabled>Auto</Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Data Management */}
-      <Card className="border-[#e0e0e0] rounded-2xl">
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Database className="h-4 w-4 text-[#1a1a1a]" />
-            <CardTitle className="text-[#1a1a1a]">Data Management</CardTitle>
-          </div>
-          <CardDescription className="text-[#6b6b6b]">Manage your data and account</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <Label className="text-[#1a1a1a]">Export Data</Label>
-              <p className="text-sm text-[#6b6b6b]">Download all your data</p>
-            </div>
-            <Button variant="outline" className="rounded-full" disabled>Export</Button>
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <Label className="text-[#1a1a1a]">Delete Account</Label>
-              <p className="text-sm text-[#6b6b6b]">Permanently delete your account and data</p>
-            </div>
-            <Button variant="destructive" className="rounded-full" disabled>Delete</Button>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }

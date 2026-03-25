@@ -40,7 +40,8 @@ class Settings(BaseSettings):
     # Google OAuth (Phase 5: Calendar Integration)
     GOOGLE_OAUTH_CLIENT_ID: str = ""
     GOOGLE_OAUTH_CLIENT_SECRET: str = ""
-    GOOGLE_OAUTH_REDIRECT_URI: str = "http://localhost:8000/api/data-sources/oauth/google-calendar/callback"
+    GOOGLE_OAUTH_REDIRECT_URI: str = "http://localhost:8000/api/data-sources/oauth/google_calendar/callback"
+    GMAIL_OAUTH_REDIRECT_URI: str = "http://localhost:8000/api/data-sources/oauth/gmail/callback"
 
     # Application
     ENVIRONMENT: str = "development"
@@ -63,7 +64,7 @@ class Settings(BaseSettings):
     # Slack OAuth (Phase X: Slack Integration)
     SLACK_CLIENT_ID: str = ""
     SLACK_CLIENT_SECRET: str = ""
-    SLACK_REDIRECT_URI: str = ""
+    SLACK_REDIRECT_URI: str = "http://localhost:8000/api/data-sources/oauth/slack/callback"
 
     # Frontend URL
     FRONTEND_URL: str = "http://localhost:3000"

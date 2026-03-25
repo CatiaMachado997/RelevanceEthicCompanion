@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Bell, CheckCircle2, Info, AlertTriangle, ShieldAlert } from 'lucide-react'
 import { notificationsApi, Notification } from '@/lib/api'
+import { Skeleton } from '@/components/ui/skeleton'
 import { PageHeader } from '@/components/ui/page-header'
 import { FilterChips } from '@/components/ui/filter-chips'
 
@@ -14,11 +15,10 @@ function timeAgo(isoString: string): string {
   const diff = Date.now() - new Date(isoString).getTime()
   const minutes = Math.floor(diff / 60000)
   if (minutes < 1) return 'just now'
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`
+  if (minutes < 60) return `${minutes}m ago`
   const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`
-  const days = Math.floor(hours / 24)
-  return `${days} day${days === 1 ? '' : 's'} ago`
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.floor(hours / 24)}d ago`
 }
 
 function iconForType(type: string) {
@@ -42,8 +42,8 @@ export default function NotificationsPage() {
       setNotifications(data)
       setUnreadCount(unread_count)
       setError(null)
-    } catch (error) {
-      console.error('Failed to load notifications:', error)
+    } catch {
+      setError('Failed to load notifications.')
     } finally {
       setLoading(false)
     }
@@ -54,9 +54,10 @@ export default function NotificationsPage() {
   const handleMarkRead = async (id: string) => {
     try {
       await notificationsApi.markRead(id)
-      await load()
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
+      setUnreadCount(prev => Math.max(0, prev - 1))
     } catch {
-      setError('Failed to update notification. Please try again.')
+      setError('Failed to mark as read.')
     }
   }
 
@@ -64,9 +65,10 @@ export default function NotificationsPage() {
     setMarkingAll(true)
     try {
       await notificationsApi.markAllRead()
-      await load()
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+      setUnreadCount(0)
     } catch {
-      setError('Failed to update notification. Please try again.')
+      setError('Failed to mark all as read.')
     } finally {
       setMarkingAll(false)
     }
@@ -112,7 +114,9 @@ export default function NotificationsPage() {
       {error && <p className="text-sm text-[#DC2626]">{error}</p>}
 
       {loading && (
-        <p className="text-sm text-[#6b6b6b]">Loading notifications…</p>
+        <div className="space-y-3">
+          {[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full rounded-2xl" />)}
+        </div>
       )}
 
       {!loading && displayedNotifications.length > 0 && (
