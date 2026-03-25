@@ -18,31 +18,24 @@ const TYPE_LABELS: Record<ValueType, string> = {
   time_window: 'Time Window',
 }
 
-const TYPE_COLORS: Record<string, { bg: string; text: string; badge: string }> = {
-  boundary:     { bg: '#0a0a0a',  text: '#ffffff', badge: 'bg-black text-white' },
-  preference:   { bg: '#f0f7f2',  text: '#0a0a0a', badge: 'bg-[#4A7C59]/10 text-[#4A7C59]' },
-  topic_filter: { bg: '#fdf8ee',  text: '#0a0a0a', badge: 'bg-[#9B7A3D]/10 text-[#9B7A3D]' },
-  time_window:  { bg: '#eef4fb',  text: '#0a0a0a', badge: 'bg-[#5B7FA6]/10 text-[#5B7FA6]' },
+const TYPE_DOT_COLORS: Record<string, string> = {
+  boundary:     '#1a1a1a',
+  preference:   '#4A7C59',
+  topic_filter: '#9B7A3D',
+  time_window:  '#5B7FA6',
 }
 
-const DEFAULT_COLORS = { bg: '#ffffff', text: '#0a0a0a', badge: 'bg-black/10 text-black' }
-
 const CARD_BASE = {
+  background: '#ffffff',
   border: '1px solid rgba(0,0,0,0.08)',
   boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
 }
 
 function TypeBadge({ type }: { type: string }) {
-  const c = TYPE_COLORS[type] ?? DEFAULT_COLORS
-  const isDark = type === 'boundary'
+  const dotColor = TYPE_DOT_COLORS[type] ?? '#9e9e9e'
   return (
-    <span
-      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-      style={{
-        background: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.10)',
-        color: c.text,
-      }}
-    >
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border border-[#e0e0e0] text-[#6b6b6b]">
+      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: dotColor }} />
       {TYPE_LABELS[type as ValueType] ?? type}
     </span>
   )
@@ -61,7 +54,6 @@ interface SortableCardProps {
 
 function SortableValueCard({ value, onEdit, onDelete }: SortableCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: value.id })
-  const c = TYPE_COLORS[value.type] ?? DEFAULT_COLORS
 
   const dragStyle = {
     transform: CSS.Transform.toString(transform),
@@ -84,11 +76,7 @@ function SortableValueCard({ value, onEdit, onDelete }: SortableCardProps) {
     >
       <div
         className={`rounded-2xl p-5 group transition-all duration-200 ease-out hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)] ${animClass}`}
-        style={{
-          ...CARD_BASE,
-          background: c.bg,
-          color: c.text,
-        }}
+        style={CARD_BASE}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
@@ -97,34 +85,29 @@ function SortableValueCard({ value, onEdit, onDelete }: SortableCardProps) {
               {...listeners}
               className="shrink-0 opacity-0 group-hover:opacity-40 transition-opacity cursor-grab"
             >
-              <GripVertical
-                size={14}
-                style={{ color: value.type === 'boundary' ? '#ffffff' : '#9e9e9e' }}
-              />
+              <GripVertical size={14} style={{ color: '#9e9e9e' }} />
             </div>
             <TypeBadge type={value.type} />
           </div>
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
             <button
               onClick={() => onEdit(value)}
-              className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
-              style={{ background: value.type === 'boundary' ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.05)' }}
+              className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-black/5"
               aria-label="Edit value"
             >
-              <Pencil size={13} style={{ color: value.type === 'boundary' ? '#ffffff' : '#6b6b6b' }} />
+              <Pencil size={13} style={{ color: '#6b6b6b' }} />
             </button>
             <button
               onClick={() => onDelete(value.id)}
-              className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
-              style={{ background: value.type === 'boundary' ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.05)' }}
+              className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-black/5"
               aria-label="Delete value"
             >
-              <Trash2 size={13} style={{ color: value.type === 'boundary' ? '#ff8080' : '#B04A3A' }} />
+              <Trash2 size={13} style={{ color: '#B04A3A' }} />
             </button>
           </div>
         </div>
-        <p className="mt-3 text-sm font-medium" style={{ color: c.text }}>{value.value}</p>
-        <p className="mt-1 text-xs" style={{ color: value.type === 'boundary' ? 'rgba(255,255,255,0.5)' : '#9e9e9e' }}>
+        <p className="mt-3 text-sm font-medium" style={{ color: '#1a1a1a' }}>{value.value}</p>
+        <p className="mt-1 text-xs" style={{ color: '#9e9e9e' }}>
           Priority {value.priority}
         </p>
       </div>
