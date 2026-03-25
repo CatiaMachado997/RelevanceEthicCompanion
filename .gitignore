@@ -30,3 +30,6 @@ frontend/.env.local.example
 # General
 .DS_Store
 *.log
+
+# Git worktrees
+.worktrees/
