@@ -87,6 +87,7 @@ function IntegrationsContent() {
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState<SourceType | null>(null)
   const [flash, setFlash] = useState<SourceType | null>(null)
+  const [errorFlash, setErrorFlash] = useState<string | null>(null)
   const searchParams = useSearchParams()
 
   const loadConnected = async () => {
@@ -109,6 +110,26 @@ function IntegrationsContent() {
       setFlash(connectedParam)
       setTimeout(() => setFlash(null), 3000)
     }
+    const errorParam = searchParams.get('error')
+    if (errorParam) {
+      loadConnected()
+      const integration = INTEGRATIONS.find(i => errorParam.startsWith(i.type))
+      const label = integration?.label ?? 'Service'
+      let msg: string
+      if (errorParam.includes('access_denied') || errorParam.includes('denied')) {
+        msg = `${label} connection cancelled. You can connect it any time.`
+      } else if (errorParam.includes('auth_failed')) {
+        msg = 'Session expired. Refresh the page and try connecting again.'
+      } else if (errorParam.includes('server_error')) {
+        msg = `${label} connection failed due to a server error. Please try again.`
+      } else if (errorParam.includes('failed')) {
+        msg = `${label} connected but the initial sync failed. Try syncing manually.`
+      } else {
+        msg = `Could not connect ${label}. Please try again.`
+      }
+      setErrorFlash(msg)
+      setTimeout(() => setErrorFlash(null), 6000)
+    }
   }, [searchParams])
 
   const isConnected = (type: SourceType) => connected.some(s => s.source_type === type)
@@ -120,6 +141,9 @@ function IntegrationsContent() {
       window.location.href = authorization_url
     } catch (e) {
       console.error(e)
+      const label = INTEGRATIONS.find(i => i.type === type)?.label ?? type
+      setErrorFlash(`Could not start ${label} connection. Make sure you're signed in and try again.`)
+      setTimeout(() => setErrorFlash(null), 6000)
     }
   }
 
@@ -179,6 +203,24 @@ function IntegrationsContent() {
           <span><strong>{INTEGRATIONS.find(i => i.type === flash)?.label}</strong> connected successfully.</span>
         </div>
       )}
+
+      {/* Flash error/warning banner */}
+      {errorFlash && (() => {
+        const isSoft = errorFlash.includes('cancelled') || errorFlash.includes('any time')
+        return (
+          <div className="flex items-center justify-between gap-2 px-4 py-3 rounded-xl text-sm" style={{
+            background: isSoft ? '#fff8f0' : 'rgba(176,74,58,0.07)',
+            border: `1px solid ${isSoft ? '#f5d9b0' : 'rgba(176,74,58,0.25)'}`,
+            color: isSoft ? '#8a5c1a' : '#B04A3A',
+          }}>
+            <div className="flex items-center gap-2">
+              <AlertCircle size={15} />
+              <span>{errorFlash}</span>
+            </div>
+            <button onClick={() => setErrorFlash(null)} className="shrink-0 opacity-50 hover:opacity-100 transition-opacity text-base leading-none">×</button>
+          </div>
+        )
+      })()}
 
       {/* Integration cards */}
       <div className="space-y-3">

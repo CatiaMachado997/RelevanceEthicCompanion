@@ -69,6 +69,9 @@ class Settings(BaseSettings):
     # Frontend URL
     FRONTEND_URL: str = "http://localhost:3000"
 
+    # Dev mode: override mock user ID to match the real user who connected OAuth
+    DEV_USER_ID: str = "00000000-0000-0000-0000-000000000000"
+
     model_config = ConfigDict(env_file=".env", case_sensitive=True)
 
 

@@ -25,8 +25,70 @@ from models.relevance import (
     ItemType
 )
 from esl.engine import EthicalSafeguardLayer
+from utils.db import get_db
 
 logger = logging.getLogger(__name__)
+
+
+def get_user_relevance_weights(user_id: str) -> Dict[str, float]:
+    """
+    Fetch user-configured relevance weight multipliers from the DB,
+    then apply any feedback-learned adjustments from relevance_adjustments.
+
+    Returns a dict with the 4 weight keys; falls back to 1.0 for any missing value.
+    """
+    defaults = {
+        "weight_goal_alignment": 1.0,
+        "weight_time_sensitivity": 1.0,
+        "weight_personal_values": 1.0,
+        "weight_context_relevance": 1.0,
+    }
+    # Map relevance_adjustments.signal_type → weight key
+    _signal_to_weight = {
+        "goal_alignment": "weight_goal_alignment",
+        "timeliness": "weight_time_sensitivity",
+        "personal_values": "weight_personal_values",
+        "query_match": "weight_context_relevance",
+    }
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                # C.2 — user-configured weights
+                cur.execute(
+                    """
+                    SELECT weight_goal_alignment, weight_time_sensitivity,
+                           weight_personal_values, weight_context_relevance
+                    FROM user_settings
+                    WHERE user_id = %s
+                    """,
+                    (str(user_id),),
+                )
+                row = cur.fetchone()
+                if row:
+                    keys = list(defaults.keys())
+                    weights = {keys[i]: (row[i] if row[i] is not None else 1.0) for i in range(4)}
+                else:
+                    weights = dict(defaults)
+
+                # C.1.3 — feedback-learned multipliers from relevance_adjustments
+                cur.execute(
+                    "SELECT signal_type, multiplier FROM relevance_adjustments WHERE user_id = %s",
+                    (str(user_id),),
+                )
+                for signal_type, multiplier in cur.fetchall():
+                    weight_key = _signal_to_weight.get(signal_type)
+                    if weight_key and multiplier is not None:
+                        weights[weight_key] = weights[weight_key] * float(multiplier)
+                        logger.debug(
+                            f"[RelevanceScoring] Applied feedback adjustment "
+                            f"{signal_type}×{multiplier:.2f} → {weight_key}={weights[weight_key]:.2f} "
+                            f"for user {user_id}"
+                        )
+
+        return weights
+    except Exception as exc:
+        logger.warning(f"Could not fetch relevance weights for {user_id}: {exc}")
+    return defaults
 
 
 class RelevanceScoringEngine:
@@ -81,6 +143,9 @@ class RelevanceScoringEngine:
         """
         scored_items: List[ScoredItem] = []
 
+        # Load user-tunable weight multipliers (Task 7.3)
+        weights = get_user_relevance_weights(user_id)
+
         for candidate in candidates:
             # Check ethical safety FIRST (YOUR ESL INTEGRATION)
             safety_check = await self.esl.check_content_safety(
@@ -95,7 +160,7 @@ class RelevanceScoringEngine:
                 continue
 
             # Calculate relevance score (YOUR ALGORITHM)
-            score, breakdown = self._calculate_relevance_score(candidate, context)
+            score, breakdown = self._calculate_relevance_score(candidate, context, weights)
 
             # Generate explanation (YOUR TRANSPARENCY LOGIC)
             explanation = self._generate_explanation(candidate, context, breakdown)
@@ -118,61 +183,75 @@ class RelevanceScoringEngine:
     def _calculate_relevance_score(
         self,
         candidate: CandidateItem,
-        context: RelevanceContext
+        context: RelevanceContext,
+        weights: Optional[Dict[str, float]] = None,
     ) -> tuple[float, Dict[str, float]]:
         """
         Calculate multi-factor relevance score
 
         YOUR SCORING ALGORITHM:
         - 50 points: Direct query match
-        - 30 points: Goal overlap
-        - 15 points: Timeliness
-        - 5 points: Recency
+        - 30 points: Goal overlap  (scaled by weight_goal_alignment)
+        - 15 points: Timeliness    (scaled by weight_time_sensitivity)
+        - 5 points:  Recency       (scaled by weight_personal_values)
+        - query_match scaled by    weight_context_relevance
 
         Args:
             candidate: Item to score
             context: Relevance context
+            weights: User-tunable multipliers (0-2x each)
 
         Returns:
             (total_score, score_breakdown)
         """
+        if weights is None:
+            weights = {}
+
         breakdown = {}
         total_score = 0.0
 
         # Factor 1: Direct query match (50 points max)
+        # Scaled by weight_context_relevance
         if context.query:
             query_score = self._score_query_match(
                 candidate.content,
                 candidate.title or "",
                 context.query
             )
+            query_score *= weights.get("weight_context_relevance", 1.0)
             breakdown["query_match"] = query_score
             total_score += query_score
         else:
             breakdown["query_match"] = 0.0
 
         # Factor 2: Goal overlap (30 points max)
+        # Scaled by weight_goal_alignment
         goal_score = self._score_goal_overlap(
             candidate.content,
             candidate.title or "",
             context.active_goals
         )
+        goal_score *= weights.get("weight_goal_alignment", 1.0)
         breakdown["goal_overlap"] = goal_score
         total_score += goal_score
 
         # Factor 3: Timeliness (15 points max)
+        # Scaled by weight_time_sensitivity
         timeliness_score = self._score_timeliness(
             candidate,
             context.upcoming_events
         )
+        timeliness_score *= weights.get("weight_time_sensitivity", 1.0)
         breakdown["timeliness"] = timeliness_score
         total_score += timeliness_score
 
         # Factor 4: Recency (5 points max)
+        # Scaled by weight_personal_values
         recency_score = self._score_recency(
             candidate.content,
             context.recent_topics
         )
+        recency_score *= weights.get("weight_personal_values", 1.0)
         breakdown["recency"] = recency_score
         total_score += recency_score
 

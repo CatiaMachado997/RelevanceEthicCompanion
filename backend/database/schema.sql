@@ -229,6 +229,18 @@ CREATE POLICY "Users can update own session"
     ON public.user_sessions FOR UPDATE
     USING (auth.uid() = user_id);
 
+-- ==================== Conversations Table (named chat threads) ====================
+
+CREATE TABLE IF NOT EXISTS public.conversations (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    title       TEXT NOT NULL DEFAULT 'New conversation',
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON public.conversations(user_id, updated_at DESC);
+
 -- ==================== Conversation Turns Table ====================
 -- Reliable ordered history for LLM context (M1 backup for Weaviate)
 
@@ -243,6 +255,9 @@ CREATE TABLE IF NOT EXISTS public.conversation_turns (
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_conversation_turns_user_time
     ON public.conversation_turns(user_id, created_at DESC);
+
+ALTER TABLE public.conversation_turns ADD COLUMN IF NOT EXISTS conversation_id UUID REFERENCES public.conversations(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS idx_conversation_turns_conv_id ON public.conversation_turns(conversation_id, created_at ASC);
 
 -- Enable RLS
 ALTER TABLE public.conversation_turns ENABLE ROW LEVEL SECURITY;
@@ -293,6 +308,84 @@ CREATE TRIGGER update_user_sessions_updated_at
 --     'no_work_after_19h',
 --     1
 -- );
+
+-- ==================== User Settings Table ====================
+-- Created via migration_profile_notifications_settings.sql; reproduced here for completeness
+
+CREATE TABLE IF NOT EXISTS public.user_settings (
+  user_id UUID PRIMARY KEY REFERENCES public.users(id) ON DELETE CASCADE,
+  email_notifications BOOLEAN DEFAULT FALSE,
+  push_notifications BOOLEAN DEFAULT FALSE,
+  esl_alerts BOOLEAN DEFAULT TRUE,
+  share_analytics BOOLEAN DEFAULT FALSE,
+  pii_protection BOOLEAN DEFAULT TRUE,
+  weight_goal_alignment    FLOAT DEFAULT 1.0,
+  weight_time_sensitivity  FLOAT DEFAULT 1.0,
+  weight_personal_values   FLOAT DEFAULT 1.0,
+  weight_context_relevance FLOAT DEFAULT 1.0,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ==================== Relevance Adjustments Table ====================
+-- User-specific multipliers nudged by feedback signals
+
+CREATE TABLE IF NOT EXISTS public.relevance_adjustments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  signal_type TEXT NOT NULL,  -- 'goal_alignment', 'timeliness', 'recency', 'query_match'
+  multiplier FLOAT NOT NULL DEFAULT 1.0,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, signal_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_relevance_adjustments_user_id ON public.relevance_adjustments(user_id);
+
+-- ==================== User ESL Sensitivity Table ====================
+-- Accumulates sensitivity boosts from value_conflict feedback
+
+CREATE TABLE IF NOT EXISTS public.user_esl_sensitivity (
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  content_category TEXT NOT NULL,
+  sensitivity_boost FLOAT DEFAULT 0.0,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (user_id, content_category)
+);
+
+-- ==================== Email Messages Table (M1) ====================
+-- Structured storage for Gmail messages (complements M2 semantic search)
+
+CREATE TABLE IF NOT EXISTS public.email_messages (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  source TEXT NOT NULL DEFAULT 'gmail',
+  external_id TEXT NOT NULL,
+  subject TEXT,
+  sender TEXT,
+  snippet TEXT,
+  received_at TIMESTAMPTZ,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, source, external_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_messages_user_received ON public.email_messages(user_id, received_at DESC);
+
+-- ==================== Slack Messages Table (M1) ====================
+-- Structured storage for Slack messages (complements M2 semantic search)
+
+CREATE TABLE IF NOT EXISTS public.slack_messages (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  channel TEXT NOT NULL,
+  sender_id TEXT,
+  text TEXT,
+  ts TEXT NOT NULL,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, channel, ts)
+);
+
+CREATE INDEX IF NOT EXISTS idx_slack_messages_user_created ON public.slack_messages(user_id, created_at DESC);
 
 -- ==================== Helpful Queries ====================
 

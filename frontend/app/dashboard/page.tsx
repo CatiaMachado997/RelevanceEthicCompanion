@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { transparencyApi, goalsApi, valuesApi, eventsApi, type Goal, type CalendarEvent } from '@/lib/api'
 import Link from 'next/link'
-import { MessageSquare, Heart, Shield, ArrowRight, Target, Calendar, Clock } from 'lucide-react'
+import { MessageSquare, Heart, Shield, ArrowRight, Target, Calendar, Clock, Info } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card } from '@/components/ui/card'
 import {
@@ -217,7 +217,33 @@ export default function DashboardPage() {
                   <Clock size={13} style={{ color: '#695e6e' }} />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm truncate font-medium" style={{ color: '#0a0a0a' }}>{event.title}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm truncate font-medium" style={{ color: '#0a0a0a' }}>{event.title}</p>
+                    {event.explanation && (
+                      <div className="relative group shrink-0">
+                        <span className="cursor-help" style={{ color: '#b0a6b4' }}>
+                          <Info size={12} />
+                        </span>
+                        <div
+                          className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-20
+                            hidden group-hover:block w-52 px-3 py-2 rounded-xl text-xs leading-relaxed
+                            pointer-events-none"
+                          style={{
+                            background: '#1a1a1a',
+                            color: '#f5f5f5',
+                            boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+                          }}
+                        >
+                          {event.explanation}
+                          {/* Arrow */}
+                          <span
+                            className="absolute left-1/2 -translate-x-1/2 top-full"
+                            style={{ borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: '5px solid #1a1a1a', display: 'block', width: 0, height: 0 }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   <p className="text-xs" style={{ color: '#9e9e9e' }}>
                     {formatEventTime(event.start_time)}
                   </p>

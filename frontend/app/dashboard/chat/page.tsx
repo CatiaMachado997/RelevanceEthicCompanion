@@ -1,12 +1,17 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, ChangeEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { CodeBlock } from '@/components/chat/CodeBlock'
+import { ArtifactCard } from '@/components/chat/ArtifactCard'
 import api from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
+import { useRouter } from 'next/navigation'
 import {
   Send, ChevronDown, ChevronUp, Copy, Square,
-  ThumbsUp, ThumbsDown, RotateCcw, Plus,
+  ThumbsUp, ThumbsDown, RotateCcw, Plus, Cpu,
+  Paperclip, Globe, Calendar, Target, StickyNote,
 } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 
@@ -28,6 +33,21 @@ const ESL_COLORS: Record<string, { bg: string; text: string; border: string }> =
   VETOED:   { bg: 'rgba(176,74,58,0.08)',  text: '#B04A3A', border: 'rgba(176,74,58,0.20)' },
   MODIFIED: { bg: 'rgba(155,122,61,0.08)', text: '#9B7A3D', border: 'rgba(155,122,61,0.20)' },
 }
+
+const GROQ_MODELS = [
+  // Production
+  { id: 'llama-3.3-70b-versatile',                    label: 'Llama 3.3 70B',      badge: 'Best',      group: 'Production' },
+  { id: 'llama-3.1-8b-instant',                       label: 'Llama 3.1 8B',       badge: '560 t/s',   group: 'Production' },
+  { id: 'openai/gpt-oss-120b',                        label: 'GPT OSS 120B',       badge: '500 t/s',   group: 'Production' },
+  { id: 'openai/gpt-oss-20b',                         label: 'GPT OSS 20B',        badge: '1000 t/s',  group: 'Production' },
+  { id: 'groq/compound',                              label: 'Groq Compound',      badge: '450 t/s',   group: 'Production' },
+  { id: 'groq/compound-mini',                         label: 'Compound Mini',      badge: 'Fast',      group: 'Production' },
+  // Preview
+  { id: 'meta-llama/llama-4-scout-17b-16e-instruct',  label: 'Llama 4 Scout 17B',  badge: 'Preview',   group: 'Preview' },
+  { id: 'moonshotai/kimi-k2-instruct-0905',           label: 'Kimi K2',            badge: '262K ctx',  group: 'Preview' },
+  { id: 'qwen/qwen3-32b',                             label: 'Qwen3 32B',          badge: 'Preview',   group: 'Preview' },
+]
+const DEFAULT_MODEL = GROQ_MODELS[0].id
 
 const EXAMPLE_PROMPTS = [
   "What's on my agenda today?",
@@ -159,9 +179,49 @@ function Cursor() {
   )
 }
 
+/* ─── Markdown component map ─── */
+const markdownComponents = {
+  code({ node, className, children, ...props }: any) {
+    const language = /language-(\w+)/.exec(className || '')?.[1]
+    const content = String(children).replace(/\n$/, '')
+    // Treat as block if it contains newlines or has a language hint
+    const isBlock = content.includes('\n') || !!language
+    if (!isBlock) {
+      return <code className={className} {...props}>{children}</code>
+    }
+    return <CodeBlock language={language}>{content}</CodeBlock>
+  },
+  table({ children }: any) {
+    return (
+      <div style={{ overflowX: 'auto', margin: '0.75em 0' }}>
+        <table style={{ minWidth: '100%' }}>{children}</table>
+      </div>
+    )
+  },
+  input({ checked, ...props }: any) {
+    return (
+      <input
+        type="checkbox"
+        checked={checked}
+        readOnly
+        style={{ accentColor: '#4A7C59', marginRight: '0.4em' }}
+        {...props}
+      />
+    )
+  },
+  h1({ children }: any) {
+    const text = String(children)
+    if (/^(plan|schedule|agenda|summary|report):/i.test(text)) {
+      return <ArtifactCard title={text}>{null}</ArtifactCard>
+    }
+    return <h1>{children}</h1>
+  },
+}
+
 /* ═══════════════════════════════════════════════════ */
-export default function ChatPage() {
+export default function ChatPage({ conversationId }: { conversationId?: string } = {}) {
   const { user } = useAuth()
+  const router = useRouter()
   const initials = user?.email?.split('@')[0].substring(0, 2).toUpperCase() ?? 'U'
 
   const [messages, setMessages] = useState<Message[]>([])
@@ -170,11 +230,35 @@ export default function ChatPage() {
   const [isThinking, setIsThinking]     = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [userScrolled, setUserScrolled] = useState(false)
+  const [activeTool, setActiveTool] = useState<string | null>(null)
+  const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL)
+  const [modelMenuOpen, setModelMenuOpen] = useState(false)
+  const [rateLimitWarning, setRateLimitWarning] = useState<{ level: string; message: string } | null>(null)
+  const [rateLimitExceeded, setRateLimitExceeded] = useState<{ retryAfter: string; message: string } | null>(null)
+
+  const [attachedFile, setAttachedFile] = useState<{ name: string; content: string } | null>(null)
+  const [plusMenuOpen, setPlusMenuOpen] = useState(false)
 
   const endRef       = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const textareaRef  = useRef<HTMLTextAreaElement>(null)
   const streamRef    = useRef<{ cancel: () => void } | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Close menus on outside click
+  useEffect(() => {
+    if (!modelMenuOpen) return
+    const handler = () => setModelMenuOpen(false)
+    document.addEventListener('click', handler)
+    return () => document.removeEventListener('click', handler)
+  }, [modelMenuOpen])
+
+  useEffect(() => {
+    if (!plusMenuOpen) return
+    const handler = () => setPlusMenuOpen(false)
+    document.addEventListener('click', handler)
+    return () => document.removeEventListener('click', handler)
+  }, [plusMenuOpen])
 
   /* feedback */
   const handleFeedback = useCallback(async (messageId: string, type: 'up' | 'down') => {
@@ -192,7 +276,9 @@ export default function ChatPage() {
 
   /* history */
   useEffect(() => {
-    api.chat.history()
+    setMessages([])
+    setLoadingHistory(true)
+    api.chat.history(50, 0, conversationId)
       .then(h => {
         setMessages((h.messages ?? []).map((m, i) => ({
           id:        `h-${i}`,
@@ -203,7 +289,7 @@ export default function ChatPage() {
       })
       .catch(console.error)
       .finally(() => setLoadingHistory(false))
-  }, [])
+  }, [conversationId])
 
   /* auto-scroll */
   useEffect(() => {
@@ -224,12 +310,30 @@ export default function ChatPage() {
     el.style.height = Math.min(el.scrollHeight, 140) + 'px'
   }, [])
 
+  /* file attachment */
+  const handleFileChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const content = ev.target?.result as string
+      setAttachedFile({ name: file.name, content })
+    }
+    reader.readAsText(file)
+    // Reset input so the same file can be re-selected
+    e.target.value = ''
+  }, [])
+
   /* send */
   const handleSend = async (text?: string) => {
-    const userMessage = (text ?? input).trim()
+    const userText = (text ?? input).trim()
+    const userMessage = attachedFile
+      ? `${userText ? userText + '\n\n' : ''}[Attached file: ${attachedFile.name}]\n\`\`\`\n${attachedFile.content.slice(0, 8000)}\n\`\`\``
+      : userText
     if (!userMessage || isLoading) return
 
     setInput('')
+    setAttachedFile(null)
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
     setIsLoading(true)
     setIsThinking(true)
@@ -247,17 +351,49 @@ export default function ChatPage() {
     ])
 
     try {
-      const s = api.chat.stream(userMessage, (token) => {
-        setIsThinking(false)
-        setMessages(prev => {
-          const msgs = [...prev]
-          const last = msgs[msgs.length - 1]
-          if (last?.streaming) msgs[msgs.length - 1] = { ...last, content: last.content + token }
-          return msgs
-        })
+      setRateLimitExceeded(null)
+
+      // Create a conversation if one doesn't exist yet, then redirect
+      let activeConvId = conversationId
+      if (!activeConvId) {
+        const conv = await api.chat.conversations.create()
+        activeConvId = conv.id
+        router.replace(`/dashboard/chat/${activeConvId}`)
+      }
+
+      const s = api.chat.stream(userMessage, {
+        model: selectedModel,
+        conversation_id: activeConvId,
+        onRateLimitWarning: (level, message) => setRateLimitWarning({ level, message }),
+        onRateLimitExceeded: (retryAfter, message) => {
+          setRateLimitExceeded({ retryAfter, message })
+          setIsLoading(false)
+          setIsThinking(false)
+          // Replace empty assistant bubble with the error message
+          setMessages(prev => prev.map(m =>
+            m.id === assistantId
+              ? { ...m, content: `⚠️ ${message}`, streaming: false }
+              : m
+          ))
+        },
+        onToken: (token) => {
+          setIsThinking(false)
+          setMessages(prev => {
+            const msgs = [...prev]
+            const last = msgs[msgs.length - 1]
+            if (last?.streaming) msgs[msgs.length - 1] = { ...last, content: last.content + token }
+            return msgs
+          })
+        },
+        onToolUse: (tool) => {
+          setIsThinking(false)
+          setActiveTool(tool)
+        },
+        onToolResult: () => setActiveTool(null),
       })
       streamRef.current = s
       await s
+      setActiveTool(null)
       setIsThinking(false)
       setMessages(prev => {
         const msgs = [...prev]
@@ -270,19 +406,46 @@ export default function ChatPage() {
       })
     } catch (e) {
       setIsThinking(false)
-      setMessages(prev => {
-        const msgs = [...prev]
-        const last = msgs[msgs.length - 1]
-        if (last?.streaming) {
-          const { streaming: _s, ...rest } = last
-          msgs[msgs.length - 1] = {
-            ...rest,
-            content: rest.content || 'Something went wrong. Please try again.',
-          }
+      setActiveTool(null)
+
+      if (e instanceof Error && e.message === 'Stream cancelled') {
+        // User hit Stop — just seal the bubble with whatever arrived
+        setMessages(prev => prev.map(m =>
+          m.id === assistantId ? { ...m, streaming: false } : m
+        ))
+      } else {
+        const raw = e instanceof Error ? e.message : String(e)
+        let userMsg: string
+
+        if (raw.includes('Failed to fetch') || raw.includes('NetworkError') || raw.includes('fetch')) {
+          userMsg = "Can't reach the server. Make sure the backend is running and try again."
+        } else if (raw.includes('Stream connection lost')) {
+          userMsg = "Connection dropped mid-response. Please try again."
+        } else if (raw.includes('validation') || raw.includes('Pydantic') || raw.includes('validation error')) {
+          userMsg = "The model returned an unexpected format. Try a different model or rephrase your message."
+        } else if (raw.includes('401') || raw.includes('Unauthorized')) {
+          userMsg = "Session expired. Please refresh the page and sign in again."
+        } else if (raw.includes('503') || raw.includes('502') || raw.includes('unavailable')) {
+          userMsg = "The AI service is temporarily unavailable. Try again in a moment."
+        } else {
+          userMsg = "Something went wrong. Please try again."
         }
-        return msgs
-      })
-      if (e instanceof Error && e.message !== 'Stream cancelled') console.error(e)
+
+        console.error('[chat] stream error:', raw)
+
+        // Update the assistant bubble — works whether it's still streaming or already sealed
+        setMessages(prev => prev.map(m => {
+          if (m.id !== assistantId) return m
+          const partial = m.content?.trim()
+          return {
+            ...m,
+            streaming: false,
+            content: partial
+              ? `${partial}\n\n*— response interrupted: ${userMsg}*`
+              : `⚠️ ${userMsg}`,
+          }
+        }))
+      }
     } finally {
       streamRef.current = null
       setIsLoading(false)
@@ -403,8 +566,11 @@ export default function ChatPage() {
 
                 {/* Message body */}
                 <div
-                  className="pl-9 text-sm leading-[1.75] w-full"
-                  style={{ color: '#1a1a1a' }}
+                  className="pl-4 text-sm w-full"
+                  style={{
+                    borderLeft: '3px solid rgba(74,124,89,0.3)',
+                    marginLeft: '1.75rem',
+                  }}
                 >
                   {msg.streaming && isThinking && !msg.content ? (
                     <div className="flex gap-1 items-center h-5">
@@ -414,8 +580,23 @@ export default function ChatPage() {
                     </div>
                   ) : msg.content ? (
                     <>
-                      <div className="chat-prose">
-                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      {msg.streaming && activeTool && (
+                        <div className="flex items-center gap-2 text-xs mb-2" style={{ color: '#9e9e9e' }}>
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#9e9e9e] animate-pulse" />
+                          {activeTool === 'web_search' && 'Searching the web\u2026'}
+                          {activeTool === 'query_calendar' && 'Checking your calendar\u2026'}
+                          {activeTool === 'query_memory' && 'Recalling context\u2026'}
+                          {activeTool === 'get_user_goals' && 'Checking your goals\u2026'}
+                          {activeTool === 'create_note' && 'Saving note\u2026'}
+                        </div>
+                      )}
+                      <div className="chat-prose max-w-none">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={markdownComponents}
+                        >
+                          {msg.content}
+                        </ReactMarkdown>
                       </div>
                       {msg.streaming && <Cursor />}
                     </>
@@ -445,10 +626,33 @@ export default function ChatPage() {
         </div>
       </div>
 
+      {/* ── Rate limit banners ── */}
+      {rateLimitExceeded && (
+        <div className="shrink-0 mx-4 mb-2 px-4 py-3 rounded-xl flex items-start justify-between gap-3 text-sm"
+          style={{ background: 'rgba(176,74,58,0.08)', border: '1px solid rgba(176,74,58,0.25)', color: '#B04A3A' }}>
+          <div>
+            <p className="font-medium">Token limit reached</p>
+            <p className="text-xs mt-0.5 opacity-80">{rateLimitExceeded.message}</p>
+          </div>
+          <button onClick={() => setRateLimitExceeded(null)} className="shrink-0 text-lg leading-none opacity-50 hover:opacity-100">×</button>
+        </div>
+      )}
+      {rateLimitWarning && !rateLimitExceeded && (
+        <div className="shrink-0 mx-4 mb-2 px-4 py-3 rounded-xl flex items-start justify-between gap-3 text-sm"
+          style={{
+            background: rateLimitWarning.level === 'high' ? 'rgba(176,120,58,0.08)' : 'rgba(155,155,58,0.06)',
+            border: `1px solid ${rateLimitWarning.level === 'high' ? 'rgba(176,120,58,0.25)' : 'rgba(155,155,58,0.20)'}`,
+            color: rateLimitWarning.level === 'high' ? '#9B6A2A' : '#7A7A2A',
+          }}>
+          <p className="text-xs">{rateLimitWarning.message}</p>
+          <button onClick={() => setRateLimitWarning(null)} className="shrink-0 text-lg leading-none opacity-50 hover:opacity-100">×</button>
+        </div>
+      )}
+
       {/* ── Input card ── */}
       <div className="shrink-0 px-4 pb-4">
         <div
-          className="mx-auto max-w-[720px] rounded-2xl overflow-hidden"
+          className="mx-auto max-w-[720px] rounded-2xl"
           style={{
             background: '#ffffff',
             border: '1px solid rgba(0,0,0,0.12)',
@@ -474,31 +678,168 @@ export default function ChatPage() {
             />
           </div>
 
+          {/* Attached file chip */}
+          {attachedFile && (
+            <div className="flex items-center gap-2 px-4 pt-2">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs"
+                style={{ background: 'rgba(0,0,0,0.06)', color: '#6b6b6b', border: '1px solid rgba(0,0,0,0.08)' }}>
+                <span className="max-w-[180px] truncate">{attachedFile.name}</span>
+                <button
+                  onClick={() => setAttachedFile(null)}
+                  className="shrink-0 ml-1 opacity-50 hover:opacity-100 transition-opacity"
+                  aria-label="Remove attachment"
+                >×</button>
+              </div>
+            </div>
+          )}
+
           {/* Bottom bar */}
           <div className="flex items-center justify-between px-3 pb-2.5 pt-1">
-            {/* Left: attach */}
-            <button
-              className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors hover:bg-black/5"
-              aria-label="Attach"
-              title="Attach file"
-              style={{ color: '#9e9e9e' }}
-            >
-              <Plus size={16} />
-            </button>
-
-            {/* Right: model chip + send/stop */}
-            <div className="flex items-center gap-2">
-              {/* Model indicator */}
-              <div
-                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium"
-                style={{
-                  background: 'rgba(0,0,0,0.04)',
-                  color: '#6b6b6b',
-                  border: '1px solid rgba(0,0,0,0.06)',
-                }}
+            {/* Left: Plus menu */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".txt,.md,.csv,.json,.py,.js,.ts,.html,.css,.xml,.yaml,.yml,.log"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+            <div className="relative">
+              <button
+                onClick={e => { e.stopPropagation(); setPlusMenuOpen(v => !v) }}
+                disabled={isLoading}
+                className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors hover:bg-black/5 disabled:opacity-30"
+                aria-label="More options"
+                style={{ color: '#9e9e9e' }}
               >
-                Ethic Companion
-                <ChevronDown size={10} />
+                <Plus size={16} />
+              </button>
+
+              {plusMenuOpen && (
+                <div
+                  className="absolute bottom-full mb-2 left-0 z-50 rounded-xl py-1.5 min-w-[220px]"
+                  style={{
+                    background: '#fff',
+                    border: '1px solid rgba(0,0,0,0.10)',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                  }}
+                  onClick={e => e.stopPropagation()}
+                >
+                  {/* Attach file */}
+                  <button
+                    onClick={() => { fileInputRef.current?.click(); setPlusMenuOpen(false) }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors hover:bg-black/4"
+                    style={{ color: '#0a0a0a' }}
+                  >
+                    <Paperclip size={15} style={{ color: '#6b6b6b' }} />
+                    Attach file
+                  </button>
+
+                  {/* Web search */}
+                  <button
+                    onClick={() => {
+                      setInput(prev => prev ? prev : '/search ')
+                      textareaRef.current?.focus()
+                      setPlusMenuOpen(false)
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors hover:bg-black/4"
+                    style={{ color: '#0a0a0a' }}
+                  >
+                    <Globe size={15} style={{ color: '#6b6b6b' }} />
+                    Search the web
+                  </button>
+
+                  <div style={{ height: '1px', background: 'rgba(0,0,0,0.06)', margin: '4px 0' }} />
+
+                  {/* Calendar */}
+                  <button
+                    onClick={() => {
+                      handleSend("What's on my calendar today?")
+                      setPlusMenuOpen(false)
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors hover:bg-black/4"
+                    style={{ color: '#0a0a0a' }}
+                  >
+                    <Calendar size={15} style={{ color: '#6b6b6b' }} />
+                    Check calendar
+                  </button>
+
+                  {/* Goals */}
+                  <button
+                    onClick={() => {
+                      handleSend("Show me my active goals and progress")
+                      setPlusMenuOpen(false)
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors hover:bg-black/4"
+                    style={{ color: '#0a0a0a' }}
+                  >
+                    <Target size={15} style={{ color: '#6b6b6b' }} />
+                    Review goals
+                  </button>
+
+                  {/* Save note */}
+                  <button
+                    onClick={() => {
+                      setInput('Remember that ')
+                      textareaRef.current?.focus()
+                      setPlusMenuOpen(false)
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors hover:bg-black/4"
+                    style={{ color: '#0a0a0a' }}
+                  >
+                    <StickyNote size={15} style={{ color: '#6b6b6b' }} />
+                    Save a note
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Right: model selector + send/stop */}
+            <div className="flex items-center gap-2">
+              {/* Model selector */}
+              <div className="relative">
+                <button
+                  onClick={() => setModelMenuOpen(v => !v)}
+                  disabled={isLoading}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors hover:bg-black/6 disabled:opacity-50"
+                  style={{
+                    background: 'rgba(0,0,0,0.04)',
+                    color: '#6b6b6b',
+                    border: '1px solid rgba(0,0,0,0.06)',
+                  }}
+                >
+                  <Cpu size={10} />
+                  {GROQ_MODELS.find(m => m.id === selectedModel)?.label ?? selectedModel}
+                  <ChevronDown size={10} />
+                </button>
+                {modelMenuOpen && (
+                  <div
+                    className="absolute bottom-full mb-2 right-0 z-50 rounded-xl overflow-hidden py-1 min-w-[200px]"
+                    style={{
+                      background: '#fff',
+                      border: '1px solid rgba(0,0,0,0.10)',
+                      boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
+                    }}
+                  >
+                    {(['Production', 'Preview'] as const).map(group => (
+                      <div key={group}>
+                        <div className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#c0c0c0' }}>{group}</div>
+                        {GROQ_MODELS.filter(m => m.group === group).map(m => (
+                          <button
+                            key={m.id}
+                            onClick={() => { setSelectedModel(m.id); setModelMenuOpen(false) }}
+                            className="w-full flex items-center justify-between px-3 py-1.5 text-xs text-left transition-colors hover:bg-black/4"
+                            style={{ color: m.id === selectedModel ? '#0a0a0a' : '#6b6b6b', fontWeight: m.id === selectedModel ? 600 : 400 }}
+                          >
+                            <span>{m.label}</span>
+                            <span className="ml-2 px-1.5 py-0.5 rounded text-[10px]" style={{ background: 'rgba(0,0,0,0.05)', color: '#9e9e9e' }}>
+                              {m.badge}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Send / Stop */}
@@ -514,7 +855,7 @@ export default function ChatPage() {
               ) : (
                 <button
                   onClick={() => handleSend()}
-                  disabled={!input.trim()}
+                  disabled={!input.trim() && !attachedFile}
                   aria-label="Send"
                   className="w-8 h-8 rounded-xl flex items-center justify-center transition-opacity disabled:opacity-30"
                   style={{ background: '#1a1a1a' }}

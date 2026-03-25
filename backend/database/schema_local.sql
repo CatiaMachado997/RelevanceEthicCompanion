@@ -192,6 +192,22 @@ VALUES
     ('00000000-0000-0000-0000-000000000000', 'Learn PostgreSQL', 'Master database design and queries', 'active', 3)
 ON CONFLICT DO NOTHING;
 
+-- ==================== User Settings Table ====================
+
+CREATE TABLE IF NOT EXISTS user_settings (
+  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  email_notifications BOOLEAN DEFAULT FALSE,
+  push_notifications BOOLEAN DEFAULT FALSE,
+  esl_alerts BOOLEAN DEFAULT TRUE,
+  share_analytics BOOLEAN DEFAULT FALSE,
+  pii_protection BOOLEAN DEFAULT TRUE,
+  weight_goal_alignment    FLOAT DEFAULT 1.0,
+  weight_time_sensitivity  FLOAT DEFAULT 1.0,
+  weight_personal_values   FLOAT DEFAULT 1.0,
+  weight_context_relevance FLOAT DEFAULT 1.0,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- ==================== V2 Tables ====================
 
 -- Data sources (Google Calendar, future: Gmail)
@@ -246,6 +262,18 @@ CREATE TABLE IF NOT EXISTS context_snapshots (
 CREATE INDEX IF NOT EXISTS idx_context_snapshots_user_id ON context_snapshots(user_id);
 CREATE INDEX IF NOT EXISTS idx_context_snapshots_snapshot_time ON context_snapshots(snapshot_time);
 
+-- ==================== Conversations Table (named chat threads) ====================
+
+CREATE TABLE IF NOT EXISTS conversations (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title       TEXT NOT NULL DEFAULT 'New conversation',
+    created_at  TIMESTAMPTZ DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id, updated_at DESC);
+
 -- ==================== Conversation Turns Table ====================
 -- Reliable ordered history for LLM context (M1 backup for Weaviate)
 
@@ -259,6 +287,71 @@ CREATE TABLE IF NOT EXISTS conversation_turns (
 
 CREATE INDEX IF NOT EXISTS idx_conversation_turns_user_time
     ON conversation_turns(user_id, created_at DESC);
+
+ALTER TABLE conversation_turns ADD COLUMN IF NOT EXISTS conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS idx_conversation_turns_conv_id ON conversation_turns(conversation_id, created_at ASC);
+
+-- ==================== Relevance Adjustments Table ====================
+-- User-specific multipliers nudged by feedback signals
+
+CREATE TABLE IF NOT EXISTS relevance_adjustments (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    signal_type TEXT NOT NULL,  -- 'goal_alignment', 'timeliness', 'recency', 'query_match'
+    multiplier FLOAT NOT NULL DEFAULT 1.0,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(user_id, signal_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_relevance_adjustments_user_id ON relevance_adjustments(user_id);
+
+-- ==================== User ESL Sensitivity Table ====================
+
+CREATE TABLE IF NOT EXISTS user_esl_sensitivity (
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  content_category TEXT NOT NULL,
+  sensitivity_boost FLOAT DEFAULT 0.0,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (user_id, content_category)
+);
+
+-- ==================== Email Messages Table (M1) ====================
+
+CREATE TABLE IF NOT EXISTS email_messages (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  source TEXT NOT NULL DEFAULT 'gmail',
+  external_id TEXT NOT NULL,
+  subject TEXT,
+  sender TEXT,
+  snippet TEXT,
+  received_at TIMESTAMPTZ,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, source, external_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_messages_user_received ON email_messages(user_id, received_at DESC);
+
+-- ==================== Slack Messages Table (M1) ====================
+
+CREATE TABLE IF NOT EXISTS slack_messages (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  channel TEXT NOT NULL,
+  sender_id TEXT,
+  text TEXT,
+  ts TEXT NOT NULL,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, channel, ts)
+);
+
+CREATE INDEX IF NOT EXISTS idx_slack_messages_user_created ON slack_messages(user_id, created_at DESC);
+
+-- ==================== Additional notes on relevance_feedback ====================
+-- The local schema feedback table may need additional_notes column
+ALTER TABLE relevance_feedback ADD COLUMN IF NOT EXISTS additional_notes TEXT;
 
 -- Success message
 DO $$

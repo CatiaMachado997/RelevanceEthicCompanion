@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Bell, Lock, Calendar, CheckCircle2, XCircle, RefreshCw } from 'lucide-react'
+import { Bell, Lock, Calendar, CheckCircle2, XCircle, RefreshCw, SlidersHorizontal } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { dataSourcesApi, DataSource, settingsApi, UserSettings } from '@/lib/api'
@@ -66,12 +66,28 @@ export default function SettingsPage() {
     setSaveError(null)
   }
 
+  const handleWeightChange = (key: keyof UserSettings, value: number) => {
+    setSettings(prev => ({ ...prev, [key]: value }))
+    setDirty(true)
+    setSaveSuccess(false)
+    setSaveError(null)
+  }
+
   const handleSave = async () => {
     setSaving(true)
     setSaveError(null)
     try {
-      const { email_notifications, push_notifications, esl_alerts, share_analytics, pii_protection } = settings
-      await settingsApi.update({ email_notifications, push_notifications, esl_alerts, share_analytics, pii_protection })
+      const {
+        email_notifications, push_notifications, esl_alerts, share_analytics, pii_protection,
+        weight_goal_alignment, weight_time_sensitivity, weight_personal_values, weight_context_relevance,
+      } = settings
+      await settingsApi.update({
+        email_notifications, push_notifications, esl_alerts, share_analytics, pii_protection,
+        weight_goal_alignment: weight_goal_alignment ?? 1.0,
+        weight_time_sensitivity: weight_time_sensitivity ?? 1.0,
+        weight_personal_values: weight_personal_values ?? 1.0,
+        weight_context_relevance: weight_context_relevance ?? 1.0,
+      })
       setDirty(false)
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 2000)
@@ -233,6 +249,67 @@ export default function SettingsPage() {
             checked={settings.pii_protection}
             onCheckedChange={handleToggle('pii_protection')}
           />
+        </div>
+      </div>
+
+      {/* Relevance Tuning */}
+      <div className="rounded-2xl p-5" style={CARD_STYLE}>
+        <div className="flex items-center gap-2 mb-4">
+          <SlidersHorizontal size={15} style={{ color: '#000000' }} />
+          <h3 className="text-sm font-semibold" style={{ color: '#0a0a0a' }}>Relevance Tuning</h3>
+        </div>
+        <p className="text-xs mb-4" style={{ color: '#9e9e9e' }}>
+          Adjust how much each signal influences what ESL surfaces for you.
+        </p>
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <span className="text-sm w-36 shrink-0" style={{ color: '#0a0a0a' }}>Goal Alignment</span>
+            <input
+              type="range" min={0} max={2} step={0.1}
+              value={settings.weight_goal_alignment ?? 1.0}
+              onChange={e => handleWeightChange('weight_goal_alignment', parseFloat(e.target.value))}
+              className="flex-1 accent-black"
+            />
+            <span className="text-xs w-8 text-right" style={{ color: '#6b6b6b' }}>
+              {(settings.weight_goal_alignment ?? 1.0).toFixed(1)}x
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-sm w-36 shrink-0" style={{ color: '#0a0a0a' }}>Time Sensitivity</span>
+            <input
+              type="range" min={0} max={2} step={0.1}
+              value={settings.weight_time_sensitivity ?? 1.0}
+              onChange={e => handleWeightChange('weight_time_sensitivity', parseFloat(e.target.value))}
+              className="flex-1 accent-black"
+            />
+            <span className="text-xs w-8 text-right" style={{ color: '#6b6b6b' }}>
+              {(settings.weight_time_sensitivity ?? 1.0).toFixed(1)}x
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-sm w-36 shrink-0" style={{ color: '#0a0a0a' }}>Personal Values</span>
+            <input
+              type="range" min={0} max={2} step={0.1}
+              value={settings.weight_personal_values ?? 1.0}
+              onChange={e => handleWeightChange('weight_personal_values', parseFloat(e.target.value))}
+              className="flex-1 accent-black"
+            />
+            <span className="text-xs w-8 text-right" style={{ color: '#6b6b6b' }}>
+              {(settings.weight_personal_values ?? 1.0).toFixed(1)}x
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-sm w-36 shrink-0" style={{ color: '#0a0a0a' }}>Context Relevance</span>
+            <input
+              type="range" min={0} max={2} step={0.1}
+              value={settings.weight_context_relevance ?? 1.0}
+              onChange={e => handleWeightChange('weight_context_relevance', parseFloat(e.target.value))}
+              className="flex-1 accent-black"
+            />
+            <span className="text-xs w-8 text-right" style={{ color: '#6b6b6b' }}>
+              {(settings.weight_context_relevance ?? 1.0).toFixed(1)}x
+            </span>
+          </div>
         </div>
       </div>
 

@@ -112,8 +112,11 @@ class DataIngestionService:
 
                 logger.info(f"✅ OAuth completed for {source_type}, user {user_id}")
 
-                # Trigger initial sync
-                await self.sync_data_source(user_id, source_type)
+                # Trigger initial sync — non-fatal: tokens are stored regardless
+                try:
+                    await self.sync_data_source(user_id, source_type)
+                except Exception as sync_err:
+                    logger.warning(f"⚠️ Initial sync failed for {source_type} (tokens stored): {sync_err}")
 
                 return {
                     "success": True,
@@ -133,8 +136,11 @@ class DataIngestionService:
 
                 logger.info(f"✅ OAuth completed for {source_type}, user {user_id}")
 
-                # Trigger initial sync
-                await self.sync_data_source(user_id, source_type)
+                # Trigger initial sync — non-fatal: tokens are stored regardless
+                try:
+                    await self.sync_data_source(user_id, source_type)
+                except Exception as sync_err:
+                    logger.warning(f"⚠️ Initial sync failed for {source_type} (tokens stored): {sync_err}")
 
                 return {
                     "success": True,
@@ -154,8 +160,11 @@ class DataIngestionService:
 
                 logger.info(f"✅ OAuth completed for {source_type}, user {user_id}")
 
-                # Trigger initial sync
-                await self.sync_data_source(user_id, source_type)
+                # Trigger initial sync — non-fatal: tokens are stored regardless
+                try:
+                    await self.sync_data_source(user_id, source_type)
+                except Exception as sync_err:
+                    logger.warning(f"⚠️ Initial sync failed for {source_type} (tokens stored): {sync_err}")
 
                 return {
                     "success": True,
@@ -315,9 +324,9 @@ class DataIngestionService:
                     return None
 
                 return {
-                    'access_token': result[0],
-                    'refresh_token': result[1],
-                    'expires_at': result[2]
+                    'access_token': result['oauth_token_encrypted'],
+                    'refresh_token': result['oauth_refresh_token_encrypted'],
+                    'expires_at': result['token_expires_at']
                 }
 
     async def _sync_google_calendar(
@@ -398,6 +407,28 @@ class DataIngestionService:
 
         for message in messages:
             try:
+                # Store in M1 (PostgreSQL) — structured for structured queries (F.1)
+                with get_db_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """
+                            INSERT INTO email_messages
+                                (user_id, source, external_id, subject, sender, snippet, received_at)
+                            VALUES (%s, 'gmail', %s, %s, %s, %s, %s)
+                            ON CONFLICT (user_id, source, external_id) DO NOTHING
+                            """,
+                            (
+                                user_id,
+                                message.get('id'),
+                                message.get('subject'),
+                                message.get('from'),
+                                message.get('snippet'),
+                                message.get('date'),
+                            )
+                        )
+                    conn.commit()
+
+                # Store in M2 (Weaviate) — semantic search
                 if self.context_manager.weaviate and self.context_manager.embedding_service:
                     content = f"Email from {message['from']}: {message['subject']}. {message['snippet']}"
 
@@ -441,6 +472,27 @@ class DataIngestionService:
 
         for message in messages:
             try:
+                # Store in M1 (PostgreSQL) — structured for structured queries (F.2)
+                with get_db_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """
+                            INSERT INTO slack_messages
+                                (user_id, channel, sender_id, text, ts)
+                            VALUES (%s, %s, %s, %s, %s)
+                            ON CONFLICT (user_id, channel, ts) DO NOTHING
+                            """,
+                            (
+                                user_id,
+                                message.get('channel'),
+                                message.get('user'),
+                                message.get('text'),
+                                message.get('ts'),
+                            )
+                        )
+                    conn.commit()
+
+                # Store in M2 (Weaviate) — semantic search
                 if self.context_manager.weaviate and self.context_manager.embedding_service:
                     content = f"Slack #{message['channel']}: {message['text']}"
 

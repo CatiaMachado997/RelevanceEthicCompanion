@@ -200,41 +200,46 @@ class TestManipulationDetector:
         assert result.passed is True
         assert "No manipulation patterns" in result.reason
 
-    def test_detects_fomo_dont_miss_out(self, manipulation_detector):
-        """Should detect 'don't miss out' FOMO pattern"""
+    def test_single_fomo_pattern_allowed(self, manipulation_detector):
+        """Single FOMO pattern alone should pass (requires ≥2 to flag)"""
         result = manipulation_detector.check_content(
             "Don't miss out on this opportunity!"
         )
 
-        assert result.passed is False
-        assert "FOMO" in result.reason
+        assert result.passed is True
 
-    def test_detects_fomo_last_chance(self, manipulation_detector):
-        """Should detect 'last chance' FOMO pattern"""
+    def test_single_fomo_last_chance_allowed(self, manipulation_detector):
+        """Single 'last chance' pattern alone should pass"""
         result = manipulation_detector.check_content(
             "This is your last chance to respond!"
         )
 
-        assert result.passed is False
-        assert "FOMO" in result.reason
+        assert result.passed is True
 
-    def test_detects_fomo_limited_time(self, manipulation_detector):
-        """Should detect 'limited time' FOMO pattern"""
+    def test_detects_fomo_combined_with_urgency(self, manipulation_detector):
+        """≥2 manipulation patterns together should be flagged"""
+        result = manipulation_detector.check_content(
+            "Limited time offer - act now! Don't miss out!"
+        )
+
+        assert result.passed is False
+        assert "manipulation" in result.reason.lower()
+
+    def test_detects_fomo_limited_time_act_now(self, manipulation_detector):
+        """'limited time' + 'act now' triggers two patterns — should be flagged"""
         result = manipulation_detector.check_content(
             "Limited time offer - act now!"
         )
 
         assert result.passed is False
-        assert "FOMO" in result.reason
 
-    def test_detects_artificial_urgency(self, manipulation_detector):
-        """Should detect artificial urgency"""
+    def test_single_urgency_pattern_allowed(self, manipulation_detector):
+        """Single artificial urgency pattern alone should pass"""
         result = manipulation_detector.check_content(
             "You must act immediately to avoid problems!"
         )
 
-        assert result.passed is False
-        assert "urgency" in result.reason.lower()
+        assert result.passed is True
 
     def test_allows_genuine_urgent_meeting(self, manipulation_detector):
         """Should allow genuine urgent meeting notifications"""
@@ -245,23 +250,22 @@ class TestManipulationDetector:
         # The regex explicitly excludes "urgent meeting"
         assert result.passed is True
 
-    def test_detects_guilt_tripping(self, manipulation_detector):
-        """Should detect guilt-tripping patterns"""
+    def test_single_guilt_pattern_allowed(self, manipulation_detector):
+        """Single guilt-tripping pattern alone should pass"""
         result = manipulation_detector.check_content(
             "You should have responded earlier."
         )
 
-        assert result.passed is False
-        assert "guilt" in result.reason.lower()
+        assert result.passed is True
 
-    def test_detects_guilt_forgot(self, manipulation_detector):
-        """Should detect 'you forgot' guilt pattern"""
+    def test_guilt_combined_with_fomo_flagged(self, manipulation_detector):
+        """Guilt + FOMO together should be flagged"""
         result = manipulation_detector.check_content(
-            "You forgot to complete this task!"
+            "You forgot to respond! Last chance to act now."
         )
 
         assert result.passed is False
-        assert "guilt" in result.reason.lower()
+        assert "manipulation" in result.reason.lower()
 
     def test_handles_empty_content(self, manipulation_detector):
         """Should handle empty content gracefully"""
@@ -291,32 +295,35 @@ class TestEngagementDetector:
         assert result.passed is True
         assert "assistance" in result.reason.lower()
 
-    def test_blocks_click_rate_optimization(self, engagement_detector):
-        """Actions optimizing for click rate should be blocked"""
+    def test_allows_single_engagement_metric(self, engagement_detector):
+        """Single engagement metric alone should pass (score ≤ 0.7 threshold)"""
         action = create_action(metadata={"click_rate": 0.15})
 
         result = engagement_detector.check_intent(action)
 
-        assert result.passed is False
-        assert "click_rate" in result.reason
+        assert result.passed is True
 
-    def test_blocks_time_in_app_optimization(self, engagement_detector):
-        """Actions optimizing for time in app should be blocked"""
-        action = create_action(metadata={"time_in_app": 300})
+    def test_allows_two_engagement_metrics(self, engagement_detector):
+        """Two engagement metrics alone should pass (score ≤ 0.7)"""
+        action = create_action(metadata={"time_in_app": 300, "click_rate": 0.15})
+
+        result = engagement_detector.check_intent(action)
+
+        assert result.passed is True
+
+    def test_blocks_heavy_engagement_optimization(self, engagement_detector):
+        """≥4 engagement metrics without assistance intent should be blocked (score > 0.7)"""
+        action = create_action(metadata={
+            "click_rate": 0.15,
+            "time_in_app": 300,
+            "daily_active": True,
+            "session_length": 600,
+        })
 
         result = engagement_detector.check_intent(action)
 
         assert result.passed is False
-        assert "time_in_app" in result.reason
-
-    def test_blocks_retention_boost(self, engagement_detector):
-        """Actions optimizing for retention should be blocked"""
-        action = create_action(metadata={"retention_boost": True})
-
-        result = engagement_detector.check_intent(action)
-
-        assert result.passed is False
-        assert "retention_boost" in result.reason
+        assert "engagement" in result.reason.lower()
 
     def test_blocks_critical_without_assistance_intent(self, engagement_detector):
         """Critical urgency without assistance intent should be suspicious"""
@@ -426,14 +433,32 @@ class TestEthicalSafeguardLayer:
 
     @pytest.mark.asyncio
     async def test_vetoes_manipulation(self, mock_context_manager):
-        """Actions with manipulation should be vetoed"""
+        """Non-chat actions with ≥2 manipulation patterns should be vetoed"""
         esl = EthicalSafeguardLayer(mock_context_manager)
-        action = create_action(content="Don't miss out on this limited time offer!")
+        # Use PUSH_NOTIFICATION (non-advisory) with multiple manipulation patterns
+        action = create_action(
+            action_type=ActionType.PUSH_NOTIFICATION,
+            content="Don't miss out! Limited time offer — act now!"
+        )
 
         decision = await esl.evaluate_action(action, "test-user")
 
         assert decision.status == ESLDecisionStatus.VETOED
-        assert "FOMO" in decision.reason or "manipulation" in decision.reason.lower()
+        assert "manipulation" in decision.reason.lower()
+
+    @pytest.mark.asyncio
+    async def test_chat_manipulation_is_advisory(self, mock_context_manager):
+        """Chat responses with manipulation patterns return APPROVED in advisory mode"""
+        esl = EthicalSafeguardLayer(mock_context_manager)
+        action = create_action(
+            action_type=ActionType.CHAT_RESPONSE,
+            content="Don't miss out! Limited time offer — act now!"
+        )
+
+        decision = await esl.evaluate_action(action, "test-user")
+
+        assert decision.status == ESLDecisionStatus.APPROVED
+        assert "Advisory" in decision.reason
 
     @pytest.mark.asyncio
     async def test_vetoes_focus_mode_violation(self, mock_context_manager):
@@ -475,7 +500,7 @@ class TestEthicalSafeguardLayer:
 
     @pytest.mark.asyncio
     async def test_vetoes_time_boundary_violation(self, mock_context_manager):
-        """Actions violating time boundaries should be vetoed"""
+        """Non-chat actions violating time boundaries should be vetoed"""
         mock_context_manager.get_user_context = AsyncMock(return_value=UserContext(
             user_id="test-user",
             current_time=datetime(2025, 1, 15, 21, 0),  # 9 PM
@@ -486,12 +511,39 @@ class TestEthicalSafeguardLayer:
             ],
         ))
         esl = EthicalSafeguardLayer(mock_context_manager)
-        action = create_action(content_type="work_summary")
+        # Use PUSH_NOTIFICATION (non-advisory) for time boundary test
+        action = create_action(
+            action_type=ActionType.PUSH_NOTIFICATION,
+            content_type="work_summary"
+        )
 
         decision = await esl.evaluate_action(action, "test-user")
 
         assert decision.status == ESLDecisionStatus.VETOED
         assert len(decision.violated_values) > 0
+
+    @pytest.mark.asyncio
+    async def test_chat_time_violation_is_advisory(self, mock_context_manager):
+        """Chat responses with time boundary violations return APPROVED in advisory mode"""
+        mock_context_manager.get_user_context = AsyncMock(return_value=UserContext(
+            user_id="test-user",
+            current_time=datetime(2025, 1, 15, 21, 0),  # 9 PM
+            focus_mode=False,
+            active_goals=[],
+            user_values=[
+                create_user_value(ValueType.BOUNDARY, "no_work_after_19h")
+            ],
+        ))
+        esl = EthicalSafeguardLayer(mock_context_manager)
+        action = create_action(
+            action_type=ActionType.CHAT_RESPONSE,
+            content_type="work_summary"
+        )
+
+        decision = await esl.evaluate_action(action, "test-user")
+
+        assert decision.status == ESLDecisionStatus.APPROVED
+        assert "Advisory" in decision.reason
 
     @pytest.mark.asyncio
     async def test_logs_all_decisions(self, mock_context_manager):

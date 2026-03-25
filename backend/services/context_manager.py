@@ -22,7 +22,7 @@ from esl.models import UserValue, UserContext, ValueType
 from models.context import Goal, Event, SemanticMemoryEntry, GoalStatus
 from models.relevance import RelevanceContext
 from utils.db import get_db_connection
-from utils.weaviate_client import WeaviateClient
+from utils.weaviate_client import WeaviateClient, get_weaviate_client
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +47,17 @@ class ContextManager:
         Initialize context manager
 
         Args:
-            weaviate_client: Weaviate client for M2 operations
+            weaviate_client: Weaviate client for M2 operations (auto-connects if None)
             embedding_service: Service for generating embeddings
         """
+        if weaviate_client is None:
+            try:
+                weaviate_client = get_weaviate_client()
+                logger.info("✅ Weaviate singleton connected")
+            except Exception as e:
+                logger.warning(f"⚠️  Weaviate auto-connect failed: {e} — semantic memory disabled")
+                weaviate_client = None
+
         self.weaviate = weaviate_client
         self.embedding_service = embedding_service
 
@@ -183,39 +191,64 @@ class ContextManager:
 
     # ==================== M1: Conversation History (PostgreSQL) ====================
 
-    async def store_conversation_turn(self, user_id: str, role: Literal["user", "assistant"], content: str) -> None:
+    async def store_conversation_turn(
+        self,
+        user_id: str,
+        role: Literal["user", "assistant"],
+        content: str,
+        conversation_id: str = None
+    ) -> None:
         """Store a single conversation turn in PostgreSQL for reliable ordered retrieval."""
         if role not in ("user", "assistant"):
             raise ValueError(f"Invalid role: {role}. Must be 'user' or 'assistant'")
 
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
-                    INSERT INTO conversation_turns (user_id, role, content)
-                    VALUES (%s, %s, %s)
-                """, (user_id, role, content))
+                if conversation_id:
+                    cur.execute("""
+                        INSERT INTO conversation_turns (user_id, role, content, conversation_id)
+                        VALUES (%s, %s, %s, %s)
+                    """, (user_id, role, content, conversation_id))
+                else:
+                    cur.execute("""
+                        INSERT INTO conversation_turns (user_id, role, content)
+                        VALUES (%s, %s, %s)
+                    """, (user_id, role, content))
         logger.debug(f"Stored conversation turn ({role}) for user {user_id}")
 
-    async def get_conversation_history(self, user_id: str, limit: int = 20) -> List[Dict[str, str]]:
+    async def get_conversation_history(
+        self,
+        user_id: str,
+        limit: int = 20,
+        conversation_id: str = None
+    ) -> List[Dict[str, str]]:
         """
         Retrieve the last N conversation turns in chronological order.
         Returns list of dicts with 'role' and 'content' keys.
+        If conversation_id is provided, returns only turns for that conversation.
         """
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
-                    SELECT role, content
-                    FROM (
-                        SELECT role, content, created_at
-                        FROM conversation_turns
-                        WHERE user_id = %s
-                        ORDER BY created_at DESC
-                        LIMIT %s
-                    ) recent
-                    ORDER BY created_at ASC
-                """, (user_id, limit))
+                if conversation_id:
+                    cur.execute("""
+                        SELECT role, content, created_at FROM conversation_turns
+                        WHERE user_id = %s AND conversation_id = %s
+                        ORDER BY created_at ASC LIMIT %s
+                    """, (user_id, conversation_id, limit))
+                else:
+                    cur.execute("""
+                        SELECT role, content
+                        FROM (
+                            SELECT role, content, created_at
+                            FROM conversation_turns
+                            WHERE user_id = %s
+                            ORDER BY created_at DESC
+                            LIMIT %s
+                        ) recent
+                        ORDER BY created_at ASC
+                    """, (user_id, limit))
                 rows = cur.fetchall()
-        return [{'role': row['role'], 'content': row['content']} for row in rows]
+        return [{'role': row['role'], 'content': row['content'], 'created_at': row.get('created_at')} for row in rows]
 
     # ==================== M1: Goals (PostgreSQL) ====================
 
@@ -463,6 +496,10 @@ class ContextManager:
         """
         if not self.weaviate:
             logger.warning("⚠️  Weaviate client not initialized - returning empty results")
+            return []
+
+        # BM25 requires a non-empty query — skip Weaviate for blank queries
+        if not query or not query.strip():
             return []
 
         try:

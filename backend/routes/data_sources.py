@@ -6,7 +6,8 @@ Endpoints for connecting external data sources (Google Calendar, etc.)
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
+from datetime import datetime, UTC
 import logging
 
 from services.data_ingestion import DataIngestionService
@@ -78,27 +79,28 @@ async def start_oauth(
 @router.get("/oauth/{source_type}/callback")
 async def oauth_callback(
     source_type: str,
-    code: str = Query(..., description="Authorization code from OAuth provider"),
-    state: str = Query(..., description="User ID passed in state parameter"),
+    code: Optional[str] = Query(None, description="Authorization code from OAuth provider"),
+    state: Optional[str] = Query(None, description="User ID passed in state parameter"),
+    error: Optional[str] = Query(None, description="Error code if user denied access"),
     ingestion: DataIngestionService = Depends(get_data_ingestion)
 ):
     """
-    Handle OAuth callback from authorization provider
+    Handle OAuth callback from authorization provider.
+    When the user denies access, the provider sends ?error=access_denied instead of ?code=xxx.
 
-    Args:
-        source_type: Type of source ('google_calendar', 'gmail', 'slack', etc.)
-        code: Authorization code
-        state: State parameter (contains signed user_id + source_type)
-
-    Returns:
-        RedirectResponse to frontend integrations page with success or error query param
-
-    Example:
-        GET /api/data-sources/oauth/google_calendar/callback?code=xxx&state=signed-state
-
-        Redirects to:
-        http://localhost:3000/dashboard/integrations?connected=google_calendar
+    Redirects to:
+        /dashboard/integrations?connected={source_type}  on success
+        /dashboard/integrations?error={source_type}_{reason}  on failure/denial
     """
+    # User denied or provider returned an error
+    if error or not code:
+        reason = error or "denied"
+        logger.info(f"OAuth denied for {source_type}: {reason}")
+        return RedirectResponse(
+            url=f"{settings.FRONTEND_URL}/dashboard/integrations?error={source_type}_{reason}",
+            status_code=302
+        )
+
     try:
         user_id = validate_signed_state(state=state, expected_source_type=source_type)
         result = await ingestion.handle_oauth_callback(
@@ -252,6 +254,24 @@ async def disconnect_source(
         raise HTTPException(status_code=500, detail="Failed to disconnect")
 
 
+def _event_explanation(start_time, now: datetime) -> Optional[str]:
+    """Generate a human-readable explanation for why an event is shown."""
+    if not start_time:
+        return None
+    delta = start_time - now
+    total_secs = delta.total_seconds()
+    if total_secs < 0:
+        return "Currently ongoing"
+    if total_secs < 3600:
+        mins = max(1, int(total_secs / 60))
+        return f"Starts in {mins} minute{'s' if mins != 1 else ''}"
+    hours = int(total_secs / 3600)
+    if hours < 24:
+        return f"Starts in {hours} hour{'s' if hours != 1 else ''}"
+    days = int(hours / 24)
+    return f"Coming up in {days} day{'s' if days != 1 else ''}"
+
+
 @router.get("/events/upcoming")
 async def get_upcoming_events(
     hours_ahead: int = Query(default=24, ge=1, le=168),
@@ -266,6 +286,7 @@ async def get_upcoming_events(
             embedding_service=embedding_service,
         )
         events = await context_manager.get_upcoming_events(str(user_id), hours_ahead=hours_ahead)
+        now = datetime.now(UTC)
         return {
             "status": "success",
             "events": [
@@ -276,6 +297,7 @@ async def get_upcoming_events(
                     "end_time": e.end_time.isoformat() if e.end_time else None,
                     "description": e.description,
                     "source": e.source,
+                    "explanation": _event_explanation(e.start_time, now),
                 }
                 for e in events
             ],

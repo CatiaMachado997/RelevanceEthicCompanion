@@ -7,6 +7,7 @@ This class is the MANDATORY GATEWAY for all user-facing actions.
 No action can bypass this evaluation.
 """
 
+import logging
 from typing import Optional
 from datetime import datetime
 
@@ -17,8 +18,10 @@ from .models import (
     UserContext,
     UserValue,
 )
-from .rules import TimeBasedRules, ManipulationDetector, EngagementDetector, TopicFilter
+from .rules import TimeBasedRules, ManipulationDetector, EngagementDetector, TopicFilter, semantic_manipulation_check
 from .audit import ESLAuditLogger
+
+logger = logging.getLogger(__name__)
 
 
 class EthicalSafeguardLayer:
@@ -38,7 +41,7 @@ class EthicalSafeguardLayer:
         # If VETOED, do nothing - this is correct behavior
     """
     
-    def __init__(self, context_manager, audit_logger: Optional[ESLAuditLogger] = None, db_connection_factory=None):
+    def __init__(self, context_manager, audit_logger: Optional[ESLAuditLogger] = None, db_connection_factory=None, llm=None):
         """
         Initialize the ESL
 
@@ -46,11 +49,13 @@ class EthicalSafeguardLayer:
             context_manager: ContextManager instance for retrieving user context
             audit_logger: ESLAuditLogger instance for logging decisions
             db_connection_factory: Optional callable for database connections (enables audit persistence)
+            llm: Optional LangChain LLM for semantic manipulation detection (E.2)
         """
         self.context_manager = context_manager
+        self.llm = llm
         # Use provided audit_logger, or create one with optional database persistence
         self.audit_logger = audit_logger or ESLAuditLogger(db_connection_factory=db_connection_factory)
-        
+
         # Initialize rule checkers
         self.time_rules = TimeBasedRules()
         self.manipulation_detector = ManipulationDetector()
@@ -100,7 +105,19 @@ class EthicalSafeguardLayer:
         if not manipulation_check.passed:
             applied_rules.append("ManipulationDetector")
             reasons.append(manipulation_check.reason)
-        
+
+        # Check 2b: Semantic manipulation detection (E.2 — LLM-based, only when llm available)
+        content_text = proposed_action.content or ""
+        if self.llm and len(content_text) > 100 and manipulation_check.passed:
+            try:
+                is_semantic_manipulation = await semantic_manipulation_check(content_text, self.llm)
+                if is_semantic_manipulation and manipulation_check.passed:
+                    applied_rules.append("SemanticManipulationDetector")
+                    reasons.append("LLM detected manipulative framing in content")
+                    manipulation_check = manipulation_check.model_copy(update={"passed": False, "reason": "Semantic manipulation detected"})
+            except Exception as e:
+                logger.debug(f"Semantic manipulation check skipped: {e}")
+
         # Check 3: Engagement vs. Assistance intent
         engagement_check = self.engagement_detector.check_intent(proposed_action)
         if not engagement_check.passed:
@@ -124,8 +141,23 @@ class EthicalSafeguardLayer:
             reasons.append("User is in focus mode; only critical actions allowed")
 
         # Step 3: Make decision
-        if violated_values or not manipulation_check.passed or not engagement_check.passed or not topic_check.passed or focus_mode_violated:
-            # VETO the action
+        # Advisory mode: chat responses never get null-vetoed for soft violations
+        advisory_mode = (
+            proposed_action.action_type == "chat_response" or
+            proposed_action.metadata.get("advisory_only", False)
+        )
+
+        # Hard veto: topic filter + focus mode always block even in advisory mode
+        hard_veto = (not topic_check.passed) or focus_mode_violated
+
+        # Soft violations: manipulation, engagement, time boundaries
+        soft_violated = (
+            (not manipulation_check.passed) or
+            (not engagement_check.passed) or
+            (not time_check.passed)
+        )
+
+        if hard_veto:
             decision = ESLDecision(
                 status=ESLDecisionStatus.VETOED,
                 reason="; ".join(reasons),
@@ -133,7 +165,27 @@ class EthicalSafeguardLayer:
                 applied_rules=applied_rules,
                 confidence=0.95
             )
-        
+
+        elif soft_violated and not advisory_mode:
+            # Non-advisory context: veto on any soft violation
+            decision = ESLDecision(
+                status=ESLDecisionStatus.VETOED,
+                reason="; ".join(reasons),
+                violated_values=violated_values,
+                applied_rules=applied_rules,
+                confidence=0.95
+            )
+
+        elif soft_violated and advisory_mode:
+            # Advisory mode: approve with warning — user always gets a response
+            decision = ESLDecision(
+                status=ESLDecisionStatus.APPROVED,
+                reason=f"Advisory: {'; '.join(reasons)}",
+                violated_values=[],
+                applied_rules=applied_rules,
+                confidence=0.7
+            )
+
         elif time_check.suggested_modification:
             # MODIFY the action (e.g., delay until appropriate time)
             decision = ESLDecision(
@@ -144,7 +196,7 @@ class EthicalSafeguardLayer:
                 applied_rules=applied_rules,
                 confidence=0.90
             )
-        
+
         else:
             # APPROVE the action
             decision = ESLDecision(
@@ -154,7 +206,19 @@ class EthicalSafeguardLayer:
                 applied_rules=applied_rules,
                 confidence=0.95
             )
-        
+
+        # Step 3b: Apply user-specific ESL sensitivity (E.1 — from value_conflict feedback)
+        if decision.status == ESLDecisionStatus.APPROVED and not hard_veto:
+            sensitivity = await self._get_user_sensitivity(user_id, proposed_action.content_type)
+            if sensitivity > 0.3 and decision.confidence < 0.7:
+                decision = ESLDecision(
+                    status=ESLDecisionStatus.MODIFIED,
+                    reason="Applying extra caution based on your previous feedback on this content type",
+                    violated_values=[],
+                    applied_rules=applied_rules + ["UserSensitivityBoost"],
+                    confidence=0.75
+                )
+
         # Step 4: Audit log (mandatory)
         await self.audit_logger.log_decision(
             user_id=user_id,
@@ -170,6 +234,51 @@ class EthicalSafeguardLayer:
         
         return decision
     
+    async def note_user_sensitivity(self, user_id: str, content_category: str, increment: float = 0.1) -> None:
+        """
+        Record that a user flagged a content_category as value_conflict.
+        Accumulates sensitivity_boost (capped at 1.0) in user_esl_sensitivity table.
+
+        Args:
+            user_id: User ID
+            content_category: Content type/category that was flagged
+            increment: How much to boost sensitivity (default 0.1)
+        """
+        from utils.db import get_db_connection
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO user_esl_sensitivity (user_id, content_category, sensitivity_boost)
+                        VALUES (%s, %s, %s)
+                        ON CONFLICT (user_id, content_category)
+                        DO UPDATE SET
+                            sensitivity_boost = LEAST(user_esl_sensitivity.sensitivity_boost + %s, 1.0),
+                            updated_at = NOW()
+                        """,
+                        (user_id, content_category, increment, increment)
+                    )
+                conn.commit()
+            logger.info(f"[ESL] Sensitivity boost +{increment} for user={user_id} category={content_category}")
+        except Exception as e:
+            logger.warning(f"Could not record ESL sensitivity for {user_id}: {e}")
+
+    async def _get_user_sensitivity(self, user_id: str, content_category: str) -> float:
+        """Return accumulated sensitivity boost for a user/category pair."""
+        from utils.db import get_db_connection
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT sensitivity_boost FROM user_esl_sensitivity WHERE user_id = %s AND content_category = %s",
+                        (user_id, content_category)
+                    )
+                    row = cur.fetchone()
+            return float(row['sensitivity_boost']) if row else 0.0
+        except Exception:
+            return 0.0
+
     async def check_content_safety(
         self,
         content: str,

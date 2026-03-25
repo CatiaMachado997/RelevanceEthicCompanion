@@ -22,7 +22,7 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-MOCK_USER_ID = "00000000-0000-0000-0000-000000000000"
+MOCK_USER_ID = settings.DEV_USER_ID
 _JWKS_CACHE: Dict[str, Any] = {"expires_at": None, "keys": []}
 _JWKS_CACHE_TTL = timedelta(minutes=10)
 
