@@ -3,12 +3,36 @@ import userEvent from '@testing-library/user-event'
 import ChatPage from '../app/dashboard/chat/page'
 import api from '../lib/api'
 
+// Helper to create a mock stream that immediately resolves with given tokens
+function makeMockStream(tokens: string[] = ['Hello from AI']) {
+  let cancelled = false
+  const promise = new Promise<void>((resolve) => {
+    // Use a microtask so onToken fires after the promise is returned
+    Promise.resolve().then(() => {
+      if (!cancelled) {
+        tokens.forEach(t => {
+          // invoke the onToken callback stored on the mock
+          const calls = (api.chat.stream as jest.Mock).mock.calls
+          if (calls.length > 0) {
+            const onToken = calls[calls.length - 1][1]
+            if (onToken) onToken(t)
+          }
+        })
+        resolve()
+      }
+    })
+  }) as Promise<void> & { cancel: () => void }
+  promise.cancel = () => { cancelled = true }
+  return promise
+}
+
 jest.mock('../lib/api', () => ({
   __esModule: true,
   default: {
     chat: {
       history: jest.fn(),
       send: jest.fn(),
+      stream: jest.fn(),
     },
   },
 }))
@@ -18,15 +42,28 @@ beforeAll(() => {
     value: jest.fn(),
     writable: true,
   })
+  // Mock clipboard
+  Object.defineProperty(navigator, 'clipboard', {
+    value: { writeText: jest.fn().mockResolvedValue(undefined) },
+    writable: true,
+  })
 })
 
 beforeEach(() => {
   jest.resetAllMocks()
   ;(api.chat.history as jest.Mock).mockResolvedValue({ messages: [] })
-  ;(api.chat.send as jest.Mock).mockResolvedValue({
-    response: 'Hello from AI',
-    timestamp: new Date().toISOString(),
-    esl_decision: null,
+  ;(api.chat.stream as jest.Mock).mockImplementation((_msg: string, onToken: (t: string) => void) => {
+    let cancelled = false
+    const promise = new Promise<void>((resolve) => {
+      Promise.resolve().then(() => {
+        if (!cancelled) {
+          onToken('Hello from AI')
+          resolve()
+        }
+      })
+    }) as Promise<void> & { cancel: () => void }
+    promise.cancel = () => { cancelled = true }
+    return promise
   })
 })
 
@@ -49,7 +86,7 @@ test('test_send_message_calls_api', async () => {
   await userEvent.type(textarea, 'Hello{Enter}')
 
   await waitFor(() => {
-    expect(api.chat.send).toHaveBeenCalledWith('Hello')
+    expect(api.chat.stream).toHaveBeenCalledWith('Hello', expect.any(Function))
   })
 })
 

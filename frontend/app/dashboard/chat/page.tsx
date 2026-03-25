@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '@/lib/api'
-import { Send, ChevronDown, ChevronUp } from 'lucide-react'
+import { Send, ChevronDown, ChevronUp, Copy, Bot, Square } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 
 interface Message {
@@ -10,6 +10,7 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   timestamp: string
+  streaming?: boolean
   esl_decision?: {
     status: 'APPROVED' | 'VETOED' | 'MODIFIED'
     reason: string
@@ -27,6 +28,40 @@ const EXAMPLE_PROMPTS = [
   "Help me prioritize my goals",
   "Summarize my week",
 ]
+
+function formatTime(iso: string): string {
+  try {
+    const d = new Date(iso)
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+  } catch {
+    return ''
+  }
+}
+
+function CopyButton({ content }: { content: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(content)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // clipboard unavailable
+    }
+  }, [content])
+
+  return (
+    <button
+      onClick={handleCopy}
+      aria-label="Copy message"
+      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md hover:bg-black/5"
+      style={{ color: copied ? '#4A7C59' : '#9e9e9e' }}
+    >
+      <Copy size={13} />
+    </button>
+  )
+}
 
 function ESLTag({ decision }: { decision: Message['esl_decision'] }) {
   const [expanded, setExpanded] = useState(false)
@@ -54,10 +89,15 @@ function ESLTag({ decision }: { decision: Message['esl_decision'] }) {
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(true)
-  const endRef = useRef<HTMLDivElement>(null)
+  const [userScrolled, setUserScrolled] = useState(false)
 
+  const endRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const streamRef = useRef<{ cancel: () => void } | null>(null)
+
+  // Load history on mount
   useEffect(() => {
     api.chat.history()
       .then(h => {
@@ -73,45 +113,95 @@ export default function ChatPage() {
       .finally(() => setLoadingHistory(false))
   }, [])
 
+  // Auto-scroll: only when user hasn't manually scrolled up
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
-
-  const send = async (text: string) => {
-    const msg = text.trim()
-    if (!msg || loading) return
-    setInput('')
-    setLoading(true)
-
-    const userMsg: Message = {
-      id: `u-${Date.now()}`,
-      role: 'user',
-      content: msg,
-      timestamp: new Date().toISOString(),
+    if (!userScrolled) {
+      endRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
-    setMessages(prev => [...prev, userMsg])
+  }, [messages, userScrolled])
+
+  // Detect manual scroll
+  const handleScroll = useCallback(() => {
+    const el = containerRef.current
+    if (!el) return
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    setUserScrolled(distanceFromBottom > 80)
+  }, [])
+
+  const handleSend = async (text?: string) => {
+    const userMessage = (text ?? input).trim()
+    if (!userMessage || isLoading) return
+
+    setInput('')
+    setIsLoading(true)
+    setUserScrolled(false)
+
+    // Add user message immediately
+    setMessages(prev => [
+      ...prev,
+      { id: `u-${Date.now()}`, role: 'user', content: userMessage, timestamp: new Date().toISOString() },
+    ])
+
+    // Add empty assistant message for streaming
+    const assistantId = `a-${Date.now()}`
+    setMessages(prev => [
+      ...prev,
+      { id: assistantId, role: 'assistant', content: '', timestamp: new Date().toISOString(), streaming: true },
+    ])
 
     try {
-      const result = await api.chat.send(msg)
-      const aiMsg: Message = {
-        id: `a-${Date.now()}`,
-        role: 'assistant',
-        content: result.response ?? 'No response.',
-        timestamp: result.timestamp ?? new Date().toISOString(),
-        esl_decision: result.esl_decision
-          ? { status: result.esl_decision.status, reason: result.esl_decision.reason }
-          : undefined,
+      const streamPromise = api.chat.stream(userMessage, (token) => {
+        setMessages(prev => {
+          const msgs = [...prev]
+          const last = msgs[msgs.length - 1]
+          if (last && last.streaming) {
+            msgs[msgs.length - 1] = { ...last, content: last.content + token }
+          }
+          return msgs
+        })
+      })
+
+      streamRef.current = streamPromise
+
+      await streamPromise
+
+      // Mark streaming complete
+      setMessages(prev => {
+        const msgs = [...prev]
+        const last = msgs[msgs.length - 1]
+        if (last && last.streaming) {
+          const { streaming: _s, ...rest } = last
+          msgs[msgs.length - 1] = rest
+        }
+        return msgs
+      })
+    } catch (e) {
+      // On cancellation or error, finalise the partial message
+      setMessages(prev => {
+        const msgs = [...prev]
+        const last = msgs[msgs.length - 1]
+        if (last && last.streaming) {
+          const { streaming: _s, ...rest } = last
+          // If nothing was received, show a fallback
+          msgs[msgs.length - 1] = {
+            ...rest,
+            content: rest.content || 'Something went wrong. Please try again.',
+          }
+        }
+        return msgs
+      })
+      if (e instanceof Error && e.message !== 'Stream cancelled') {
+        console.error(e)
       }
-      setMessages(prev => [...prev, aiMsg])
-    } catch {
-      setMessages(prev => [...prev, {
-        id: `err-${Date.now()}`,
-        role: 'assistant',
-        content: 'Something went wrong. Please try again.',
-        timestamp: new Date().toISOString(),
-      }])
     } finally {
-      setLoading(false)
+      streamRef.current = null
+      setIsLoading(false)
+    }
+  }
+
+  const handleStop = () => {
+    if (streamRef.current) {
+      streamRef.current.cancel()
     }
   }
 
@@ -128,7 +218,11 @@ export default function ChatPage() {
       }}
     >
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+      <div
+        ref={containerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto px-6 py-4 space-y-4"
+      >
         {loadingHistory && (
           <div className="space-y-3">
             {[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-3/4" />)}
@@ -144,7 +238,7 @@ export default function ChatPage() {
               {EXAMPLE_PROMPTS.map(p => (
                 <button
                   key={p}
-                  onClick={() => send(p)}
+                  onClick={() => handleSend(p)}
                   className="px-3 py-1.5 rounded-full text-sm transition-colors hover:bg-[#f5f5f5]"
                   style={{ border: '1px solid rgba(0,0,0,0.10)', color: '#6b6b6b' }}
                 >
@@ -156,50 +250,74 @@ export default function ChatPage() {
         )}
 
         {messages.map(msg => (
-          <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+          <div key={msg.id} className={`flex group ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             {msg.role === 'user' ? (
-              <div
-                className="max-w-[70%] px-4 py-2.5 rounded-2xl rounded-br-sm text-sm"
-                style={{ background: 'rgba(0,0,0,0.06)', color: '#0a0a0a' }}
-              >
-                {msg.content}
+              <div className="flex flex-col items-end gap-1 max-w-[70%]">
+                <div className="flex items-end gap-1.5">
+                  <CopyButton content={msg.content} />
+                  <div
+                    className="px-4 py-2.5 rounded-2xl rounded-br-sm text-sm"
+                    style={{ background: 'rgba(0,0,0,0.06)', color: '#0a0a0a' }}
+                  >
+                    {msg.content}
+                  </div>
+                  {/* User avatar */}
+                  <div
+                    className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0"
+                    style={{ background: '#332b36', color: '#ffffff' }}
+                    aria-label="User"
+                  >
+                    U
+                  </div>
+                </div>
+                {msg.timestamp && (
+                  <span className="text-[10px] pr-9" style={{ color: '#b0b0b0' }}>
+                    {formatTime(msg.timestamp)}
+                  </span>
+                )}
               </div>
             ) : (
-              <div
-                className="max-w-[70%] px-4 py-2.5 rounded-2xl rounded-bl-sm text-sm border-l-2"
-                style={{
-                  background: '#f9f9f9',
-                  color: '#0a0a0a',
-                  borderLeftColor: msg.esl_decision
-                    ? (ESL_COLORS[msg.esl_decision.status]?.leftBorder ?? '#E5E5E5')
-                    : '#E5E5E5',
-                }}
-              >
-                {msg.content}
-                {msg.esl_decision && <ESLTag decision={msg.esl_decision} />}
+              <div className="flex flex-col items-start gap-1 max-w-[70%]">
+                <div className="flex items-end gap-1.5">
+                  {/* Bot avatar */}
+                  <div
+                    className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
+                    style={{ background: '#f0ecf3', color: '#695e6e' }}
+                    aria-label="Assistant"
+                  >
+                    <Bot size={14} />
+                  </div>
+                  <div
+                    className="px-4 py-2.5 rounded-2xl rounded-bl-sm text-sm border-l-2"
+                    style={{
+                      background: '#f9f9f9',
+                      color: '#0a0a0a',
+                      borderLeftColor: msg.esl_decision
+                        ? (ESL_COLORS[msg.esl_decision.status]?.leftBorder ?? '#E5E5E5')
+                        : '#E5E5E5',
+                    }}
+                  >
+                    {msg.content}
+                    {msg.streaming && (
+                      <span
+                        className="inline-block w-0.5 h-3.5 ml-0.5 align-middle animate-pulse"
+                        style={{ background: '#695e6e' }}
+                        aria-hidden="true"
+                      />
+                    )}
+                    {msg.esl_decision && <ESLTag decision={msg.esl_decision} />}
+                  </div>
+                  {!msg.streaming && <CopyButton content={msg.content} />}
+                </div>
+                {msg.timestamp && !msg.streaming && (
+                  <span className="text-[10px] pl-9" style={{ color: '#b0b0b0' }}>
+                    {formatTime(msg.timestamp)}
+                  </span>
+                )}
               </div>
             )}
           </div>
         ))}
-
-        {loading && (
-          <div className="flex justify-start">
-            <div
-              className="px-4 py-3 rounded-2xl rounded-bl-sm"
-              style={{ background: '#f5f5f5', border: '1px solid rgba(0,0,0,0.06)' }}
-            >
-              <div className="flex gap-1">
-                {[0, 1, 2].map(i => (
-                  <span
-                    key={i}
-                    className="w-1.5 h-1.5 rounded-full animate-bounce"
-                    style={{ background: '#9e9e9e', animationDelay: `${i * 150}ms` }}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
 
         <div ref={endRef} />
       </div>
@@ -217,7 +335,7 @@ export default function ChatPage() {
             onKeyDown={e => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
-                send(input)
+                handleSend()
               }
             }}
             placeholder="Message your companion…"
@@ -231,15 +349,26 @@ export default function ChatPage() {
               overflowY: 'auto',
             }}
           />
-          <button
-            onClick={() => send(input)}
-            disabled={!input.trim() || loading}
-            className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-opacity disabled:opacity-40"
-            style={{ background: '#000000' }}
-            aria-label="Send message"
-          >
-            <Send size={15} color="#FFFFFF" />
-          </button>
+          {isLoading ? (
+            <button
+              onClick={handleStop}
+              aria-label="Stop generation"
+              className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-opacity hover:opacity-80"
+              style={{ background: '#332b36' }}
+            >
+              <Square size={13} color="#FFFFFF" fill="#FFFFFF" />
+            </button>
+          ) : (
+            <button
+              onClick={() => handleSend()}
+              disabled={!input.trim() || isLoading}
+              className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-opacity disabled:opacity-40"
+              style={{ background: '#000000' }}
+              aria-label="Send message"
+            >
+              <Send size={15} color="#FFFFFF" />
+            </button>
+          )}
         </div>
       </div>
     </div>

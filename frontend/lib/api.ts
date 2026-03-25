@@ -236,6 +236,64 @@ export const chatApi = {
     }),
 
   /**
+   * Stream a chat message via Server-Sent Events.
+   * Returns a Promise that resolves when the stream ends, and exposes a
+   * `cancel()` method to abort early.
+   */
+  stream: (
+    message: string,
+    onToken: (token: string) => void,
+  ): Promise<void> & { cancel: () => void } => {
+    let es: EventSource | null = null
+    let settled = false
+    let rejectRef: ((err: Error) => void) | null = null
+
+    const promise = new Promise<void>((resolve, reject) => {
+      rejectRef = reject
+      const url = `${API_URL}/api/chat/stream?message=${encodeURIComponent(message)}`
+      es = new EventSource(url, { withCredentials: true })
+
+      es.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data)
+          if (data.error) {
+            es!.close()
+            if (!settled) { settled = true; reject(new Error(data.error)) }
+            return
+          }
+          if (data.done) {
+            es!.close()
+            if (!settled) { settled = true; resolve() }
+            return
+          }
+          onToken(data.token)
+        } catch {
+          // ignore parse errors on individual tokens
+        }
+      }
+
+      es.onerror = () => {
+        es!.close()
+        if (!settled) { settled = true; reject(new Error('Stream error')) }
+      }
+    })
+
+    const extended = promise as Promise<void> & { cancel: () => void }
+    extended.cancel = () => {
+      if (es) {
+        es.close()
+        es = null
+      }
+      if (!settled && rejectRef) {
+        settled = true
+        rejectRef(new Error('Stream cancelled'))
+      }
+    }
+
+    return extended
+  },
+
+  /**
    * Get conversation history
    */
   history: (limit = 50, offset = 0) =>
