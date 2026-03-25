@@ -748,6 +748,13 @@ export const searchApi = {
   },
 }
 
+// ==================== Insight API ====================
+
+export const insightApi = {
+  daily: async (): Promise<{ insight: string; cached: boolean }> =>
+    apiRequest<{ insight: string; cached: boolean }>('/api/insight/daily'),
+}
+
 export const api = {
   values: valuesApi,
   chat: chatApi,
@@ -760,6 +767,7 @@ export const api = {
   settings: settingsApi,
   notifications: notificationsApi,
   search: searchApi,
+  insight: insightApi,
 };
 
 export default api;
