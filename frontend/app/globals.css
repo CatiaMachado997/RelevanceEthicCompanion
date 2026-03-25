@@ -2,45 +2,37 @@
 @plugin "tailwindcss-animate";
 
 :root {
-  /* Figma design system — warm purple-gray palette */
-  --gray-950: #2a222d;
-  --gray-900: #332b36;
-  --gray-600: #695e6e;
-  --gray-400: #b0a6b4;
-  --gray-200: #e4dee7;
-  --gray-50:  #f9f6fa;
-
-  --primary: 291 10% 19%;             /* #332b36 warm purple-gray */
-  --primary-foreground: 0 0% 100%;    /* white */
-
-  --background: 0 0% 100%;            /* #ffffff pure white */
-  --foreground: 291 10% 19%;          /* #332b36 warm purple-gray */
-  --card: 0 0% 100%;                  /* #ffffff */
-  --card-foreground: 291 10% 19%;
+  /* Neutral Material/Apple palette */
+  --background: 0 0% 96%;          /* #f5f5f5 — page surface */
+  --foreground: 0 0% 9%;           /* #171717 — primary text */
+  --card: 0 0% 100%;               /* #ffffff — card surface */
+  --card-foreground: 0 0% 9%;
   --popover: 0 0% 100%;
-  --popover-foreground: 291 10% 19%;
-  --secondary: 291 11% 95%;           /* #f9f6fa surface tint */
-  --secondary-foreground: 291 10% 19%;
-  --muted: 291 11% 95%;               /* #f9f6fa */
-  --muted-foreground: 291 8% 40%;     /* #695e6e */
-  --accent: 291 11% 95%;              /* #f9f6fa */
-  --accent-foreground: 291 10% 19%;
-  --destructive: 0 84% 60%;
+  --popover-foreground: 0 0% 9%;
+  --primary: 0 0% 10%;             /* #1a1a1a — black CTAs */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 94%;           /* #f0f0f0 — tinted surface */
+  --secondary-foreground: 0 0% 20%;
+  --muted: 0 0% 94%;               /* #f0f0f0 */
+  --muted-foreground: 0 0% 42%;    /* #6b6b6b */
+  --accent: 0 0% 94%;
+  --accent-foreground: 0 0% 10%;
+  --destructive: 0 72% 51%;        /* #d32f2f Material error */
   --destructive-foreground: 0 0% 100%;
-  --border: 291 14% 88%;              /* #e4dee7 */
-  --input: 291 14% 88%;               /* #e4dee7 */
-  --ring: 291 10% 19%;                /* #332b36 */
+  --border: 0 0% 88%;              /* #e0e0e0 */
+  --input: 0 0% 88%;               /* #e0e0e0 */
+  --ring: 0 0% 10%;                /* #1a1a1a */
+  --radius: 0.5rem;
 
-  --radius: 0.75rem;
-
-  --sidebar: 291 11% 95%;             /* #f9f6fa */
-  --sidebar-foreground: 291 8% 40%;   /* #695e6e */
-  --sidebar-primary: 291 10% 19%;     /* #332b36 */
+  /* Sidebar tokens */
+  --sidebar: 0 0% 100%;            /* #ffffff */
+  --sidebar-foreground: 0 0% 30%;  /* #4d4d4d */
+  --sidebar-primary: 0 0% 10%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 291 14% 88%;      /* #e4dee7 */
-  --sidebar-accent-foreground: 291 10% 19%;
-  --sidebar-border: 291 14% 88%;      /* #e4dee7 */
-  --sidebar-ring: 291 10% 19%;        /* #332b36 */
+  --sidebar-accent: 0 0% 94%;
+  --sidebar-accent-foreground: 0 0% 10%;
+  --sidebar-border: 0 0% 91%;      /* #e8e8e8 */
+  --sidebar-ring: 0 0% 10%;
 }
 
 @theme inline {
@@ -63,10 +55,10 @@
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 4px);
+  --radius-xl: calc(var(--radius) + 8px);
   --color-sidebar: hsl(var(--sidebar));
   --color-sidebar-foreground: hsl(var(--sidebar-foreground));
   --color-sidebar-primary: hsl(var(--sidebar-primary));
@@ -78,37 +70,27 @@
 }
 
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
+  * { @apply border-border outline-ring/50; }
+  body { @apply bg-background text-foreground; }
+}
+
+/* ── ESL status colours (unchanged) ── */
+:root {
+  --esl-approved: #4A7C59;
+  --esl-vetoed:   #B04A3A;
+  --esl-modified: #9B7A3D;
 }
 
 @keyframes shimmer {
-  0% { transform: translateX(-100%); }
+  0%   { transform: translateX(-100%); }
   100% { transform: translateX(100%); }
 }
-
 @keyframes esl-pulse {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.5); opacity: 0.5; }
+  0%, 100% { transform: scale(1);   opacity: 1;   }
+  50%       { transform: scale(1.5); opacity: 0.5; }
 }
-
-.animate-shimmer {
-  animation: shimmer 2s infinite;
-  will-change: transform;
-}
-
-.animate-esl-pulse {
-  animation: esl-pulse 150ms ease-out;
-  will-change: transform, opacity;
-}
-
+.animate-shimmer   { animation: shimmer   2s infinite; will-change: transform; }
+.animate-esl-pulse { animation: esl-pulse 150ms ease-out; will-change: transform, opacity; }
 @media (prefers-reduced-motion: reduce) {
-  .animate-shimmer,
-  .animate-esl-pulse {
-    animation: none !important;
-  }
+  .animate-shimmer, .animate-esl-pulse { animation: none !important; }
 }
