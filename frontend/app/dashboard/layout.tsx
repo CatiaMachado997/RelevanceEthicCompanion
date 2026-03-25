@@ -30,13 +30,15 @@ export default function DashboardLayout({
     })
   }, [])
 
+  const isDev = process.env.NEXT_PUBLIC_ENVIRONMENT === 'development'
+
   useEffect(() => {
-    if (!loading && !isAuthenticated) {
+    if (!isDev && !loading && !isAuthenticated) {
       router.push('/login')
     }
-  }, [loading, isAuthenticated, router])
+  }, [loading, isAuthenticated, router, isDev])
 
-  if (loading) return null
+  if (!isDev && loading) return null
 
   return (
     <div className="flex h-screen" style={{ background: '#ffffff' }}>
