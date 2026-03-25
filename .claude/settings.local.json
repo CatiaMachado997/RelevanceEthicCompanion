@@ -31,7 +31,9 @@
       "Bash(pytest tests/test_conversation_history.py -v --tb=short)",
       "Bash(pytest --no-header -q)",
       "mcp__figma__get_metadata",
-      "Bash(pytest tests/test_chat_stream.py -v)"
+      "Bash(pytest tests/test_chat_stream.py -v)",
+      "Bash(node -e \"require\\(''remark-gfm''\\); console.log\\(''remark-gfm ok''\\)\")",
+      "Bash(node -e \"require\\(''rehype-highlight''\\); console.log\\(''rehype-highlight ok''\\)\")"
     ]
   }
 }

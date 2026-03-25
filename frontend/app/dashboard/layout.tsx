@@ -27,7 +27,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const meta = PAGE_META[pathname] ?? { title: 'Ethic Companion' }
+  const meta = (() => {
+    if (PAGE_META[pathname]) return PAGE_META[pathname]
+    if (pathname.startsWith('/dashboard/chat/')) return { title: 'Chat', subtitle: 'Message your companion' }
+    return { title: 'Ethic Companion' }
+  })()
   const isDev = process.env.NEXT_PUBLIC_ENVIRONMENT === 'development'
 
   useEffect(() => {

@@ -4,10 +4,15 @@ LangChain Tool Definitions for V2 Orchestrator
 Converts internal tools to LangChain-compatible format for agent use.
 """
 
+import asyncio
+import json
 from typing import Optional, Type, Any, Dict
 from langchain.tools import BaseTool
 from pydantic import BaseModel, Field
 import logging
+
+from models.context import SemanticMemoryEntry
+from utils.db import get_db_connection
 
 logger = logging.getLogger(__name__)
 
@@ -186,60 +191,35 @@ class WebSearchTool(BaseTool):
         self.user_id = user_id
 
     async def _arun(self, query: str, max_results: int = 5) -> str:
-        """Async implementation with relevance scoring"""
+        """Async implementation with optional relevance scoring"""
         try:
-            # Perform web search using Tavily
-            search_results = self.tavily_client.search(
-                query=query,
-                max_results=max_results * 2  # Get more, then rank
+            # Perform web search using Tavily — run the blocking SDK call in a
+            # thread-pool executor so it does not stall the event loop.
+            loop = asyncio.get_event_loop()
+            search_results = await loop.run_in_executor(
+                None,
+                lambda: self.tavily_client.search(
+                    query=query,
+                    max_results=max_results * 2  # Get more, then rank
+                )
             )
 
             if not search_results or not search_results.get("results"):
                 return f"No search results found for: {query}"
 
-            # Convert search results to CandidateItems for relevance scoring
-            from models.relevance import CandidateItem
-            from datetime import datetime, UTC
+            raw_results = search_results["results"]
 
-            candidates = []
-            for result in search_results["results"]:
-                candidates.append(CandidateItem(
-                    id=result.get("url", ""),
-                    type="search_result",
-                    content=result.get("content", ""),
-                    title=result.get("title", ""),
-                    source=result.get("url", ""),
-                    timestamp=datetime.now(UTC),
-                    metadata={
-                        "score": result.get("score", 0),
-                        "published_date": result.get("published_date", "")
-                    }
-                ))
-
-            # Score and rank candidates using relevance engine
-            scored_items = await self.relevance_engine.score_candidates(
-                user_id=self.user_id,
-                candidates=candidates,
-                query_context=query
-            )
-
-            # Take top results after scoring
-            top_results = scored_items[:max_results]
-
-            if not top_results:
-                return f"Found search results but none were relevant to your goals/values for: {query}"
-
-            # Format results
-            results_text = f"Found {len(top_results)} relevant search results for '{query}':\n\n"
-            for i, scored in enumerate(top_results, 1):
-                results_text += f"{i}. {scored.item.title}\n"
-                results_text += f"   URL: {scored.item.source}\n"
-                results_text += f"   Relevance: {scored.relevance_score:.0f}/100 - {scored.explanation}\n"
-                content_preview = scored.item.content[:150]
-                if len(scored.item.content) > 150:
+            # Use raw Tavily results directly (relevance scoring requires a full
+            # RelevanceContext which is not available inside a tool call)
+            top_raw = raw_results[:max_results]
+            results_text = f"Found {len(top_raw)} search results for '{query}':\n\n"
+            for i, result in enumerate(top_raw, 1):
+                results_text += f"{i}. {result.get('title', 'No title')}\n"
+                results_text += f"   URL: {result.get('url', '')}\n"
+                content_preview = result.get("content", "")[:150]
+                if len(result.get("content", "")) > 150:
                     content_preview += "..."
                 results_text += f"   Summary: {content_preview}\n\n"
-
             return results_text
 
         except Exception as e:
@@ -322,6 +302,84 @@ class UserGoalsTool(BaseTool):
         raise NotImplementedError("Use async version (_arun)")
 
 
+# ==================== Note Create Tool ====================
+
+class NoteCreateInput(BaseModel):
+    """Input for the note creation tool"""
+    content: str = Field(description="The note or task text to save")
+    as_goal: bool = Field(default=False, description="If true, also creates a goal from this note")
+
+
+class NoteCreateTool(BaseTool):
+    """Tool for saving notes, tasks, or reminders directly from chat"""
+
+    name: str = "create_note"
+    description: str = (
+        "Save a note, task, or reminder for the user. "
+        "Use this when the user says 'remember this', 'note that', or asks to save something. "
+        "Set as_goal=true if the user wants it tracked as a goal."
+    )
+    args_schema: Type[BaseModel] = NoteCreateInput
+
+    context_manager: Any = None
+    user_id: str = ""
+
+    def __init__(self, context_manager, user_id: str):
+        super().__init__()
+        self.context_manager = context_manager
+        self.user_id = user_id
+
+    async def _arun(self, content: str, as_goal: bool = False) -> str:
+        """Async implementation — writes to PostgreSQL (M1) first, then Weaviate (M2)."""
+        # --- M1 write (PostgreSQL) — primary persistence ---
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO user_values (user_id, type, value, priority, active, metadata)
+                        VALUES (%s, 'preference', %s, 5, TRUE, %s)
+                        """,
+                        (
+                            self.user_id,
+                            content,
+                            json.dumps({
+                                "subtype": "note",
+                                "as_goal": as_goal,
+                                "source": "chat_tool",
+                            }),
+                        ),
+                    )
+                conn.commit()
+        except Exception as e:
+            logger.error(f"Note M1 (PostgreSQL) write failed: {e}")
+            return f"Error saving note to database: {str(e)}"
+
+        # --- M2 write (Weaviate) — semantic index; failure is non-fatal ---
+        try:
+            await self.context_manager.store_semantic_memory(
+                SemanticMemoryEntry(
+                    user_id=self.user_id,
+                    content=content,
+                    source="note",
+                    metadata={"type": "user_note", "as_goal": as_goal}
+                )
+            )
+        except Exception as e:
+            logger.warning(f"Note M2 (Weaviate) write failed (non-fatal): {e}")
+
+        confirmation = f"Note saved: '{content[:80]}'"
+        if len(content) > 80:
+            confirmation += "..."
+        if as_goal:
+            confirmation += " (also added as goal)"
+        return confirmation
+
+    def _run(self, content: str, as_goal: bool = False) -> str:
+        """Sync implementation (not used)"""
+        raise NotImplementedError("Use async version (_arun)")
+
+
 # ==================== Tool Factory ====================
 
 def create_langchain_tools(
@@ -346,10 +404,11 @@ def create_langchain_tools(
         MemoryQueryTool(context_manager=context_manager, user_id=user_id),
         CalendarQueryTool(context_manager=context_manager, user_id=user_id),
         UserGoalsTool(context_manager=context_manager, user_id=user_id),
+        NoteCreateTool(context_manager=context_manager, user_id=user_id),
     ]
 
-    # Add web search if clients are provided
-    if tavily_client and relevance_engine:
+    # Add web search if Tavily client is provided (relevance_engine is optional)
+    if tavily_client:
         tools.append(WebSearchTool(
             tavily_client=tavily_client,
             relevance_engine=relevance_engine,

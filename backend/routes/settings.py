@@ -22,6 +22,10 @@ DEFAULTS = {
     "esl_alerts": True,
     "share_analytics": False,
     "pii_protection": True,
+    "weight_goal_alignment": 1.0,
+    "weight_time_sensitivity": 1.0,
+    "weight_personal_values": 1.0,
+    "weight_context_relevance": 1.0,
 }
 
 
@@ -39,11 +43,15 @@ class UpdateSettingsRequest(BaseModel):
     esl_alerts: bool = True
     share_analytics: bool = False
     pii_protection: bool = True
+    weight_goal_alignment: float = 1.0
+    weight_time_sensitivity: float = 1.0
+    weight_personal_values: float = 1.0
+    weight_context_relevance: float = 1.0
 
 
 @router.get("/", response_model=dict)
 async def get_settings(
-    user_id: str = Depends(get_current_read_user_id),
+    user_id: str = Depends(get_current_user_id),
 ):
     """Fetch user settings. Returns defaults if no row exists yet."""
     try:
@@ -91,15 +99,21 @@ async def update_settings(
                     """
                     INSERT INTO user_settings
                         (user_id, email_notifications, push_notifications,
-                         esl_alerts, share_analytics, pii_protection)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                         esl_alerts, share_analytics, pii_protection,
+                         weight_goal_alignment, weight_time_sensitivity,
+                         weight_personal_values, weight_context_relevance)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (user_id) DO UPDATE SET
-                        email_notifications = EXCLUDED.email_notifications,
-                        push_notifications  = EXCLUDED.push_notifications,
-                        esl_alerts          = EXCLUDED.esl_alerts,
-                        share_analytics     = EXCLUDED.share_analytics,
-                        pii_protection      = EXCLUDED.pii_protection,
-                        updated_at          = NOW()
+                        email_notifications      = EXCLUDED.email_notifications,
+                        push_notifications       = EXCLUDED.push_notifications,
+                        esl_alerts               = EXCLUDED.esl_alerts,
+                        share_analytics          = EXCLUDED.share_analytics,
+                        pii_protection           = EXCLUDED.pii_protection,
+                        weight_goal_alignment    = EXCLUDED.weight_goal_alignment,
+                        weight_time_sensitivity  = EXCLUDED.weight_time_sensitivity,
+                        weight_personal_values   = EXCLUDED.weight_personal_values,
+                        weight_context_relevance = EXCLUDED.weight_context_relevance,
+                        updated_at               = NOW()
                     RETURNING *
                     """,
                     (
@@ -109,6 +123,10 @@ async def update_settings(
                         request.esl_alerts,
                         request.share_analytics,
                         request.pii_protection,
+                        request.weight_goal_alignment,
+                        request.weight_time_sensitivity,
+                        request.weight_personal_values,
+                        request.weight_context_relevance,
                     ),
                 )
                 saved = cur.fetchone()

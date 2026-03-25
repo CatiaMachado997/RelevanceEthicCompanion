@@ -16,6 +16,7 @@ Every user-facing action MUST flow through ESL:
 from typing import AsyncGenerator, Dict, Any, Optional, List
 from datetime import datetime, UTC
 import logging
+import re
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_groq import ChatGroq
@@ -26,10 +27,48 @@ from esl.engine import EthicalSafeguardLayer
 from esl.audit import ESLAuditLogger
 from services.context_manager import ContextManager
 from services.langchain_tools import create_langchain_tools
+from services.feedback_processor import FeedbackProcessor
 from models.context import SemanticMemoryEntry
+from utils.db import get_db_connection
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+# ── Daily token tracker (in-memory, resets per day) ──────────────────────────
+_DAILY_TOKEN_LIMIT = 100_000
+_daily_tokens: Dict[str, Dict[str, Any]] = {}
+
+
+def _estimate_tokens(text: str) -> int:
+    return max(1, len(text) // 4)
+
+
+def _check_token_warning(user_id: str, new_tokens: int) -> Optional[dict]:
+    """Update daily counter and return a warning event dict if a threshold is crossed."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    entry = _daily_tokens.get(user_id)
+    if not entry or entry["date"] != today:
+        _daily_tokens[user_id] = {"date": today, "used": 0, "warned_75": False, "warned_85": False}
+        entry = _daily_tokens[user_id]
+    entry["used"] += new_tokens
+    used = entry["used"]
+    remaining = max(0, _DAILY_TOKEN_LIMIT - used)
+    pct = used / _DAILY_TOKEN_LIMIT
+    if pct >= 0.85 and not entry["warned_85"]:
+        entry["warned_85"] = True
+        return {
+            "event": "rate_limit_warning", "level": "high",
+            "used_pct": int(pct * 100),
+            "message": f"⚠️ ~15% of your daily token limit remaining (~{remaining:,} tokens). Switch to a faster model to save tokens.",
+        }
+    if pct >= 0.75 and not entry["warned_75"]:
+        entry["warned_75"] = True
+        return {
+            "event": "rate_limit_warning", "level": "medium",
+            "used_pct": int(pct * 100),
+            "message": f"~25% of your daily token limit remaining (~{remaining:,} tokens).",
+        }
+    return None
 
 
 class ActionType:
@@ -75,7 +114,8 @@ class OrchestratorV2:
         context_manager: ContextManager,
         relevance_engine=None,
         tavily_client=None,
-        db_connection_factory=None
+        db_connection_factory=None,
+        model: str = "llama-3.3-70b-versatile",
     ):
         """
         Initialize V2 Orchestrator
@@ -90,29 +130,38 @@ class OrchestratorV2:
         self.relevance_engine = relevance_engine
         self.tavily_client = tavily_client
 
-        # ESL remains the mandatory gateway
-        self.esl = EthicalSafeguardLayer(
-            context_manager,
-            audit_logger=ESLAuditLogger(db_connection_factory=db_connection_factory)
-        )
-
         # Initialize Groq LLM for agent (Gemini only used for embeddings)
         self.llm = ChatGroq(
-            model="llama-3.3-70b-versatile",  # Fast, high-quality Llama model
+            model=model,
             groq_api_key=settings.GROQ_API_KEY,
             temperature=0.7
         )
 
+        # ESL remains the mandatory gateway — pass llm so semantic manipulation check (E.2) works
+        self.esl = EthicalSafeguardLayer(
+            context_manager,
+            audit_logger=ESLAuditLogger(db_connection_factory=db_connection_factory),
+            llm=self.llm,
+        )
+
+        # Feedback-driven personalisation
+        self.feedback_processor = FeedbackProcessor()
+
         # Simplified approach using direct LLM calls with context
         # (LangGraph agents would be added in future iterations)
 
-    def _build_system_prompt(self, user_context: Dict[str, Any]) -> str:
+    def _build_system_prompt(self, user_context: Dict[str, Any], adjustments: dict = None) -> str:
         """
         Create context-rich system prompt with user values and goals.
 
         This is where YOUR intelligence goes - not in the model.
+
+        Args:
+            user_context: Formatted user context dict from _get_user_context_text.
+            adjustments: Optional feedback-derived signal multipliers
+                         (e.g. {'goal_alignment': 1.3, 'query_match': 0.8}).
         """
-        return f"""You are an AI assistant helping {user_context['user_name']}.
+        prompt = f"""You are an AI assistant helping {user_context['user_name']}.
 
 CRITICAL: Respect user boundaries and values at all times.
 
@@ -138,7 +187,27 @@ Instructions:
 4. Reference relevant goals and events when appropriate
 5. Maintain user privacy and values at all times
 
-Respond in a helpful, direct manner that aligns with the user's stated goals and values."""
+Respond in a helpful, direct manner that aligns with the user's stated goals and values.
+
+Tools available — only call a tool when it is clearly necessary:
+- query_memory: ONLY if the user explicitly asks about a past conversation or you need specific prior context not already in this prompt
+- query_calendar: ONLY if the user asks about their schedule or specific events
+- web_search: ONLY if the user asks about current events, recent news, or live data after your training cutoff
+- get_user_goals: ONLY if the user asks about their goals specifically
+- create_note: ONLY if the user explicitly asks to save or remember something
+
+For greetings, general questions, or anything answerable from the context above — respond directly WITHOUT calling any tools."""
+
+        if adjustments:
+            notes = []
+            if adjustments.get("goal_alignment", 1.0) > 1.1:
+                notes.append("User prefers responses highly aligned with their active goals.")
+            if adjustments.get("query_match", 1.0) < 0.9:
+                notes.append("User finds literal keyword matches less useful; prioritise goal relevance.")
+            if notes:
+                prompt += "\nPersonalisation signals from user feedback:\n" + "\n".join(f"- {n}" for n in notes)
+
+        return prompt
 
     async def _get_user_context_text(self, user_id: str) -> Dict[str, Any]:
         """
@@ -191,7 +260,9 @@ Respond in a helpful, direct manner that aligns with the user's stated goals and
             "recent_topics": recent_topics_text
         }
 
-    async def _get_conversation_history(self, user_id: str, limit: int = 20) -> List:
+    async def _get_conversation_history(
+        self, user_id: str, limit: int = 20, conversation_id: str = None
+    ) -> List:
         """
         Retrieve recent conversation turns from PostgreSQL (M1), sorted chronologically.
 
@@ -199,25 +270,73 @@ Respond in a helpful, direct manner that aligns with the user's stated goals and
 
         Returns a list of LangChain HumanMessage/AIMessage objects ready to pass
         to the LLM so it has full conversational context.
+        If conversation_id is provided, only turns from that conversation are returned.
         """
         try:
-            turns = await self.context_manager.get_conversation_history(user_id, limit=limit)
+            turns = await self.context_manager.get_conversation_history(
+                user_id, limit=limit, conversation_id=conversation_id
+            )
             history = []
             for turn in turns:
+                content = turn.get('content') or ''
+                if not content:
+                    continue
                 if turn['role'] == 'user':
-                    history.append(HumanMessage(content=turn['content']))
+                    history.append(HumanMessage(content=content))
                 elif turn['role'] == 'assistant':
-                    history.append(AIMessage(content=turn['content']))
+                    history.append(AIMessage(content=content))
             return history
         except Exception as e:
             logger.warning(f"Could not retrieve conversation history: {e}")
             return []
 
+    def _get_llm_with_tools(self, user_id: str):
+        """Return LLM bound to user-specific tools, plus a name→tool map."""
+        tools = create_langchain_tools(
+            context_manager=self.context_manager,
+            user_id=user_id,
+            tavily_client=self.tavily_client,
+            relevance_engine=self.relevance_engine,
+        )
+        tool_map = {t.name: t for t in tools}
+        if tools:
+            return self.llm.bind_tools(tools), tool_map
+        return self.llm, tool_map
+
+    async def _execute_tool_call(self, tool_call: dict, user_id: str, tool_map: dict = None) -> str:
+        """Execute a single tool call and return its string result.
+
+        Args:
+            tool_call: Dict with 'name', 'args', and 'id' keys from the LLM response.
+            user_id: Current user ID (used as fallback if tool_map is not provided).
+            tool_map: Pre-built name→tool mapping from _get_llm_with_tools.
+                      If omitted, tools are re-created (legacy fallback).
+        """
+        if tool_map is None:
+            # Fallback: rebuild tool map (avoids breaking any external callers)
+            tools = create_langchain_tools(
+                context_manager=self.context_manager,
+                user_id=user_id,
+                tavily_client=self.tavily_client,
+                relevance_engine=self.relevance_engine,
+            )
+            tool_map = {t.name: t for t in tools}
+        tool = tool_map.get(tool_call['name'])
+        if not tool:
+            return f"Unknown tool: {tool_call['name']}"
+        try:
+            result = await tool._arun(**tool_call['args'])
+            return str(result)
+        except Exception as e:
+            logger.error(f"Tool {tool_call['name']} failed: {e}")
+            return f"Tool error: {e}"
+
     async def handle_user_message(
         self,
         user_id: str,
         message: str,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Dict[str, Any]] = None,
+        conversation_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Handle user message with Groq LLM + ESL protection.
@@ -241,23 +360,41 @@ Respond in a helpful, direct manner that aligns with the user's stated goals and
         try:
             # Step 1: Get user context and build prompt (YOUR context building)
             user_context = await self._get_user_context_text(user_id)
-            system_prompt = self._build_system_prompt(user_context)
+            try:
+                adjustments = await self.feedback_processor.get_user_adjustments(user_id)
+            except Exception:
+                adjustments = {}
+            system_prompt = self._build_system_prompt(user_context, adjustments=adjustments)
 
             # Step 2: Call Groq LLM (stateless text generation)
             logger.info(f"Generating response for user {user_id}: {message[:50]}...")
 
             # Retrieve recent conversation history so the LLM has full context
-            conversation_history = await self._get_conversation_history(user_id)
+            conversation_history = await self._get_conversation_history(
+                user_id, conversation_id=conversation_id
+            )
 
             # Build messages: system prompt + prior turns + current user message
-            lc_messages = [
+            messages = [
                 SystemMessage(content=system_prompt),
                 *conversation_history,
                 HumanMessage(content=message)
             ]
 
-            response = await self.llm.ainvoke(lc_messages)
-            generated_response = response.content
+            # Agent loop: allow up to 5 tool-call rounds before final text response
+            llm_with_tools, tool_map = self._get_llm_with_tools(user_id)
+            MAX_TOOL_ROUNDS = 5
+            response = None
+            for _ in range(MAX_TOOL_ROUNDS):
+                response = await llm_with_tools.ainvoke(messages)
+                if not getattr(response, 'tool_calls', None):
+                    break
+                messages.append(response)
+                for tc in response.tool_calls:
+                    tool_result = await self._execute_tool_call(tc, user_id, tool_map=tool_map)
+                    messages.append(ToolMessage(content=tool_result, tool_call_id=tc['id']))
+
+            generated_response = response.content if response else ""
 
             logger.info(f"Generated response: {generated_response[:100]}...")
 
@@ -281,7 +418,28 @@ Respond in a helpful, direct manner that aligns with the user's stated goals and
             )
 
             # Store user turn unconditionally (user said what they said - fine to record)
-            await self.context_manager.store_conversation_turn(user_id, 'user', message)
+            await self.context_manager.store_conversation_turn(
+                user_id, 'user', message, conversation_id=conversation_id
+            )
+
+            # Auto-title conversation on first message
+            if conversation_id:
+                try:
+                    with get_db_connection() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                "SELECT COUNT(*) as cnt FROM conversation_turns WHERE conversation_id = %s",
+                                (conversation_id,)
+                            )
+                            row = cur.fetchone()
+                            if row['cnt'] <= 1:  # first message
+                                title = message[:60] + ("\u2026" if len(message) > 60 else "")
+                                cur.execute(
+                                    "UPDATE conversations SET title = %s, updated_at = NOW() WHERE id = %s",
+                                    (title, conversation_id)
+                                )
+                except Exception as e:
+                    logger.warning(f"Could not auto-title conversation: {e}")
 
             # Step 4 & 5: ESL evaluation (MANDATORY - YOUR ethical rules)
             decision_result = await self.decide_action(
@@ -306,7 +464,9 @@ Respond in a helpful, direct manner that aligns with the user's stated goals and
                     modified = decision.modified_action
                     if hasattr(modified, 'content') and modified.content:
                         assistant_content = modified.content
-                await self.context_manager.store_conversation_turn(user_id, 'assistant', assistant_content)
+                await self.context_manager.store_conversation_turn(
+                    user_id, 'assistant', assistant_content, conversation_id=conversation_id
+                )
 
             # Step 6: Return result
             return {
@@ -332,38 +492,154 @@ Respond in a helpful, direct manner that aligns with the user's stated goals and
     async def stream_message(
         self,
         user_id: str,
-        message: str
-    ) -> AsyncGenerator[str, None]:
+        message: str,
+        conversation_id: Optional[str] = None,
+    ) -> AsyncGenerator[dict, None]:
         """
-        Yield tokens from the Groq LLM response one at a time via streaming.
+        Yield SSE event dicts from the Groq LLM response.
 
-        Uses the same context-building and LLM client as handle_user_message.
-        ESL evaluation is skipped during streaming; callers should treat the
-        streamed content as a draft — production callers may wish to run ESL
-        on the aggregated response after streaming completes.
+        Emits tool_use / tool_result events before text tokens so the frontend
+        can show activity indicators.  ESL runs in advisory mode after streaming
+        completes — the user always receives a response.
 
-        Args:
-            user_id: User ID
-            message: User's message
-
-        Yields:
-            Individual text tokens from the LLM response.
+        Yields dicts:
+            {"event": "tool_use",    "tool": "web_search"}
+            {"event": "tool_result", "tool": "web_search"}
+            {"event": "token",       "token": "Hello"}
+            {"event": "done"}
         """
         user_context = await self._get_user_context_text(user_id)
-        system_prompt = self._build_system_prompt(user_context)
+        try:
+            adjustments = await self.feedback_processor.get_user_adjustments(user_id)
+        except Exception:
+            adjustments = {}
+        system_prompt = self._build_system_prompt(user_context, adjustments=adjustments) or "You are a helpful assistant."
+        conversation_history = await self._get_conversation_history(
+            user_id, conversation_id=conversation_id
+        )
 
-        conversation_history = await self._get_conversation_history(user_id)
-
-        lc_messages = [
+        messages = [
             SystemMessage(content=system_prompt),
             *conversation_history,
             HumanMessage(content=message)
         ]
 
-        async for chunk in self.llm.astream(lc_messages):
-            token = chunk.content
-            if token:
-                yield token
+        llm_with_tools, tool_map = self._get_llm_with_tools(user_id)
+
+        full_response = ""
+        try:
+            # Tool rounds (non-streaming; tool results must be complete before next call)
+            tool_calls_made = False
+            final_response = None
+            for _ in range(5):
+                response = await llm_with_tools.ainvoke(messages)
+                if not getattr(response, 'tool_calls', None):
+                    final_response = response  # save — avoids a second LLM call
+                    break
+                tool_calls_made = True
+                messages.append(response)
+                for tc in response.tool_calls:
+                    yield {"event": "tool_use", "tool": tc['name']}
+                    result = await self._execute_tool_call(tc, user_id, tool_map=tool_map)
+                    yield {"event": "tool_result", "tool": tc['name']}
+                    messages.append(ToolMessage(content=result, tool_call_id=tc['id']))
+
+            # Produce the final textual response
+            if final_response and final_response.content:
+                # Use the response we already have — avoids a redundant second LLM call
+                full_response = final_response.content
+                yield {"event": "token", "token": full_response}
+            else:
+                # Either no tools were called and ainvoke returned empty content,
+                # or 5 tool rounds exhausted without a text response.
+                # Force a text reply using the unbound LLM (no tool_call chunks).
+                async for chunk in self.llm.astream(messages):
+                    if chunk.content:
+                        full_response += chunk.content
+                        yield {"event": "token", "token": chunk.content}
+
+        except Exception as e:
+            err_str = str(e)
+            if any(k in err_str for k in ("rate_limit_exceeded", "Rate limit", "429", "TPD", "tokens per day", "RateLimitError")):
+                retry_match = re.search(r'try again in ([\w\d .]+?)\.?(?:\s|$)', err_str, re.IGNORECASE)
+                raw = retry_match.group(1).strip() if retry_match else "a few minutes"
+                # Format "22m43.391999999s" → "22m 43s"
+                m = re.match(r'(\d+)m([\d.]+)s', raw)
+                retry_after = f"{m.group(1)}m {int(float(m.group(2)))}s" if m else raw
+                yield {
+                    "event": "rate_limit_exceeded",
+                    "retry_after": retry_after,
+                    "message": f"Daily token limit reached. Try again in {retry_after}, or switch to a faster model like Llama 3.1 8B.",
+                }
+                yield {"event": "done"}
+                return
+            raise
+
+        # Emit token warning if approaching daily limit
+        estimated = _estimate_tokens(message) + _estimate_tokens(full_response)
+        warning = _check_token_warning(user_id, estimated)
+        if warning:
+            yield warning
+
+        yield {"event": "done"}
+
+        # Post-stream: store conversation + run ESL advisory (non-blocking)
+        await self._post_stream_store(user_id, message, full_response, conversation_id=conversation_id)
+
+    async def _post_stream_store(
+        self,
+        user_id: str,
+        user_msg: str,
+        assistant_msg: str,
+        conversation_id: str = None,
+    ):
+        """Store conversation turns in M1+M2 and run ESL in advisory mode."""
+        try:
+            await self.context_manager.store_conversation_turn(
+                user_id, 'user', user_msg, conversation_id=conversation_id
+            )
+            # Auto-title conversation on first message
+            if conversation_id:
+                try:
+                    with get_db_connection() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                "SELECT COUNT(*) as cnt FROM conversation_turns WHERE conversation_id = %s",
+                                (conversation_id,)
+                            )
+                            row = cur.fetchone()
+                            if row['cnt'] <= 1:  # first message
+                                title = user_msg[:60] + ("\u2026" if len(user_msg) > 60 else "")
+                                cur.execute(
+                                    "UPDATE conversations SET title = %s, updated_at = NOW() WHERE id = %s",
+                                    (title, conversation_id)
+                                )
+                except Exception as e:
+                    logger.warning(f"Could not auto-title conversation: {e}")
+            await self.context_manager.store_conversation_turn(
+                user_id, 'assistant', assistant_msg, conversation_id=conversation_id
+            )
+            for entry in [
+                SemanticMemoryEntry(
+                    user_id=user_id, content=user_msg,
+                    source="conversation", metadata={"role": "user"}
+                ),
+                SemanticMemoryEntry(
+                    user_id=user_id, content=assistant_msg,
+                    source="conversation", metadata={"role": "assistant"}
+                ),
+            ]:
+                await self.context_manager.store_semantic_memory(entry)
+            # Advisory ESL — logs only, never blocks the already-delivered response
+            await self.decide_action(
+                user_id=user_id,
+                action_type=ActionType.CHAT_RESPONSE,
+                content=assistant_msg,
+                urgency=UrgencyLevel.LOW,
+                metadata={"advisory_only": True}
+            )
+        except Exception as e:
+            logger.warning(f"Post-stream store failed: {e}")
 
     async def decide_action(
         self,

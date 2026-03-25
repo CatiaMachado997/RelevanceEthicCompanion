@@ -5,12 +5,53 @@ Individual rule checkers for the Ethical Safeguard Layer
 Each rule is testable and auditable
 """
 
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime, time
 from pydantic import BaseModel
 import re
+import hashlib
 
 from .models import ProposedAction, UserValue, ValueType
+
+# Module-level cache for semantic manipulation check results (keyed by content hash)
+_semantic_cache: Dict[str, bool] = {}
+
+
+async def semantic_manipulation_check(content: str, llm) -> bool:
+    """
+    LLM-based secondary manipulation check.
+
+    Only invoked for content > 100 chars. Results are cached per content hash
+    to avoid redundant LLM calls.
+
+    Args:
+        content: Text to evaluate
+        llm: LangChain LLM instance (must support ainvoke)
+
+    Returns:
+        True if the LLM considers the content manipulative
+    """
+    if len(content) < 100:
+        return False
+
+    content_hash = hashlib.sha256(content[:500].encode()).hexdigest()[:16]
+    if content_hash in _semantic_cache:
+        return _semantic_cache[content_hash]
+
+    try:
+        from langchain_core.messages import HumanMessage
+        prompt = (
+            "Evaluate if this content uses psychological manipulation "
+            "(FOMO, guilt, false urgency, social pressure, emotional coercion):\n\n"
+            f'Content: "{content[:500]}"\n\n'
+            "Answer only: YES or NO"
+        )
+        response = await llm.ainvoke([HumanMessage(content=prompt)])
+        is_manipulative = "YES" in response.content.upper()
+        _semantic_cache[content_hash] = is_manipulative
+        return is_manipulative
+    except Exception:
+        return False
 
 
 class RuleCheckResult(BaseModel):
@@ -122,43 +163,42 @@ class ManipulationDetector:
     
     def check_content(self, content: str) -> RuleCheckResult:
         """
-        Check if content contains manipulation patterns
-        
+        Check if content contains manipulation patterns.
+        Requires ≥2 distinct manipulation signals before flagging.
+
         Args:
             content: Text content to check
-            
+
         Returns:
             RuleCheckResult with pass/fail
         """
         if not content:
             return RuleCheckResult(passed=True, reason="No content to check")
-        
+
         content_lower = content.lower()
-        
+        violations = []
+
         # Check FOMO patterns
         for pattern in self.FOMO_PATTERNS:
             if re.search(pattern, content_lower):
-                return RuleCheckResult(
-                    passed=False,
-                    reason=f"Detected FOMO manipulation pattern: '{pattern}'"
-                )
-        
+                violations.append(f"FOMO: '{pattern}'")
+
         # Check urgency abuse (not genuine urgency)
         for pattern in self.URGENCY_PATTERNS:
             if re.search(pattern, content_lower):
-                return RuleCheckResult(
-                    passed=False,
-                    reason=f"Detected artificial urgency pattern: '{pattern}'"
-                )
-        
+                violations.append(f"urgency: '{pattern}'")
+
         # Check guilt patterns
         for pattern in self.GUILT_PATTERNS:
             if re.search(pattern, content_lower):
-                return RuleCheckResult(
-                    passed=False,
-                    reason=f"Detected guilt-tripping pattern: '{pattern}'"
-                )
-        
+                violations.append(f"guilt: '{pattern}'")
+
+        if len(violations) >= 2:
+            return RuleCheckResult(
+                passed=False,
+                reason=f"Detected multiple manipulation patterns: {'; '.join(violations)}"
+            )
+
         return RuleCheckResult(
             passed=True,
             reason="No manipulation patterns detected"
@@ -182,17 +222,17 @@ class EngagementDetector:
     
     def check_intent(self, action: ProposedAction) -> RuleCheckResult:
         """
-        Check if action intent is assistance vs. engagement
-        
+        Check if action intent is assistance vs. engagement.
+        Only flags when engagement score is strong (>0.7) AND no assistance signals.
+
         Args:
             action: Proposed action
-            
+
         Returns:
             RuleCheckResult with pass/fail
         """
-        # Check metadata for engagement metrics (anti-pattern)
         metadata = action.metadata
-        
+
         # Red flags: action optimized for engagement
         engagement_metrics = [
             "click_rate",
@@ -201,14 +241,7 @@ class EngagementDetector:
             "session_length",
             "retention_boost"
         ]
-        
-        for metric in engagement_metrics:
-            if metric in metadata:
-                return RuleCheckResult(
-                    passed=False,
-                    reason=f"Action optimized for engagement metric: {metric}"
-                )
-        
+
         # Green flags: action optimized for assistance
         assistance_metrics = [
             "goal_relevance",
@@ -216,16 +249,25 @@ class EngagementDetector:
             "time_saving",
             "clarity_improvement"
         ]
-        
-        has_assistance_intent = any(metric in metadata for metric in assistance_metrics)
-        
-        # If action has very high urgency without clear assistance intent, be suspicious
-        if action.urgency.value == "critical" and not has_assistance_intent:
+
+        engagement_count = sum(1 for m in engagement_metrics if m in metadata)
+        engagement_score = engagement_count / len(engagement_metrics)
+        goal_relevance_score = 1.0 if any(m in metadata for m in assistance_metrics) else 0.0
+
+        # Only flag if engagement signals are strong AND no positive assistance signals
+        if engagement_score > 0.7 and goal_relevance_score < 0.3:
+            return RuleCheckResult(
+                passed=False,
+                reason=f"Action strongly optimized for engagement metrics (score: {engagement_score:.1f}) without assistance intent"
+            )
+
+        # High urgency without any assistance intent is suspicious
+        if action.urgency.value == "critical" and goal_relevance_score < 0.3:
             return RuleCheckResult(
                 passed=False,
                 reason="High urgency without clear assistance intent (possible manipulation)"
             )
-        
+
         return RuleCheckResult(
             passed=True,
             reason="Action intent aligned with user assistance"

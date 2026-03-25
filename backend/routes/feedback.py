@@ -29,6 +29,18 @@ async def submit_feedback(
             feedback_type=request.feedback_type,
             additional_notes=request.additional_notes,
         )
+        # Close the feedback loop: nudge relevance weights based on patterns
+        await processor.adjust_signal_from_feedback(
+            user_id=str(user_id),
+            feedback_type=request.feedback_type,
+            item_type=request.item_type,
+        )
+        # E.1: value_conflict → increase ESL sensitivity for this content category
+        if request.feedback_type == "value_conflict":
+            await processor.note_esl_sensitivity_boost(
+                user_id=str(user_id),
+                content_category=request.item_type,
+            )
         return {"status": "success", "data": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error submitting feedback: {str(e)}")

@@ -9,6 +9,7 @@ import logging
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 from uuid import uuid4
+from psycopg.types.json import Json
 
 from utils.db import get_db_connection
 from models.feedback import (
@@ -109,7 +110,7 @@ class FeedbackProcessor:
                         item_type,
                         item_id,
                         feedback_type,
-                        context_snapshot or {},
+                        Json(context_snapshot or {}),
                         additional_notes,
                         datetime.utcnow()
                     ))
@@ -340,6 +341,101 @@ class FeedbackProcessor:
         except Exception as e:
             logger.error(f"❌ Failed to get item feedback: {e}")
             return []
+
+
+    async def get_user_adjustments(self, user_id: str) -> Dict[str, float]:
+        """
+        Get user-specific relevance multipliers accumulated from feedback history.
+
+        Returns:
+            Dict mapping signal_type → multiplier (e.g. {'goal_alignment': 1.3})
+        """
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT signal_type, multiplier FROM relevance_adjustments WHERE user_id = %s",
+                        (str(user_id),)
+                    )
+                    rows = cur.fetchall()
+            return {row[0]: float(row[1]) for row in rows} if rows else {}
+        except Exception as e:
+            logger.warning(f"Could not fetch relevance adjustments for {user_id}: {e}")
+            return {}
+
+    async def adjust_signal_from_feedback(
+        self,
+        user_id: str,
+        feedback_type: str,
+        item_type: str,
+    ) -> None:
+        """
+        Nudge relevance weights based on sustained feedback patterns.
+
+        Only adjusts when satisfaction drops below 40% over the last 30 days,
+        indicating the user consistently finds responses misaligned.
+        """
+        try:
+            analytics = await self.get_feedback_analytics(user_id=user_id, days=30)
+            satisfaction = analytics.satisfaction_rate if analytics else 50.0
+
+            if satisfaction < 40 and feedback_type == 'thumbs_down':
+                # User is consistently dissatisfied — boost goal alignment, reduce raw query match
+                await self._upsert_adjustment(user_id, 'goal_alignment', 1.3)
+                await self._upsert_adjustment(user_id, 'query_match', 0.8)
+                logger.info(
+                    f"[FeedbackProcessor] Adjusted goal_alignment→1.3, query_match→0.8 for user {user_id} "
+                    f"(satisfaction={satisfaction:.0f}%)"
+                )
+        except Exception as e:
+            logger.warning(f"Could not adjust relevance signal for {user_id}: {e}")
+
+    async def note_esl_sensitivity_boost(self, user_id: str, content_category: str, increment: float = 0.1) -> None:
+        """
+        Record a value_conflict event so the ESL becomes more cautious
+        about this content category for this user.
+
+        Writes directly to user_esl_sensitivity table (same effect as
+        ESLEngine.note_user_sensitivity but accessible from the feedback service).
+        """
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO user_esl_sensitivity (user_id, content_category, sensitivity_boost)
+                        VALUES (%s, %s, %s)
+                        ON CONFLICT (user_id, content_category)
+                        DO UPDATE SET
+                            sensitivity_boost = LEAST(user_esl_sensitivity.sensitivity_boost + %s, 1.0),
+                            updated_at = NOW()
+                        """,
+                        (user_id, content_category, increment, increment)
+                    )
+                conn.commit()
+            logger.info(
+                f"[FeedbackProcessor] ESL sensitivity +{increment} for user={user_id} category={content_category}"
+            )
+        except Exception as e:
+            logger.warning(f"Could not record ESL sensitivity boost for {user_id}: {e}")
+
+    async def _upsert_adjustment(self, user_id: str, signal_type: str, multiplier: float) -> None:
+        """Insert or update a relevance_adjustments row."""
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO relevance_adjustments (user_id, signal_type, multiplier)
+                        VALUES (%s, %s, %s)
+                        ON CONFLICT (user_id, signal_type)
+                        DO UPDATE SET multiplier = %s, updated_at = NOW()
+                        """,
+                        (str(user_id), signal_type, multiplier, multiplier)
+                    )
+                conn.commit()
+        except Exception as e:
+            logger.error(f"Failed to upsert relevance adjustment: {e}")
 
 
 # Example usage

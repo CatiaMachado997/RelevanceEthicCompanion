@@ -148,147 +148,151 @@
 }
 
 /* ── Chat message prose ── */
-/* Drop-in replacement for `prose prose-sm` that matches the EC design system
-   and uses the tight paragraph rhythm of ChatGPT / Claude.ai */
+/* Rich editorial styles matching the EC design system — supports GFM tables,
+   task lists, code blocks with syntax highlighting, and callout blockquotes */
 .chat-prose {
-  font-size: 0.875rem;     /* 14px */
-  line-height: 1.75;
-  color: #1a1a1a;
+  font-size: 0.875rem;
+  line-height: 1.7;
+  color: var(--ec-text);
   word-break: break-word;
 }
 
-/* ── paragraphs ── */
-.chat-prose p {
-  margin-top: 0.6em;
-  margin-bottom: 0.6em;
-}
-.chat-prose p:first-child { margin-top: 0; }
-.chat-prose p:last-child  { margin-bottom: 0; }
-
-/* ── inline emphasis ── */
-.chat-prose strong, .chat-prose b {
-  font-weight: 600;
-  color: #0a0a0a;
-}
-.chat-prose em { font-style: italic; }
-
-/* ── headings ── */
+/* ── Headings ── */
 .chat-prose h1, .chat-prose h2, .chat-prose h3, .chat-prose h4 {
   font-weight: 600;
-  color: #0a0a0a;
+  color: var(--ec-text);
   line-height: 1.3;
-  margin-top: 1.2em;
-  margin-bottom: 0.4em;
+  margin-top: 1.25em;
+  margin-bottom: 0.5em;
 }
 .chat-prose h1:first-child,
 .chat-prose h2:first-child,
 .chat-prose h3:first-child { margin-top: 0; }
-.chat-prose h1 { font-size: 1.15em; }
-.chat-prose h2 { font-size: 1.05em; }
-.chat-prose h3 { font-size: 1em;    }
-.chat-prose h4 { font-size: 0.9em;  text-transform: uppercase; letter-spacing: 0.04em; }
+.chat-prose h1 { font-size: 1.15rem; border-bottom: 1px solid var(--ec-card-border); padding-bottom: 0.4em; }
+.chat-prose h2 { font-size: 1rem; }
+.chat-prose h3 { font-size: 0.9rem; color: var(--ec-text-subtle); }
+.chat-prose h4 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ec-text-muted); }
 
-/* ── lists ── */
+/* ── Paragraphs ── */
+.chat-prose p { margin: 0.6em 0; }
+.chat-prose p:first-child { margin-top: 0; }
+.chat-prose p:last-child { margin-bottom: 0; }
+
+/* ── Lists ── */
 .chat-prose ul, .chat-prose ol {
-  margin-top: 0.5em;
-  margin-bottom: 0.5em;
   padding-left: 1.4em;
+  margin: 0.5em 0;
 }
+.chat-prose li { margin: 0.25em 0; padding-left: 0.2em; }
+.chat-prose li > p { margin: 0; }
 .chat-prose ul { list-style-type: disc; }
 .chat-prose ol { list-style-type: decimal; }
-.chat-prose li {
-  margin-top: 0.2em;
-  margin-bottom: 0.2em;
-  padding-left: 0.2em;
-}
-.chat-prose li > p { margin: 0; }
 
-/* ── inline code ── */
-.chat-prose code {
-  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
-  font-size: 0.84em;
-  background: rgba(0,0,0,0.05);
-  border: 1px solid rgba(0,0,0,0.07);
+/* ── Task list (GFM) ── */
+.chat-prose .task-list-item { list-style: none; margin-left: -1.4em; }
+.chat-prose .task-list-item input[type="checkbox"] {
+  margin-right: 0.5em;
+  accent-color: #4A7C59;
+  width: 14px; height: 14px;
+  vertical-align: middle;
+  cursor: default;
+}
+
+/* ── Inline code ── */
+.chat-prose code:not(pre code) {
+  font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
+  font-size: 0.8em;
+  padding: 0.15em 0.4em;
   border-radius: 4px;
-  padding: 0.1em 0.35em;
-  color: #1a1a1a;
+  background: var(--ec-surface-2);
+  border: 1px solid var(--ec-card-border);
+  color: var(--ec-text);
+  white-space: nowrap;
 }
 
-/* ── fenced code blocks ── */
+/* ── Code blocks (used by CodeBlock component, also fallback) ── */
 .chat-prose pre {
-  background: #f5f5f5;
-  border: 1px solid rgba(0,0,0,0.08);
-  border-radius: 10px;
-  padding: 0.85em 1em;
-  overflow-x: auto;
   margin: 0.75em 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--ec-card-border);
+  background: #0d1117;
 }
 .chat-prose pre code {
-  background: none;
+  display: block;
+  padding: 1em;
+  overflow-x: auto;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: #e6edf3;
+  background: transparent;
   border: none;
-  padding: 0;
-  font-size: 0.82em;
-  color: #1a1a1a;
+  white-space: pre;
 }
 
-/* ── blockquote ── */
-.chat-prose blockquote {
-  border-left: 3px solid rgba(0,0,0,0.12);
-  padding-left: 0.9em;
-  color: #6b6b6b;
-  margin: 0.75em 0;
-  font-style: italic;
-}
-.chat-prose blockquote p:first-child { margin-top: 0; }
-.chat-prose blockquote p:last-child  { margin-bottom: 0; }
-
-/* ── horizontal rule ── */
-.chat-prose hr {
-  border: none;
-  border-top: 1px solid rgba(0,0,0,0.08);
-  margin: 1em 0;
-}
-
-/* ── links ── */
-.chat-prose a {
-  color: #1a1a1a;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  text-decoration-color: rgba(0,0,0,0.25);
-}
-.chat-prose a:hover { text-decoration-color: rgba(0,0,0,0.6); }
-
-/* ── tables ── */
+/* ── Tables (GFM) ── */
 .chat-prose table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.875em;
+  font-size: 0.82rem;
   margin: 0.75em 0;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--ec-card-border);
+}
+.chat-prose thead tr {
+  background: var(--ec-surface-2);
 }
 .chat-prose th {
+  padding: 0.5em 0.75em;
   text-align: left;
   font-weight: 600;
-  padding: 0.4em 0.75em;
-  border-bottom: 1px solid rgba(0,0,0,0.12);
-  color: #0a0a0a;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ec-text-muted);
+  border-bottom: 1px solid var(--ec-card-border);
 }
 .chat-prose td {
-  padding: 0.35em 0.75em;
-  border-bottom: 1px solid rgba(0,0,0,0.06);
-  color: #1a1a1a;
+  padding: 0.45em 0.75em;
+  border-bottom: 1px solid var(--ec-card-border);
+  color: var(--ec-text);
+  vertical-align: top;
+}
+.chat-prose tr:last-child td { border-bottom: none; }
+.chat-prose tbody tr:nth-child(even) { background: var(--ec-surface-2); }
+
+/* ── Blockquotes / callouts ── */
+.chat-prose blockquote {
+  margin: 0.75em 0;
+  padding: 0.6em 1em;
+  border-left: 3px solid #4A7C59;
+  background: rgba(74,124,89,0.06);
+  border-radius: 0 8px 8px 0;
+  color: var(--ec-text);
+  font-style: normal;
+}
+.chat-prose blockquote p { margin: 0; }
+
+/* ── Horizontal rule ── */
+.chat-prose hr {
+  border: none;
+  border-top: 1px solid var(--ec-card-border);
+  margin: 1em 0;
 }
 
-/* Dark mode adjustments */
-.dark .chat-prose { color: #e8e8e8; }
-.dark .chat-prose strong, .dark .chat-prose b, .dark .chat-prose h1,
-.dark .chat-prose h2, .dark .chat-prose h3, .dark .chat-prose h4 { color: #f0f0f0; }
-.dark .chat-prose code { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.10); color: #e8e8e8; }
-.dark .chat-prose pre  { background: #1e1e1e; border-color: rgba(255,255,255,0.08); }
-.dark .chat-prose pre code { color: #e8e8e8; }
-.dark .chat-prose blockquote { border-left-color: rgba(255,255,255,0.15); color: #909090; }
-.dark .chat-prose hr { border-top-color: rgba(255,255,255,0.08); }
-.dark .chat-prose a  { color: #e8e8e8; text-decoration-color: rgba(255,255,255,0.3); }
-.dark .chat-prose td, .dark .chat-prose th { border-color: rgba(255,255,255,0.08); color: #e8e8e8; }
+/* ── Strong / em / links ── */
+.chat-prose strong, .chat-prose b { font-weight: 600; color: var(--ec-text); }
+.chat-prose em { font-style: italic; }
+.chat-prose a { color: #4A7C59; text-decoration: underline; text-underline-offset: 2px; }
+.chat-prose a:hover { opacity: 0.8; }
+
+/* ── Dark mode fine-tuning ── */
+.dark .chat-prose { color: var(--ec-text); }
+.dark .chat-prose pre { background: #0d1117; border-color: var(--ec-card-border); }
+.dark .chat-prose blockquote { background: rgba(74,124,89,0.08); }
+.dark .chat-prose tbody tr:nth-child(even) { background: var(--ec-surface-2); }
 
 @keyframes shimmer {
   0%   { transform: translateX(-100%); }

@@ -239,23 +239,79 @@ export const chatApi = {
    * Stream a chat message via Server-Sent Events.
    * Returns a Promise that resolves when the stream ends, and exposes a
    * `cancel()` method to abort early.
+   *
+   * Accepts either a plain `onToken` callback (legacy) or a callbacks object
+   * with optional `onToolUse` / `onToolResult` for tool activity indicators.
    */
   stream: (
     message: string,
-    onToken: (token: string) => void,
+    callbacksOrOnToken:
+      | ((token: string) => void)
+      | {
+          onToken: (token: string) => void
+          onToolUse?: (tool: string) => void
+          onToolResult?: (tool: string) => void
+          onRateLimitWarning?: (level: string, message: string) => void
+          onRateLimitExceeded?: (retryAfter: string, message: string) => void
+          model?: string
+          conversation_id?: string
+        },
   ): Promise<void> & { cancel: () => void } => {
+    const callbacks =
+      typeof callbacksOrOnToken === 'function'
+        ? { onToken: callbacksOrOnToken }
+        : callbacksOrOnToken
+
     let es: EventSource | null = null
     let settled = false
     let rejectRef: ((err: Error) => void) | null = null
 
     const promise = new Promise<void>((resolve, reject) => {
       rejectRef = reject
-      const url = `${API_URL}/api/chat/stream?message=${encodeURIComponent(message)}`
+      const modelParam = callbacks.model ? `&model=${encodeURIComponent(callbacks.model)}` : ''
+      const convParam = callbacks.conversation_id ? `&conversation_id=${encodeURIComponent(callbacks.conversation_id)}` : ''
+      const url = `${API_URL}/api/chat/stream?message=${encodeURIComponent(message)}${modelParam}${convParam}`
       es = new EventSource(url, { withCredentials: true })
 
       es.onmessage = (e) => {
         try {
           const data = JSON.parse(e.data)
+
+          // New event schema
+          if (data.event === 'tool_use') {
+            callbacks.onToolUse?.(data.tool)
+            return
+          }
+          if (data.event === 'tool_result') {
+            callbacks.onToolResult?.(data.tool)
+            return
+          }
+          if (data.event === 'rate_limit_warning') {
+            callbacks.onRateLimitWarning?.(data.level, data.message)
+            return
+          }
+          if (data.event === 'rate_limit_exceeded') {
+            callbacks.onRateLimitExceeded?.(data.retry_after, data.message)
+            es!.close()
+            if (!settled) { settled = true; resolve() }
+            return
+          }
+          if (data.event === 'token') {
+            callbacks.onToken(data.token)
+            return
+          }
+          if (data.event === 'done') {
+            es!.close()
+            if (!settled) { settled = true; resolve() }
+            return
+          }
+          if (data.event === 'error') {
+            es!.close()
+            if (!settled) { settled = true; reject(new Error(data.error)) }
+            return
+          }
+
+          // Backward-compat: legacy {token, done} format
           if (data.error) {
             es!.close()
             if (!settled) { settled = true; reject(new Error(data.error)) }
@@ -266,15 +322,21 @@ export const chatApi = {
             if (!settled) { settled = true; resolve() }
             return
           }
-          onToken(data.token)
+          if (data.token !== undefined) {
+            callbacks.onToken(data.token)
+          }
         } catch {
           // ignore parse errors on individual tokens
         }
       }
 
-      es.onerror = () => {
+      es.onerror = (e) => {
         es!.close()
-        if (!settled) { settled = true; reject(new Error('Stream error')) }
+        // EventSource readyState 2 = CLOSED (never connected)
+        const msg = (es as EventSource).readyState === 2 || !navigator.onLine
+          ? 'Failed to fetch'
+          : 'Stream connection lost'
+        if (!settled) { settled = true; reject(new Error(msg)) }
       }
     })
 
@@ -296,7 +358,7 @@ export const chatApi = {
   /**
    * Get conversation history
    */
-  history: (limit = 50, offset = 0) =>
+  history: (limit = 50, offset = 0, conversationId?: string) =>
     apiRequest<{
       user_id: string
       messages: Array<{
@@ -305,7 +367,21 @@ export const chatApi = {
         timestamp: string
       }>
       total_count: number
-    }>(`/api/chat/history?limit=${limit}&offset=${offset}`),
+    }>(`/api/chat/history?limit=${limit}&offset=${offset}${conversationId ? `&conversation_id=${conversationId}` : ''}`),
+
+  /**
+   * Conversation management
+   */
+  conversations: {
+    list: () =>
+      apiRequest<{ conversations: Array<{ id: string; title: string; created_at: string; updated_at: string }> }>('/api/chat/conversations'),
+    create: () =>
+      apiRequest<{ id: string; title: string; created_at: string; updated_at: string }>('/api/chat/conversations', { method: 'POST' }),
+    rename: (id: string, title: string) =>
+      apiRequest<{ id: string; title: string }>(`/api/chat/conversations/${id}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
+    delete: (id: string) =>
+      apiRequest<{ success: boolean }>(`/api/chat/conversations/${id}`, { method: 'DELETE' }),
+  },
 
   /**
    * Get available LLM models
@@ -519,6 +595,7 @@ export interface CalendarEvent {
   end_time: string | null
   description: string | null
   source: string
+  explanation?: string | null
 }
 
 export const eventsApi = {
@@ -597,6 +674,10 @@ export interface UserSettings {
   esl_alerts: boolean
   share_analytics: boolean
   pii_protection: boolean
+  weight_goal_alignment?: number
+  weight_time_sensitivity?: number
+  weight_personal_values?: number
+  weight_context_relevance?: number
   updated_at?: string
 }
 

@@ -40,8 +40,18 @@ CREATE TABLE IF NOT EXISTS public.user_settings (
   esl_alerts BOOLEAN DEFAULT TRUE,
   share_analytics BOOLEAN DEFAULT FALSE,
   pii_protection BOOLEAN DEFAULT TRUE,
+  weight_goal_alignment    FLOAT DEFAULT 1.0,
+  weight_time_sensitivity  FLOAT DEFAULT 1.0,
+  weight_personal_values   FLOAT DEFAULT 1.0,
+  weight_context_relevance FLOAT DEFAULT 1.0,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Add weight columns to existing deployments (safe if table already exists)
+ALTER TABLE public.user_settings ADD COLUMN IF NOT EXISTS weight_goal_alignment    FLOAT DEFAULT 1.0;
+ALTER TABLE public.user_settings ADD COLUMN IF NOT EXISTS weight_time_sensitivity  FLOAT DEFAULT 1.0;
+ALTER TABLE public.user_settings ADD COLUMN IF NOT EXISTS weight_personal_values   FLOAT DEFAULT 1.0;
+ALTER TABLE public.user_settings ADD COLUMN IF NOT EXISTS weight_context_relevance FLOAT DEFAULT 1.0;
 
 -- Keep updated_at current on settings changes
 CREATE OR REPLACE TRIGGER update_user_settings_updated_at
