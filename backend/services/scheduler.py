@@ -227,10 +227,11 @@ class BackgroundScheduler:
                     cur.execute("SELECT id FROM users LIMIT 100")
                     users = cur.fetchall()
 
+            ctx = ContextManager()
+
             for user_row in users:
                 user_id = str(user_row["id"])
                 try:
-                    ctx = ContextManager()
                     goals = await ctx.get_active_goals(user_id)
                     values = await ctx.get_user_values(user_id)
 
