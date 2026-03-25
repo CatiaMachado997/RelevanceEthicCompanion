@@ -22,7 +22,11 @@ const NAV_ITEMS = [
   { href: "/dashboard/integrations", label: "Integrations", icon: Plug },
 ]
 
-export function SidebarNav() {
+interface SidebarNavProps {
+  onClose?: () => void
+}
+
+export function SidebarNav({ onClose }: SidebarNavProps = {}) {
   const pathname = usePathname()
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname === href || pathname.startsWith(href + "/")
@@ -57,6 +61,7 @@ export function SidebarNav() {
               key={href}
               href={href}
               title={label}
+              onClick={onClose}
               className={cn(
                 "w-11 h-11 rounded-xl flex items-center justify-center transition-colors duration-150",
                 active ? "" : "hover:bg-black/5"
