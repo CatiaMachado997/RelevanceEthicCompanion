@@ -167,7 +167,7 @@ class ESLAuditLogger:
                             confidence, context_snapshot
                         FROM esl_audit_log
                         WHERE user_id = %s
-                          AND timestamp >= NOW() - INTERVAL '%s days'
+                          AND timestamp >= NOW() - (INTERVAL '1 day' * %s)
                     """
                     params = [user_id, days]
 
