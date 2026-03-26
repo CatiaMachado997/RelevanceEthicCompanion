@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from services.orchestrator_v2 import OrchestratorV2
 from services.context_manager import ContextManager
 from esl.audit import ESLAuditLogger
-from utils.db import get_db
+from utils.db import get_db, get_db_connection
 from utils.supabase_auth import get_current_read_user_id
 
 
@@ -56,8 +56,11 @@ router = APIRouter(prefix="/api/transparency", tags=["ESL Transparency"])
 
 # Dependencies
 def get_audit_logger() -> ESLAuditLogger:
-    """Get ESLAuditLogger instance"""
-    return ESLAuditLogger()
+    """Get ESLAuditLogger instance with DB persistence when available."""
+    try:
+        return ESLAuditLogger(db_connection_factory=get_db_connection)
+    except Exception:
+        return ESLAuditLogger()
 
 def get_orchestrator() -> OrchestratorV2:
     """Get OrchestratorV2 instance"""
@@ -87,10 +90,24 @@ async def get_esl_logs(
         # TODO: Enhance ESLAuditLogger.get_user_logs to support limit/offset
         limited_logs = logs[:limit]
 
+        def _flatten_log(log) -> dict:
+            """Flatten ESLAuditLog into the shape expected by the frontend."""
+            return {
+                "id": log.id or "",
+                "timestamp": log.timestamp.isoformat() if hasattr(log.timestamp, "isoformat") else str(log.timestamp),
+                "action_type": log.proposed_action.action_type.value if hasattr(log.proposed_action.action_type, "value") else log.proposed_action.action_type,
+                "decision_status": log.decision.status.value if hasattr(log.decision.status, "value") else log.decision.status,
+                "decision_reason": log.decision.reason,
+                "reason": log.decision.reason,
+                "violated_values": log.decision.violated_values or [],
+                "applied_rules": log.decision.applied_rules or [],
+                "confidence": log.decision.confidence,
+            }
+
         return {
             "user_id": str(user_id),
-            "logs": [log.model_dump() for log in limited_logs], # Convert Pydantic models to dicts
-            "total_count": len(logs), # Total available before limit
+            "logs": [_flatten_log(log) for log in limited_logs],
+            "total_count": len(logs),
             "filtered_count": len(limited_logs)
         }
         
