@@ -15,6 +15,6 @@ def test_source_items_table_exists():
             """)
             cols = [r['column_name'] for r in cur.fetchall()]
     required = {'id', 'user_id', 'source_type', 'source_item_type',
-                'title', 'body', 'metadata', 'item_at', 'synced_at',
+                'external_id', 'title', 'body', 'metadata', 'item_at', 'synced_at',
                 'embedding_status', 'sensitivity', 'relevance_hints'}
     assert required.issubset(set(cols)), f"Missing columns: {required - set(cols)}"
