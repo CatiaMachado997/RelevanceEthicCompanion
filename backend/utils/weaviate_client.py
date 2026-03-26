@@ -290,12 +290,20 @@ class WeaviateClient:
 _weaviate_client: Optional[WeaviateClient] = None
 
 
-def get_weaviate_client() -> WeaviateClient:
-    """Get or create singleton Weaviate client"""
+def get_weaviate_client() -> Optional[WeaviateClient]:
+    """Get or create singleton Weaviate client.
+
+    Returns None gracefully if Weaviate is unavailable so the app can start
+    and serve requests without semantic memory (M2 degraded mode).
+    """
     global _weaviate_client
     if _weaviate_client is None:
-        _weaviate_client = WeaviateClient()
-        _weaviate_client.initialize_schemas()
+        try:
+            _weaviate_client = WeaviateClient()
+            _weaviate_client.initialize_schemas()
+        except Exception as e:
+            logger.warning(f"Weaviate unavailable — running without semantic memory: {e}")
+            return None
     return _weaviate_client
 
 

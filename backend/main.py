@@ -165,37 +165,14 @@ async def root():
     }
 
 
-@app.get("/health")
-async def health():
-    """Detailed health check with live DB ping"""
-    from utils.db import get_db
-    db_status = "unavailable"
-    try:
-        with get_db() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1")
-        db_status = "connected"
-    except Exception:
-        pass
-
-    overall = "healthy" if db_status == "connected" else "degraded"
-    return {
-        "status": overall,
-        "ethical_safeguard_layer": "active",
-        "components": {
-            "api": "operational",
-            "esl": "active",
-            "database": db_status,
-        },
-    }
-
-
 # Import routers
 from routes import auth, values, chat, goals, transparency, relevance, data_sources, profile, notifications, feedback, search
 from routes import settings as settings_router
 from routes.insight import router as insight_router
+from routes.health import router as health_router
 
 # Register routers
+app.include_router(health_router)
 app.include_router(auth.router)
 app.include_router(values.router)
 app.include_router(chat.router)
