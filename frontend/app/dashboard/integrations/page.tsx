@@ -12,6 +12,9 @@ interface ConnectedSource {
   last_sync?: string | null
   enabled: boolean
   status?: string
+  item_count?: number
+  sync_error?: string | null
+  sync_error_count?: number
 }
 
 // Brand-specific configs for each integration
@@ -88,12 +91,19 @@ function IntegrationsContent() {
   const [syncing, setSyncing] = useState<SourceType | null>(null)
   const [flash, setFlash] = useState<SourceType | null>(null)
   const [errorFlash, setErrorFlash] = useState<string | null>(null)
+  const [stats, setStats] = useState<Record<string, number>>({})
   const searchParams = useSearchParams()
 
   const loadConnected = async () => {
     try {
       const r = await dataSourcesApi.list()
       setConnected((r.sources ?? []) as ConnectedSource[])
+      try {
+        const s = await dataSourcesApi.stats()
+        setStats(s)
+      } catch {
+        // stats are non-critical
+      }
     } catch (e) {
       console.error(e)
     } finally {
@@ -274,6 +284,18 @@ function IntegrationsContent() {
                           ? `Last synced ${new Date(sync).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
                           : description}
                       </p>
+                      {/* Item count — only when connected and count > 0 */}
+                      {isConn && (stats[type] ?? 0) > 0 && (
+                        <span className="inline-flex items-center gap-1 mt-1 text-[10px]" style={{ color: '#6b6b6b' }}>
+                          <span className="font-medium">{(stats[type] ?? 0).toLocaleString()}</span> items synced
+                        </span>
+                      )}
+                      {/* Sync error indicator */}
+                      {isConn && connected.find(src => src.source_type === type)?.sync_error && (
+                        <p className="mt-1 text-[10px]" style={{ color: '#B04A3A' }}>
+                          ⚠ Last sync failed — try syncing again
+                        </p>
+                      )}
                     </div>
                   </div>
 
