@@ -166,7 +166,7 @@ async def root():
 
 
 # Import routers
-from routes import auth, values, chat, goals, transparency, relevance, data_sources, profile, notifications, feedback, search
+from routes import auth, values, chat, goals, transparency, relevance, data_sources, profile, notifications, feedback, search, documents
 from routes import settings as settings_router
 from routes.insight import router as insight_router
 from routes.health import router as health_router
@@ -186,7 +186,6 @@ app.include_router(settings_router.router)
 app.include_router(feedback.router)
 app.include_router(search.router)
 app.include_router(insight_router)
-from routes import documents
 app.include_router(documents.router)
 
 

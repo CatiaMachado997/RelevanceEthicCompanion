@@ -89,13 +89,13 @@ async def upload_document(
 
     # Read file bytes
     file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="File is empty.")
     if len(file_bytes) > MAX_FILE_SIZE_BYTES:
         raise HTTPException(
             status_code=413,
             detail=f"File too large. Maximum size is {MAX_FILE_SIZE_BYTES // 1024 // 1024} MB.",
         )
-    if not file_bytes:
-        raise HTTPException(status_code=400, detail="File is empty.")
 
     # Create document record (status=processing)
     document_id = str(uuid.uuid4())
