@@ -1,5 +1,6 @@
 # backend/tests/test_connectors.py
 import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
 from services.connectors.base import BaseConnector, SourceItem
 from services.connectors.google_calendar import GoogleCalendarConnector
 from services.connectors.gmail import GmailConnector
@@ -160,3 +161,44 @@ def test_slack_normalize_empty_text():
     item = conn.normalize_to_source_item(raw, "user-1")
     assert item.title == "#dev"
     assert item.body == ""
+
+
+@pytest.mark.asyncio
+async def test_sync_writes_to_source_items():
+    """Sync should write normalized items via _store_normalized_item."""
+    from services.data_ingestion import DataIngestionService
+    from services.connectors.base import SourceItem
+
+    mock_cm = MagicMock()
+    mock_cm.weaviate = None  # Weaviate offline — should not block sync
+
+    service = DataIngestionService(mock_cm)
+
+    fake_item = SourceItem(
+        user_id="user-1",
+        source_type="google_calendar",
+        source_item_type="event",
+        external_id="evt_1",
+        title="Standup",
+    )
+    mock_connector = MagicMock()
+    mock_connector.fetch_raw_items = AsyncMock(return_value=[{"id": "evt_1", "summary": "Standup", "start": {}, "end": {}}])
+    mock_connector.normalize_to_source_item.return_value = fake_item
+
+    written_items = []
+
+    async def fake_store(item):
+        written_items.append(item)
+
+    with patch("services.data_ingestion.get_connector", return_value=mock_connector), \
+         patch.object(service, "_get_data_source_tokens", new_callable=AsyncMock,
+                      return_value={"access_token": "tok", "refresh_token": "ref", "expires_at": None}), \
+         patch.object(service, "_store_normalized_item", side_effect=fake_store), \
+         patch.object(service, "_update_last_sync", new_callable=AsyncMock), \
+         patch.object(service, "_clear_sync_error", new_callable=AsyncMock):
+        result = await service.sync_data_source("user-1", "google_calendar")
+
+    assert result["success"] is True
+    assert result["items_synced"] == 1
+    assert len(written_items) == 1
+    assert written_items[0].external_id == "evt_1"
