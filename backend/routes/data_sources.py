@@ -209,6 +209,29 @@ async def get_connected_sources(
         raise HTTPException(status_code=500, detail="Failed to retrieve sources")
 
 
+@router.get("/stats")
+async def get_source_stats(
+    user_id: str = Depends(get_current_read_user_id),
+    ingestion: DataIngestionService = Depends(get_data_ingestion),
+) -> Dict[str, Any]:
+    """
+    Return item counts per connected source for the current user.
+
+    Response:
+        {
+            "google_calendar": 15,
+            "gmail": 42,
+            "slack": 8,
+            "total": 65
+        }
+    """
+    try:
+        return await ingestion.get_source_stats(user_id)
+    except Exception as e:
+        logger.error(f"Failed to get source stats: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve stats")
+
+
 @router.delete("/{source_type}")
 async def disconnect_source(
     source_type: str,
