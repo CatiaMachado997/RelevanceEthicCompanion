@@ -18,6 +18,7 @@ router = APIRouter(prefix="/api/search", tags=["Search"])
 SEARCH_COLLECTIONS = [
     ("ConversationMemory", "memory"),
     ("ContextualEvents", "event"),
+    ("DocumentMemory", "document"),
 ]
 
 
