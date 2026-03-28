@@ -296,18 +296,30 @@ def get_weaviate_client() -> Optional[WeaviateClient]:
 
     Returns None gracefully if Weaviate is unavailable so the app can start
     and serve requests without semantic memory (M2 degraded mode).
+
+    Also handles mid-session disconnects: if the existing client is stale
+    (is_ready() throws), the singleton is reset and a reconnect is attempted.
     """
     global _weaviate_client, _weaviate_unavailable
     if _weaviate_unavailable:
         return None
-    if _weaviate_client is None:
+    if _weaviate_client is not None:
         try:
-            _weaviate_client = WeaviateClient()
-            _weaviate_client.initialize_schemas()
-        except Exception as e:
-            logger.warning(f"Weaviate unavailable — running without semantic memory: {e}")
-            _weaviate_unavailable = True
-            return None
+            # Verify the existing client is still alive
+            _weaviate_client.client.is_ready()
+            return _weaviate_client
+        except Exception:
+            logger.warning("Weaviate connection lost — resetting client for reconnect")
+            _weaviate_client = None
+            _weaviate_unavailable = False
+    # Try to (re)connect
+    try:
+        _weaviate_client = WeaviateClient()
+        _weaviate_client.initialize_schemas()
+    except Exception as e:
+        logger.warning(f"Weaviate unavailable — running without semantic memory: {e}")
+        _weaviate_unavailable = True
+        return None
     return _weaviate_client
 
 

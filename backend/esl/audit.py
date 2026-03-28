@@ -198,7 +198,7 @@ class ESLAuditLogger:
 
                         logs.append(ESLAuditLog(
                             id=str(row['id']),
-                            user_id=row['user_id'],
+                            user_id=str(row['user_id']),
                             timestamp=row['timestamp'],
                             proposed_action=proposed_action,
                             decision=decision,
