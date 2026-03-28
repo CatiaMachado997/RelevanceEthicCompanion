@@ -186,6 +186,8 @@ app.include_router(settings_router.router)
 app.include_router(feedback.router)
 app.include_router(search.router)
 app.include_router(insight_router)
+from routes import documents
+app.include_router(documents.router)
 
 
 if __name__ == "__main__":
