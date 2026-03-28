@@ -796,6 +796,80 @@ export const insightApi = {
     apiRequest<{ insight: string; cached: boolean }>('/api/insight/daily'),
 }
 
+// ==================== Documents API ====================
+
+export interface Document {
+  id: string
+  filename: string
+  content_type: string
+  size_bytes: number
+  status: 'processing' | 'ready' | 'failed'
+  chunk_count: number
+  error_message: string | null
+  created_at: string | null
+}
+
+export interface UploadDocumentResponse {
+  id: string
+  filename: string
+  status: string
+  chunk_count: number
+  message: string
+}
+
+export const documentsApi = {
+  /**
+   * Upload a document via multipart/form-data.
+   * Uses fetch directly so the browser sets Content-Type with the multipart boundary.
+   */
+  upload: async (file: File): Promise<UploadDocumentResponse> => {
+    const token = await resolveAccessToken()
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const headers: Record<string, string> = {}
+    if (token) {
+      headers.Authorization = `Bearer ${token}`
+    }
+
+    const response = await fetch(`${API_URL}/api/documents/upload`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    })
+
+    if (response.status === 401) {
+      if (authConfig.onUnauthorized) {
+        authConfig.onUnauthorized()
+      }
+      throw new Error('Unauthorized')
+    }
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Request failed' }))
+      throw new Error(error.detail || `HTTP ${response.status}`)
+    }
+
+    return response.json()
+  },
+
+  /**
+   * List all uploaded documents
+   */
+  list: async (): Promise<Document[]> => {
+    return apiRequest<Document[]>('/api/documents/')
+  },
+
+  /**
+   * Delete a document by ID
+   */
+  delete: async (id: string): Promise<{ message: string }> => {
+    return apiRequest<{ message: string }>(`/api/documents/${id}`, {
+      method: 'DELETE',
+    })
+  },
+}
+
 export const api = {
   values: valuesApi,
   chat: chatApi,
@@ -809,6 +883,7 @@ export const api = {
   notifications: notificationsApi,
   search: searchApi,
   insight: insightApi,
+  documents: documentsApi,
 };
 
 export default api;
