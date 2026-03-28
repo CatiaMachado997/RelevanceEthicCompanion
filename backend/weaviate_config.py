@@ -182,6 +182,20 @@ WEAVIATE_SCHEMAS: List[Dict[str, Any]] = [
             },
         ],
     },
+    {
+        "class": "DocumentMemory",
+        "description": "Document chunks with semantic embeddings for search",
+        "vectorizer": "none",
+        "properties": [
+            {"name": "user_id",      "dataType": ["text"], "indexFilterable": True,  "indexSearchable": False},
+            {"name": "content",      "dataType": ["text"], "indexFilterable": False, "indexSearchable": True},
+            {"name": "document_id",  "dataType": ["text"], "indexFilterable": True,  "indexSearchable": False},
+            {"name": "filename",     "dataType": ["text"], "indexFilterable": False, "indexSearchable": True},
+            {"name": "chunk_index",  "dataType": ["int"],  "indexFilterable": True,  "indexSearchable": False},
+            {"name": "chunk_count",  "dataType": ["int"],  "indexFilterable": False, "indexSearchable": False},
+            {"name": "created_at",   "dataType": ["date"], "indexFilterable": True,  "indexSearchable": False},
+        ],
+    },
 ]
 
 
