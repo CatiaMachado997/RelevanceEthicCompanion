@@ -9,6 +9,7 @@ from weaviate.classes.query import Filter
 from typing import List, Dict, Any, Optional
 import logging
 import json
+import time
 from datetime import datetime
 
 from weaviate_config import WEAVIATE_SCHEMAS, get_collection_schema
@@ -289,6 +290,8 @@ class WeaviateClient:
 # Global client instance
 _weaviate_client: Optional[WeaviateClient] = None
 _weaviate_unavailable: bool = False
+_weaviate_last_probe: float = 0.0
+_WEAVIATE_PROBE_TTL = 30.0  # seconds between liveness checks
 
 
 def get_weaviate_client() -> Optional[WeaviateClient]:
@@ -297,36 +300,54 @@ def get_weaviate_client() -> Optional[WeaviateClient]:
     Returns None gracefully if Weaviate is unavailable so the app can start
     and serve requests without semantic memory (M2 degraded mode).
 
-    Also handles mid-session disconnects: if the existing client is stale
-    (is_ready() throws), the singleton is reset and a reconnect is attempted.
+    Uses a TTL-gated liveness probe to avoid an HTTP round-trip on every call.
+    When the probe is due, is_ready() returning False (not raising) is treated
+    as a stale connection and triggers a reconnect attempt.
     """
-    global _weaviate_client, _weaviate_unavailable
+    global _weaviate_client, _weaviate_unavailable, _weaviate_last_probe
+
+    now = time.monotonic()
+
+    # Short-circuit if we already know it's down (until explicit close/reset)
     if _weaviate_unavailable:
         return None
+
+    # If we have a client, do a TTL-gated liveness probe
     if _weaviate_client is not None:
+        if now - _weaviate_last_probe < _WEAVIATE_PROBE_TTL:
+            return _weaviate_client  # recent probe passed, skip
+        # Probe is due — check if client is still alive
         try:
-            # Verify the existing client is still alive
-            _weaviate_client.client.is_ready()
-            return _weaviate_client
+            inner = getattr(_weaviate_client, "client", None)
+            ready = inner.is_ready() if inner is not None else False
+            if ready:
+                _weaviate_last_probe = now
+                return _weaviate_client
+            # is_ready() returned False — treat as stale
         except Exception:
-            logger.warning("Weaviate connection lost — resetting client for reconnect")
-            _weaviate_client = None
-            _weaviate_unavailable = False
-    # Try to (re)connect
+            pass
+        # Client is stale — reset and fall through to reconnect
+        logger.warning("Weaviate connection lost — attempting reconnect")
+        _weaviate_client = None
+        _weaviate_unavailable = False
+
+    # Try to connect
     try:
         _weaviate_client = WeaviateClient()
         _weaviate_client.initialize_schemas()
+        _weaviate_last_probe = time.monotonic()
+        return _weaviate_client
     except Exception as e:
         logger.warning(f"Weaviate unavailable — running without semantic memory: {e}")
         _weaviate_unavailable = True
         return None
-    return _weaviate_client
 
 
 def close_weaviate_client():
     """Close singleton Weaviate client"""
-    global _weaviate_client, _weaviate_unavailable
+    global _weaviate_client, _weaviate_unavailable, _weaviate_last_probe
     if _weaviate_client:
         _weaviate_client.close()
         _weaviate_client = None
     _weaviate_unavailable = False
+    _weaviate_last_probe = 0.0
