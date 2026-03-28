@@ -1,630 +1,353 @@
 """
-Data Ingestion Service
+Data Ingestion Service (Sprint 2)
 
-Orchestrates data ingestion from external sources (Google Calendar, etc.)
-and stores in M1 (PostgreSQL) + M2 (Weaviate with embeddings).
-
-This is 100% YOUR CUSTOM CODE - not provided by any framework.
+Orchestrates data ingestion from external sources using the connector framework.
+Each source maps to a BaseConnector; this service drives OAuth, sync, M1 storage,
+M2 embedding, and error tracking.
 """
 
+import json
 import logging
-from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
-from services.google_calendar_sync import GoogleCalendarSync
-from services.gmail_sync import GmailSync
-from services.slack_sync import SlackSync
+from services.connectors import get_connector
+from services.connectors.base import SourceItem
 from services.context_manager import ContextManager
-from models.context import Event, SemanticMemoryEntry
+from models.context import SemanticMemoryEntry
 from utils.db import get_db_connection
 from config import settings
 
 logger = logging.getLogger(__name__)
 
+SUPPORTED_SOURCES = ["google_calendar", "gmail", "slack"]
+
 
 class DataIngestionService:
     """
-    Coordinates data ingestion from external sources
-
-    Responsibilities:
-    - Manage OAuth flows for data sources
-    - Fetch data from external APIs
-    - Store in M1 (PostgreSQL) for structured queries
-    - Generate embeddings and store in M2 (Weaviate) for semantic search
-    - Track sync status and prevent duplicates
+    Thin orchestrator: delegates auth + fetch + normalize to connectors;
+    drives storage in M1 (source_items) and M2.
     """
 
     def __init__(self, context_manager: ContextManager):
-        """
-        Initialize data ingestion service
-
-        Args:
-            context_manager: For storing in M1 + M2
-        """
         self.context_manager = context_manager
-
-        # Initialize sync adapters with redirect URIs from config
-        self.google_calendar = GoogleCalendarSync(redirect_uri=settings.GOOGLE_OAUTH_REDIRECT_URI)
-        self.gmail = GmailSync(redirect_uri=settings.GMAIL_OAUTH_REDIRECT_URI)
-        self.slack = SlackSync()
-
         logger.info("✅ DataIngestionService initialized")
 
-    async def initiate_oauth(self, user_id: str, source_type: str, oauth_state: Optional[str] = None) -> str:
-        """
-        Start OAuth flow for a data source
+    # ── OAuth ──────────────────────────────────────────────────────────────
 
-        Args:
-            user_id: User ID requesting authorization
-            source_type: Type of source ('google_calendar', etc.)
-
-        Returns:
-            Authorization URL to redirect user to
-
-        Raises:
-            ValueError: If source_type is not supported
-        """
-        if source_type == 'google_calendar':
-            auth_url = self.google_calendar.get_authorization_url(user_id, oauth_state=oauth_state)
-            logger.info(f"✅ Generated OAuth URL for {source_type}, user {user_id}")
-            return auth_url
-        elif source_type == 'gmail':
-            auth_url = self.gmail.get_authorization_url(user_id, oauth_state=oauth_state)
-            logger.info(f"✅ Generated OAuth URL for {source_type}, user {user_id}")
-            return auth_url
-        elif source_type == 'slack':
-            auth_url = self.slack.get_authorization_url(user_id, oauth_state=oauth_state)
-            logger.info(f"✅ Generated OAuth URL for {source_type}, user {user_id}")
-            return auth_url
-        else:
-            raise ValueError(f"Unsupported source type: {source_type}")
+    async def initiate_oauth(
+        self, user_id: str, source_type: str, oauth_state: Optional[str] = None
+    ) -> str:
+        connector = get_connector(source_type)
+        url = connector.get_authorization_url(user_id, state=oauth_state)
+        logger.info(f"✅ OAuth URL generated for {source_type}, user {user_id}")
+        return url
 
     async def handle_oauth_callback(
-        self,
-        source_type: str,
-        authorization_code: str,
-        user_id: str
+        self, source_type: str, authorization_code: str, user_id: str
     ) -> Dict[str, Any]:
-        """
-        Handle OAuth callback and store tokens
-
-        Args:
-            source_type: Type of source ('google_calendar', etc.)
-            authorization_code: Authorization code from OAuth provider
-            user_id: User ID who authorized
-
-        Returns:
-            Dict with success status and message
-        """
         try:
-            if source_type == 'google_calendar':
-                # Exchange code for tokens
-                tokens = self.google_calendar.exchange_code_for_tokens(authorization_code)
+            connector = get_connector(source_type)
+            tokens = connector.exchange_code_for_tokens(authorization_code)
 
-                # Store tokens in database (encrypted in production!)
-                await self._store_data_source(
-                    user_id=user_id,
-                    source_type=source_type,
-                    access_token=tokens['access_token'],
-                    refresh_token=tokens['refresh_token'],
-                    expires_at=tokens['expires_at']
+            await self._store_data_source(
+                user_id=user_id,
+                source_type=source_type,
+                access_token=tokens["access_token"],
+                refresh_token=tokens.get("refresh_token"),
+                expires_at=tokens.get("expires_at"),
+            )
+            logger.info(f"✅ OAuth completed for {source_type}, user {user_id}")
+
+            try:
+                await self.sync_data_source(user_id, source_type)
+            except Exception as sync_err:
+                logger.warning(
+                    f"⚠️ Initial sync failed for {source_type} (tokens stored): {sync_err}"
                 )
 
-                logger.info(f"✅ OAuth completed for {source_type}, user {user_id}")
-
-                # Trigger initial sync — non-fatal: tokens are stored regardless
-                try:
-                    await self.sync_data_source(user_id, source_type)
-                except Exception as sync_err:
-                    logger.warning(f"⚠️ Initial sync failed for {source_type} (tokens stored): {sync_err}")
-
-                return {
-                    "success": True,
-                    "message": f"{source_type} connected successfully",
-                    "source_type": source_type
-                }
-            elif source_type == 'gmail':
-                tokens = self.gmail.exchange_code_for_tokens(authorization_code)
-
-                await self._store_data_source(
-                    user_id=user_id,
-                    source_type=source_type,
-                    access_token=tokens['access_token'],
-                    refresh_token=tokens['refresh_token'],
-                    expires_at=tokens['expires_at']
-                )
-
-                logger.info(f"✅ OAuth completed for {source_type}, user {user_id}")
-
-                # Trigger initial sync — non-fatal: tokens are stored regardless
-                try:
-                    await self.sync_data_source(user_id, source_type)
-                except Exception as sync_err:
-                    logger.warning(f"⚠️ Initial sync failed for {source_type} (tokens stored): {sync_err}")
-
-                return {
-                    "success": True,
-                    "message": f"{source_type} connected successfully",
-                    "source_type": source_type
-                }
-            elif source_type == 'slack':
-                tokens = self.slack.exchange_code_for_tokens(authorization_code)
-
-                await self._store_data_source(
-                    user_id=user_id,
-                    source_type=source_type,
-                    access_token=tokens['access_token'],
-                    refresh_token=tokens['refresh_token'],
-                    expires_at=tokens['expires_at']
-                )
-
-                logger.info(f"✅ OAuth completed for {source_type}, user {user_id}")
-
-                # Trigger initial sync — non-fatal: tokens are stored regardless
-                try:
-                    await self.sync_data_source(user_id, source_type)
-                except Exception as sync_err:
-                    logger.warning(f"⚠️ Initial sync failed for {source_type} (tokens stored): {sync_err}")
-
-                return {
-                    "success": True,
-                    "message": f"{source_type} connected successfully",
-                    "source_type": source_type
-                }
-            else:
-                raise ValueError(f"Unsupported source type: {source_type}")
-
+            return {"success": True, "message": f"{source_type} connected", "source_type": source_type}
         except Exception as e:
             logger.error(f"❌ OAuth callback failed: {e}")
+            return {"success": False, "message": str(e), "source_type": source_type}
+
+    # ── Sync ───────────────────────────────────────────────────────────────
+
+    async def sync_data_source(self, user_id: str, source_type: str) -> Dict[str, Any]:
+        logger.info(f"🔄 Starting sync: {source_type} for user {user_id}")
+
+        tokens = await self._get_data_source_tokens(user_id, source_type)
+        if not tokens:
+            return {"success": False, "message": f"{source_type} not connected", "items_synced": 0}
+
+        try:
+            connector = get_connector(source_type)
+            raw_items = await connector.fetch_raw_items(
+                access_token=tokens["access_token"],
+                refresh_token=tokens.get("refresh_token"),
+            )
+
+            items_synced = 0
+            for raw in raw_items:
+                try:
+                    source_item = connector.normalize_to_source_item(raw, user_id)
+                    await self._store_normalized_item(source_item)
+                    await self._maybe_embed(source_item, user_id)
+                    items_synced += 1
+                except Exception as item_err:
+                    logger.warning(f"⚠️ Failed to process item from {source_type}: {item_err}")
+
+            await self._update_last_sync(user_id, source_type)
+            await self._clear_sync_error(user_id, source_type)
+
+            logger.info(f"✅ Sync complete: {items_synced} items from {source_type}")
+            return {
+                "success": True,
+                "message": f"Synced {items_synced} items from {source_type}",
+                "items_synced": items_synced,
+                "source_type": source_type,
+            }
+
+        except Exception as e:
+            error_msg = str(e)
+            logger.error(f"❌ Sync failed for {source_type}: {error_msg}", exc_info=True)
+            await self._record_sync_error(user_id, source_type, error_msg)
             return {
                 "success": False,
-                "message": f"Failed to connect {source_type}: {str(e)}",
-                "source_type": source_type
+                "message": f"Sync failed: {error_msg}",
+                "items_synced": 0,
+                "source_type": source_type,
             }
+
+    # ── Storage helpers ────────────────────────────────────────────────────
+
+    async def _store_normalized_item(self, item: SourceItem):
+        """Upsert a normalized item into source_items (M1)."""
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO source_items
+                        (user_id, source_type, source_item_type, external_id,
+                         title, body, metadata, item_at, embedding_status, sensitivity)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (user_id, source_type, external_id)
+                    DO UPDATE SET
+                        title = EXCLUDED.title,
+                        body = EXCLUDED.body,
+                        metadata = EXCLUDED.metadata,
+                        synced_at = NOW()
+                    """,
+                    (
+                        item.user_id,
+                        item.source_type,
+                        item.source_item_type,
+                        item.external_id,
+                        item.title,
+                        item.body,
+                        json.dumps(item.metadata),
+                        item.item_at,
+                        item.embedding_status,
+                        item.sensitivity,
+                    ),
+                )
+            conn.commit()
+
+    async def _maybe_embed(self, item: SourceItem, user_id: str):
+        """Store in M2 (Weaviate) if available — best-effort."""
+        if not (self.context_manager.weaviate and self.context_manager.embedding_service):
+            return
+        try:
+            content = f"{item.title}. {item.body or ''}"
+            memory_entry = SemanticMemoryEntry(
+                user_id=user_id,
+                content=content,
+                source=item.source_type,
+                timestamp=datetime.now(timezone.utc),
+                metadata={"external_id": item.external_id, **item.metadata},
+            )
+            await self.context_manager.store_semantic_memory(memory_entry)
+        except Exception as e:
+            logger.warning(f"⚠️ M2 embed failed for {item.external_id}: {e}")
 
     async def _store_data_source(
         self,
         user_id: str,
         source_type: str,
         access_token: str,
-        refresh_token: str,
-        expires_at: str
+        refresh_token: Optional[str],
+        expires_at: Optional[str],
     ):
-        """
-        Store data source credentials in database
-
-        WARNING: In production, tokens MUST be encrypted!
-        For MVP, we're storing in plain text. Use encryption before production.
-
-        Args:
-            user_id: User ID
-            source_type: Source type
-            access_token: OAuth access token
-            refresh_token: OAuth refresh token
-            expires_at: Token expiration time
-        """
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                # Check if source already exists
-                cur.execute("""
-                    SELECT id FROM data_sources
-                    WHERE user_id = %s AND source_type = %s
-                """, (user_id, source_type))
-
+                cur.execute(
+                    "SELECT id FROM data_sources WHERE user_id = %s AND source_type = %s",
+                    (user_id, source_type),
+                )
                 existing = cur.fetchone()
 
                 if existing:
-                    # Update existing
-                    cur.execute("""
+                    cur.execute(
+                        """
                         UPDATE data_sources
                         SET oauth_token_encrypted = %s,
                             oauth_refresh_token_encrypted = %s,
                             token_expires_at = %s,
                             enabled = TRUE,
-                            last_sync = NULL
+                            last_sync = NULL,
+                            sync_error_message = NULL,
+                            sync_error_count = 0
                         WHERE user_id = %s AND source_type = %s
-                    """, (access_token, refresh_token, expires_at, user_id, source_type))
+                        """,
+                        (access_token, refresh_token, expires_at, user_id, source_type),
+                    )
                 else:
-                    # Insert new
-                    cur.execute("""
+                    cur.execute(
+                        """
                         INSERT INTO data_sources
-                        (user_id, source_type, oauth_token_encrypted, oauth_refresh_token_encrypted, token_expires_at, enabled)
+                            (user_id, source_type, oauth_token_encrypted,
+                             oauth_refresh_token_encrypted, token_expires_at, enabled)
                         VALUES (%s, %s, %s, %s, %s, TRUE)
-                    """, (user_id, source_type, access_token, refresh_token, expires_at))
+                        """,
+                        (user_id, source_type, access_token, refresh_token, expires_at),
+                    )
+            conn.commit()
 
-                conn.commit()
-
-        logger.info(f"✅ Stored credentials for {source_type}, user {user_id}")
-
-    async def sync_data_source(self, user_id: str, source_type: str) -> Dict[str, Any]:
-        """
-        Sync data from external source to M1 + M2
-
-        Flow:
-        1. Retrieve OAuth tokens from database
-        2. Fetch data from external API
-        3. Normalize data to internal models
-        4. Store in M1 (PostgreSQL) for structured queries
-        5. Generate embeddings and store in M2 (Weaviate) for semantic search
-        6. Update last_sync timestamp
-
-        Args:
-            user_id: User ID
-            source_type: Source type ('google_calendar', etc.)
-
-        Returns:
-            Dict with sync results
-        """
-        try:
-            logger.info(f"🔄 Starting sync: {source_type} for user {user_id}")
-
-            # Step 1: Get OAuth tokens
-            tokens = await self._get_data_source_tokens(user_id, source_type)
-            if not tokens:
-                return {
-                    "success": False,
-                    "message": f"{source_type} not connected",
-                    "items_synced": 0
-                }
-
-            # Step 2: Fetch data from external API
-            if source_type == 'google_calendar':
-                items_synced = await self._sync_google_calendar(
-                    user_id=user_id,
-                    access_token=tokens['access_token'],
-                    refresh_token=tokens['refresh_token']
-                )
-            elif source_type == 'gmail':
-                items_synced = await self._sync_gmail(
-                    user_id=user_id,
-                    access_token=tokens['access_token'],
-                    refresh_token=tokens['refresh_token']
-                )
-            elif source_type == 'slack':
-                items_synced = await self._sync_slack(
-                    user_id=user_id,
-                    access_token=tokens['access_token']
-                )
-            else:
-                raise ValueError(f"Unsupported source type: {source_type}")
-
-            # Step 3: Update last_sync timestamp
-            await self._update_last_sync(user_id, source_type)
-
-            logger.info(f"✅ Sync complete: {items_synced} items from {source_type}")
-
-            return {
-                "success": True,
-                "message": f"Synced {items_synced} items from {source_type}",
-                "items_synced": items_synced,
-                "source_type": source_type
-            }
-
-        except Exception as e:
-            logger.error(f"❌ Sync failed for {source_type}: {e}", exc_info=True)
-            return {
-                "success": False,
-                "message": f"Sync failed: {str(e)}",
-                "items_synced": 0,
-                "source_type": source_type
-            }
-
-    async def _get_data_source_tokens(self, user_id: str, source_type: str) -> Optional[Dict[str, str]]:
-        """Retrieve OAuth tokens from database"""
+    async def _get_data_source_tokens(
+        self, user_id: str, source_type: str
+    ) -> Optional[Dict[str, str]]:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT oauth_token_encrypted, oauth_refresh_token_encrypted, token_expires_at
                     FROM data_sources
                     WHERE user_id = %s AND source_type = %s AND enabled = TRUE
-                """, (user_id, source_type))
-
-                result = cur.fetchone()
-                if not result:
+                    """,
+                    (user_id, source_type),
+                )
+                row = cur.fetchone()
+                if not row:
                     return None
-
                 return {
-                    'access_token': result['oauth_token_encrypted'],
-                    'refresh_token': result['oauth_refresh_token_encrypted'],
-                    'expires_at': result['token_expires_at']
+                    "access_token": row["oauth_token_encrypted"],
+                    "refresh_token": row["oauth_refresh_token_encrypted"],
+                    "expires_at": row["token_expires_at"],
                 }
 
-    async def _sync_google_calendar(
-        self,
-        user_id: str,
-        access_token: str,
-        refresh_token: str
-    ) -> int:
-        """
-        Sync Google Calendar events to M1 + M2
-
-        Returns:
-            Number of events synced
-        """
-        # Fetch events from Google Calendar
-        google_events = await self.google_calendar.fetch_events(
-            access_token=access_token,
-            refresh_token=refresh_token
-        )
-
-        items_synced = 0
-
-        for google_event in google_events:
-            try:
-                # Normalize to Event model
-                event = self.google_calendar.normalize_event(google_event, user_id)
-
-                # Store in M1 (PostgreSQL) - YOUR structured storage
-                await self.context_manager.store_event(event)
-
-                # Store in M2 (Weaviate) with embeddings - YOUR semantic search
-                if self.context_manager.weaviate and self.context_manager.embedding_service:
-                    # Generate embedding for event content
-                    event_content = f"{event.title}. {event.description or ''}"
-
-                    # Store as semantic memory
-                    memory_entry = SemanticMemoryEntry(
-                        user_id=user_id,
-                        content=event_content,
-                        source='google_calendar',
-                        timestamp=event.start_time,
-                        metadata={
-                            'event_id': event.id,
-                            'location': event.location,
-                            'start_time': event.start_time.isoformat(),
-                            'end_time': event.end_time.isoformat() if event.end_time else None
-                        }
-                    )
-
-                    await self.context_manager.store_semantic_memory(memory_entry)
-
-                items_synced += 1
-
-            except Exception as e:
-                logger.warning(f"⚠️  Failed to sync event {google_event.get('id')}: {e}")
-                continue
-
-        return items_synced
-
-    async def _sync_gmail(
-        self,
-        user_id: str,
-        access_token: str,
-        refresh_token: str
-    ) -> int:
-        """
-        Sync Gmail messages to M2 (semantic memory)
-
-        Returns:
-            Number of messages synced
-        """
-        messages = self.gmail.fetch_messages(
-            access_token=access_token,
-            refresh_token=refresh_token
-        )
-
-        items_synced = 0
-
-        for message in messages:
-            try:
-                # Store in M1 (PostgreSQL) — structured for structured queries (F.1)
-                with get_db_connection() as conn:
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            """
-                            INSERT INTO email_messages
-                                (user_id, source, external_id, subject, sender, snippet, received_at)
-                            VALUES (%s, 'gmail', %s, %s, %s, %s, %s)
-                            ON CONFLICT (user_id, source, external_id) DO NOTHING
-                            """,
-                            (
-                                user_id,
-                                message.get('id'),
-                                message.get('subject'),
-                                message.get('from'),
-                                message.get('snippet'),
-                                message.get('date'),
-                            )
-                        )
-                    conn.commit()
-
-                # Store in M2 (Weaviate) — semantic search
-                if self.context_manager.weaviate and self.context_manager.embedding_service:
-                    content = f"Email from {message['from']}: {message['subject']}. {message['snippet']}"
-
-                    memory_entry = SemanticMemoryEntry(
-                        user_id=user_id,
-                        content=content,
-                        source='gmail',
-                        timestamp=datetime.now(timezone.utc),
-                        metadata={
-                            'message_id': message['id'],
-                            'subject': message['subject'],
-                            'from': message['from'],
-                            'date': message['date'],
-                        }
-                    )
-
-                    await self.context_manager.store_semantic_memory(memory_entry)
-
-                items_synced += 1
-
-            except Exception as e:
-                logger.warning(f"⚠️  Failed to sync Gmail message {message.get('id')}: {e}")
-                continue
-
-        return items_synced
-
-    async def _sync_slack(
-        self,
-        user_id: str,
-        access_token: str
-    ) -> int:
-        """
-        Sync Slack messages to M2 (semantic memory)
-
-        Returns:
-            Number of messages synced
-        """
-        messages = self.slack.fetch_messages(access_token=access_token)
-
-        items_synced = 0
-
-        for message in messages:
-            try:
-                # Store in M1 (PostgreSQL) — structured for structured queries (F.2)
-                with get_db_connection() as conn:
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            """
-                            INSERT INTO slack_messages
-                                (user_id, channel, sender_id, text, ts)
-                            VALUES (%s, %s, %s, %s, %s)
-                            ON CONFLICT (user_id, channel, ts) DO NOTHING
-                            """,
-                            (
-                                user_id,
-                                message.get('channel'),
-                                message.get('user'),
-                                message.get('text'),
-                                message.get('ts'),
-                            )
-                        )
-                    conn.commit()
-
-                # Store in M2 (Weaviate) — semantic search
-                if self.context_manager.weaviate and self.context_manager.embedding_service:
-                    content = f"Slack #{message['channel']}: {message['text']}"
-
-                    memory_entry = SemanticMemoryEntry(
-                        user_id=user_id,
-                        content=content,
-                        source='slack',
-                        timestamp=datetime.now(timezone.utc),
-                        metadata={
-                            'channel': message['channel'],
-                            'ts': message['ts'],
-                            'user': message['user'],
-                        }
-                    )
-
-                    await self.context_manager.store_semantic_memory(memory_entry)
-
-                items_synced += 1
-
-            except Exception as e:
-                logger.warning(f"⚠️  Failed to sync Slack message {message.get('ts')}: {e}")
-                continue
-
-        return items_synced
-
     async def _update_last_sync(self, user_id: str, source_type: str):
-        """Update last_sync timestamp"""
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    "UPDATE data_sources SET last_sync = %s WHERE user_id = %s AND source_type = %s",
+                    (datetime.now(timezone.utc), user_id, source_type),
+                )
+            conn.commit()
+
+    async def _record_sync_error(self, user_id: str, source_type: str, message: str):
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
                     UPDATE data_sources
-                    SET last_sync = %s
+                    SET sync_error_message = %s,
+                        sync_error_count = COALESCE(sync_error_count, 0) + 1
                     WHERE user_id = %s AND source_type = %s
-                """, (datetime.now(timezone.utc), user_id, source_type))
-                conn.commit()
+                    """,
+                    (message[:500], user_id, source_type),
+                )
+            conn.commit()
+
+    async def _clear_sync_error(self, user_id: str, source_type: str):
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE data_sources
+                    SET sync_error_message = NULL, sync_error_count = 0
+                    WHERE user_id = %s AND source_type = %s
+                    """,
+                    (user_id, source_type),
+                )
+            conn.commit()
+
+    # ── Query ──────────────────────────────────────────────────────────────
 
     async def get_connected_sources(self, user_id: str) -> List[Dict[str, Any]]:
-        """
-        Get list of connected data sources for user
-
-        Args:
-            user_id: User ID
-
-        Returns:
-            List of connected sources with status
-        """
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
-                    SELECT source_type, enabled, last_sync, token_expires_at
-                    FROM data_sources
-                    WHERE user_id = %s
-                    ORDER BY source_type
-                """, (user_id,))
-
+                cur.execute(
+                    """
+                    SELECT
+                        ds.source_type,
+                        ds.enabled,
+                        ds.last_sync,
+                        ds.token_expires_at,
+                        ds.sync_error_message,
+                        ds.sync_error_count,
+                        COUNT(si.id) AS item_count
+                    FROM data_sources ds
+                    LEFT JOIN source_items si
+                        ON si.user_id = ds.user_id AND si.source_type = ds.source_type
+                    WHERE ds.user_id = %s
+                    GROUP BY ds.source_type, ds.enabled, ds.last_sync,
+                             ds.token_expires_at, ds.sync_error_message, ds.sync_error_count
+                    ORDER BY ds.source_type
+                    """,
+                    (user_id,),
+                )
                 sources = []
                 for row in cur.fetchall():
-                    sources.append({
-                        'source_type': row['source_type'],
-                        'enabled': row['enabled'],
-                        'last_sync': row['last_sync'].isoformat() if row['last_sync'] else None,
-                        'token_expires_at': row['token_expires_at'].isoformat() if row['token_expires_at'] else None,
-                        'status': 'connected' if row['enabled'] else 'disconnected'
-                    })
-
+                    sources.append(
+                        {
+                            "source_type": row["source_type"],
+                            "enabled": row["enabled"],
+                            "last_sync": row["last_sync"].isoformat() if row["last_sync"] else None,
+                            "token_expires_at": (
+                                row["token_expires_at"].isoformat()
+                                if row["token_expires_at"]
+                                else None
+                            ),
+                            "status": "connected" if row["enabled"] else "disconnected",
+                            "item_count": row["item_count"],
+                            "sync_error": row["sync_error_message"],
+                            "sync_error_count": row["sync_error_count"],
+                        }
+                    )
                 return sources
 
+    async def get_source_stats(self, user_id: str) -> Dict[str, Any]:
+        """Return item counts per source for the stats endpoint."""
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT source_type, COUNT(*) AS item_count
+                    FROM source_items
+                    WHERE user_id = %s
+                    GROUP BY source_type
+                    """,
+                    (user_id,),
+                )
+                counts = {row["source_type"]: row["item_count"] for row in cur.fetchall()}
+        return {
+            "google_calendar": counts.get("google_calendar", 0),
+            "gmail": counts.get("gmail", 0),
+            "slack": counts.get("slack", 0),
+            "total": sum(counts.values()),
+        }
+
     async def disconnect_source(self, user_id: str, source_type: str) -> bool:
-        """
-        Disconnect a data source (disable syncing)
-
-        Args:
-            user_id: User ID
-            source_type: Source type to disconnect
-
-        Returns:
-            True if successful
-        """
         try:
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
-                    cur.execute("""
-                        UPDATE data_sources
-                        SET enabled = FALSE
-                        WHERE user_id = %s AND source_type = %s
-                    """, (user_id, source_type))
-                    conn.commit()
-
+                    cur.execute(
+                        "UPDATE data_sources SET enabled = FALSE WHERE user_id = %s AND source_type = %s",
+                        (user_id, source_type),
+                    )
+                conn.commit()
             logger.info(f"✅ Disconnected {source_type} for user {user_id}")
             return True
-
         except Exception as e:
             logger.error(f"❌ Failed to disconnect {source_type}: {e}")
             return False
-
-
-# Example usage
-if __name__ == "__main__":
-    import asyncio
-    from services.embedding_service import EmbeddingService
-    from utils.weaviate_client import get_weaviate_client
-    import os
-    from dotenv import load_dotenv
-
-    load_dotenv()
-
-    async def test_data_ingestion():
-        """Test data ingestion service"""
-
-        # Initialize dependencies
-        weaviate_client = get_weaviate_client()
-        embedding_service = EmbeddingService(os.getenv('GEMINI_API_KEY'))
-
-        context_manager = ContextManager(
-            weaviate_client=weaviate_client,
-            embedding_service=embedding_service
-        )
-
-        ingestion = DataIngestionService(context_manager)
-
-        print("\n" + "=" * 60)
-        print("DATA INGESTION SERVICE TEST")
-        print("=" * 60)
-
-        # Step 1: Get OAuth URL
-        test_user_id = "test-user-123"
-        auth_url = await ingestion.initiate_oauth(test_user_id, 'google_calendar')
-
-        print(f"\n1. OAuth Authorization URL:")
-        print(f"   {auth_url}")
-        print(f"\n2. Open URL in browser and authorize")
-        print(f"3. Copy 'code' parameter from redirect")
-        print(f"4. Call handle_oauth_callback() with code")
-
-    asyncio.run(test_data_ingestion())
