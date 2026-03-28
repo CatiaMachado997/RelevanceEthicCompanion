@@ -64,7 +64,6 @@ def test_extract_text_unsupported():
 
 # ── Route tests (require router registered in main.py) ──────────────────────
 
-from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 
