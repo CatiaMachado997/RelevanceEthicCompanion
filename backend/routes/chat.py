@@ -109,6 +109,7 @@ def get_orchestrator(model: str = DEFAULT_MODEL) -> OrchestratorV2:
         context_manager,
         relevance_engine=relevance_engine,
         tavily_client=tavily_client,
+        db_connection_factory=get_db_connection,
         model=model,
     )
 
