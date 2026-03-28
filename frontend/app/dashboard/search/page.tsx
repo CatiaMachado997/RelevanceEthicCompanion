@@ -1,12 +1,12 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Search, X, MessageSquare, Clock, Zap, Calendar } from "lucide-react"
+import { Search, X, MessageSquare, Clock, Zap, Calendar, FileText } from "lucide-react"
 import { searchApi, SearchResult } from "@/lib/api"
 import { PageHeader } from "@/components/ui/page-header"
 import { FilterChips } from "@/components/ui/filter-chips"
 
-type FilterType = "all" | "memory" | "event"
+type FilterType = "all" | "memory" | "event" | "document"
 
 export default function SearchPage() {
   const [query, setQuery] = useState("")
@@ -79,6 +79,8 @@ export default function SearchPage() {
         return <MessageSquare className="h-4 w-4" />
       case "event":
         return <Calendar className="h-4 w-4" />
+      case "document":
+        return <FileText className="h-4 w-4" />
       default:
         return <Zap className="h-4 w-4" />
     }
@@ -88,6 +90,7 @@ export default function SearchPage() {
     switch (type) {
       case "memory": return "Memory"
       case "event": return "Event"
+      case "document": return "Document"
       default: return type
     }
   }
@@ -128,6 +131,7 @@ export default function SearchPage() {
             { value: null, label: 'All' },
             { value: 'memory', label: 'Memory' },
             { value: 'event', label: 'Event' },
+            { value: 'document', label: 'Document' },
           ]}
           selected={filterType === 'all' ? null : filterType}
           onChange={(f) => {
