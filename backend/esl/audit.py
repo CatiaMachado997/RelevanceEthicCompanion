@@ -167,7 +167,7 @@ class ESLAuditLogger:
                             confidence, context_snapshot
                         FROM esl_audit_log
                         WHERE user_id = %s
-                          AND timestamp >= NOW() - INTERVAL '%s days'
+                          AND timestamp >= NOW() - (INTERVAL '1 day' * %s)
                     """
                     params = [user_id, days]
 
@@ -182,23 +182,24 @@ class ESLAuditLogger:
 
                     logs = []
                     for row in rows:
-                        proposed_action_data = row[3] if isinstance(row[3], dict) else json.loads(row[3])
-                        context_snapshot = row[9] if isinstance(row[9], dict) else json.loads(row[9])
+                        # rows are dicts due to dict_row cursor factory
+                        proposed_action_data = row['proposed_action'] if isinstance(row['proposed_action'], dict) else json.loads(row['proposed_action'])
+                        context_snapshot = row['context_snapshot'] if isinstance(row['context_snapshot'], dict) else json.loads(row['context_snapshot'])
 
                         proposed_action = ProposedAction(**proposed_action_data)
                         decision = ESLDecision(
-                            status=row[4],
-                            reason=row[5],
-                            violated_values=row[6] or [],
-                            applied_rules=row[7] or [],
-                            confidence=row[8],
-                            timestamp=row[2]
+                            status=row['decision_status'],
+                            reason=row['decision_reason'],
+                            violated_values=row['violated_values'] or [],
+                            applied_rules=row['applied_rules'] or [],
+                            confidence=row['confidence'],
+                            timestamp=row['timestamp']
                         )
 
                         logs.append(ESLAuditLog(
-                            id=str(row[0]),
-                            user_id=row[1],
-                            timestamp=row[2],
+                            id=str(row['id']),
+                            user_id=str(row['user_id']),
+                            timestamp=row['timestamp'],
                             proposed_action=proposed_action,
                             decision=decision,
                             context_snapshot=context_snapshot
