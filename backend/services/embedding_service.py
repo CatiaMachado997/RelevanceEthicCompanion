@@ -9,7 +9,8 @@ THIS IS YOUR CODE - You wrap the external API with YOUR logic:
 - Rate limiting
 """
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from typing import List, Dict, Any, Optional
 import logging
 import hashlib
@@ -42,7 +43,7 @@ class EmbeddingService:
             raise ValueError("GEMINI_API_KEY is required")
 
         self.api_key = api_key
-        genai.configure(api_key=api_key)
+        self._client = genai.Client(api_key=api_key)
 
         # Simple in-memory cache (for MVP)
         # In production, use Redis or similar
@@ -91,13 +92,13 @@ class EmbeddingService:
         try:
             # Call Gemini API (THE ONLY EXTERNAL INTELLIGENCE)
             # Note: Free tier uses embedding-001
-            result = genai.embed_content(
+            result = self._client.models.embed_content(
                 model="models/gemini-embedding-001",
-                content=text,
-                task_type="retrieval_document"
+                contents=text,
+                config=types.EmbedContentConfig(task_type="retrieval_document"),
             )
 
-            embedding = result['embedding']
+            embedding = result.embeddings[0].values
 
             # Store in cache
             self._store_in_cache(text, embedding)
@@ -149,19 +150,14 @@ class EmbeddingService:
 
                 # Generate embeddings for uncached texts
                 if uncached_texts:
-                    result = genai.embed_content(
+                    result = self._client.models.embed_content(
                         model="models/gemini-embedding-001",
-                        content=uncached_texts,
-                        task_type="retrieval_document"
+                        contents=uncached_texts,
+                        config=types.EmbedContentConfig(task_type="retrieval_document"),
                     )
 
-                    # Handle both single and batch responses
-                    if isinstance(result['embedding'][0], list):
-                        # Batch response
-                        new_embeddings = result['embedding']
-                    else:
-                        # Single response
-                        new_embeddings = [result['embedding']]
+                    # New SDK always returns a list of ContentEmbedding objects
+                    new_embeddings = [emb.values for emb in result.embeddings]
 
                     # Store in cache and add to results
                     for text, embedding, idx in zip(uncached_texts, new_embeddings, uncached_indices):
@@ -194,13 +190,13 @@ class EmbeddingService:
         """
         try:
             # Use retrieval_query task type (optimized for queries)
-            result = genai.embed_content(
+            result = self._client.models.embed_content(
                 model="models/gemini-embedding-001",
-                content=query,
-                task_type="retrieval_query"
+                contents=query,
+                config=types.EmbedContentConfig(task_type="retrieval_query"),
             )
 
-            embedding = result['embedding']
+            embedding = result.embeddings[0].values
             logger.debug(f"✅ Generated query embedding (len={len(query)}, dim={len(embedding)})")
             return embedding
 
