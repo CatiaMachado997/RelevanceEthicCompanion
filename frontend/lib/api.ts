@@ -692,6 +692,18 @@ export const dataSourcesApi = {
       method: 'POST',
     })
   },
+
+  /**
+   * Get item counts per data source
+   */
+  stats: async () => {
+    return apiRequest<{
+      google_calendar: number
+      gmail: number
+      slack: number
+      total: number
+    }>('/api/data-sources/stats')
+  },
 }
 
 // ==================== Settings API ====================
