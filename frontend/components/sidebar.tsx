@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation"
 import {
   LayoutDashboard, MessageSquare, Heart, Target,
   Eye, Plug, Settings, LogOut, Bell, User, Sun, Moon, Search,
-  Plus, Pencil, Trash2, Check, X,
+  Plus, Pencil, Trash2, Check, X, FileText,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/useAuth"
@@ -49,6 +49,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/goals",        label: "Goals",        icon: Target },
   { href: "/dashboard/transparency", label: "Transparency", icon: Eye },
   { href: "/dashboard/integrations", label: "Integrations", icon: Plug },
+  { href: "/dashboard/documents",    label: "Documents",    icon: FileText },
   { href: "/dashboard/notifications",label: "Notifications",icon: Bell },
   { href: "/dashboard/search",       label: "Search",        icon: Search },
 ]
