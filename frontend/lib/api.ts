@@ -870,6 +870,120 @@ export const documentsApi = {
   },
 }
 
+// ==================== Projects API ====================
+
+export interface Project {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string | null;
+  status: 'active' | 'completed' | 'archived';
+  goal_id: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export const projectsApi = {
+  list: async (status?: string): Promise<Project[]> => {
+    const query = status ? `?status=${status}` : ''
+    return apiRequest<Project[]>(`/api/projects${query}`)
+  },
+
+  get: async (id: string): Promise<Project> => {
+    return apiRequest<Project>(`/api/projects/${id}`)
+  },
+
+  create: async (data: { title: string; description?: string; goal_id?: string }): Promise<Project> => {
+    return apiRequest<Project>('/api/projects', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+
+  update: async (id: string, data: Partial<Pick<Project, 'title' | 'description' | 'status' | 'goal_id'>>): Promise<Project> => {
+    return apiRequest<Project>(`/api/projects/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    })
+  },
+
+  archive: async (id: string): Promise<{ success: boolean; id: string }> => {
+    return apiRequest<{ success: boolean; id: string }>(`/api/projects/${id}`, {
+      method: 'DELETE',
+    })
+  },
+}
+
+// ==================== Tasks API ====================
+
+export interface Task {
+  id: string;
+  user_id: string;
+  project_id: string | null;
+  title: string;
+  description: string | null;
+  status: 'todo' | 'in_progress' | 'done' | 'cancelled';
+  priority: number;
+  due_date: string | null;
+  source_origin: string;
+  ai_confidence: number | null;
+  user_confirmed: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface ExtractedTask {
+  title: string;
+  description?: string;
+  priority?: number;
+}
+
+export const tasksApi = {
+  list: async (params?: { project_id?: string; status?: string }): Promise<Task[]> => {
+    const query = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
+    return apiRequest<Task[]>(`/api/tasks${query}`)
+  },
+
+  get: async (id: string): Promise<Task> => {
+    return apiRequest<Task>(`/api/tasks/${id}`)
+  },
+
+  create: async (data: {
+    title: string;
+    description?: string;
+    project_id?: string;
+    priority?: number;
+    due_date?: string;
+    source_origin?: string;
+    ai_confidence?: number;
+  }): Promise<Task> => {
+    return apiRequest<Task>('/api/tasks', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+
+  update: async (id: string, data: Partial<Pick<Task, 'title' | 'description' | 'status' | 'priority' | 'due_date' | 'project_id'>>): Promise<Task> => {
+    return apiRequest<Task>(`/api/tasks/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    })
+  },
+
+  delete: async (id: string): Promise<{ success: boolean; id: string }> => {
+    return apiRequest<{ success: boolean; id: string }>(`/api/tasks/${id}`, {
+      method: 'DELETE',
+    })
+  },
+
+  extract: async (text: string): Promise<{ suggestions: ExtractedTask[] }> => {
+    return apiRequest<{ suggestions: ExtractedTask[] }>('/api/tasks/extract', {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    })
+  },
+}
+
 export const api = {
   values: valuesApi,
   chat: chatApi,
@@ -884,6 +998,8 @@ export const api = {
   search: searchApi,
   insight: insightApi,
   documents: documentsApi,
+  projects: projectsApi,
+  tasks: tasksApi,
 };
 
 export default api;
