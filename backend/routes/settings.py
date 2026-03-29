@@ -64,6 +64,13 @@ async def get_settings(
                 row = cur.fetchone()
 
         data = serialize_row(row) if row else {**DEFAULTS, "user_id": str(user_id)}
+        # Ensure weight fields are always present (handles DB rows created before migration)
+        for key, default in [
+            ("weight_goal_alignment", 1.0), ("weight_time_sensitivity", 1.0),
+            ("weight_personal_values", 1.0), ("weight_context_relevance", 1.0),
+        ]:
+            if key not in data or data[key] is None:
+                data[key] = default
         return {"status": "success", "data": data}
 
     except Exception as e:
@@ -140,4 +147,10 @@ async def update_settings(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error saving settings: {str(e)}")
+        err = str(e)
+        if "column" in err and "does not exist" in err:
+            raise HTTPException(
+                status_code=500,
+                detail="Database schema is out of date. Restart the backend to apply migrations.",
+            )
+        raise HTTPException(status_code=500, detail=f"Error saving settings: {err}")
