@@ -307,3 +307,12 @@
 @media (prefers-reduced-motion: reduce) {
   .animate-shimmer, .animate-esl-pulse { animation: none !important; }
 }
+
+/* ── Empty state prompt card hover ── */
+.prompt-card {
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+.prompt-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.10);
+}

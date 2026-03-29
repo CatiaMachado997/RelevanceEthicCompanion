@@ -12,6 +12,7 @@ import {
   Send, ChevronDown, ChevronUp, Copy, Square,
   ThumbsUp, ThumbsDown, RotateCcw, Plus, Cpu,
   Paperclip, Globe, Calendar, Target, StickyNote,
+  BarChart2, ShieldCheck, Sparkles,
 } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 
@@ -50,10 +51,10 @@ const GROQ_MODELS = [
 const DEFAULT_MODEL = GROQ_MODELS[0].id
 
 const EXAMPLE_PROMPTS = [
-  "What's on my agenda today?",
-  "Help me prioritize my goals",
-  "Summarize my week",
-  "How are my values being respected?",
+  { text: "What's on my agenda today?",       icon: Calendar,     desc: 'Review upcoming events' },
+  { text: "Help me prioritize my goals",       icon: Target,       desc: 'Align work with values' },
+  { text: "Summarize my week",                 icon: BarChart2,    desc: 'Reflect on recent activity' },
+  { text: "How are my values being respected?", icon: ShieldCheck, desc: 'ESL transparency check' },
 ]
 
 function formatTime(iso: string): string {
@@ -159,8 +160,12 @@ function AssistantActions({
 function CompanionAvatar() {
   return (
     <div
-      className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 select-none"
-      style={{ background: 'var(--ec-text)', color: 'var(--ec-sidebar-bg)' }}
+      className="w-7 h-7 rounded-xl flex items-center justify-center text-[9px] font-bold shrink-0 select-none"
+      style={{
+        background: 'linear-gradient(145deg, #1a1a1a 0%, #3d3d3d 100%)',
+        color: '#ffffff',
+        boxShadow: '0 2px 6px rgba(0,0,0,0.18)',
+      }}
       aria-hidden="true"
     >
       EC
@@ -467,7 +472,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto"
       >
-        <div className="mx-auto max-w-[720px] px-4 py-8 space-y-8">
+        <div className="mx-auto max-w-[700px] px-4 py-8 space-y-6">
 
           {loadingHistory && (
             <div className="space-y-5">
@@ -479,34 +484,59 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
 
           {/* Empty state */}
           {isEmpty && (
-            <div className="flex flex-col items-center justify-center gap-6 pt-20 text-center">
-              <div>
+            <div className="flex flex-col items-center justify-center gap-8 pt-16 pb-8 text-center">
+              {/* Logo */}
+              <div className="relative">
                 <div
-                  className="w-11 h-11 rounded-2xl flex items-center justify-center text-sm font-bold mx-auto mb-5"
-                  style={{ background: 'var(--ec-text)', color: 'var(--ec-sidebar-bg)' }}
+                  className="w-16 h-16 rounded-3xl flex items-center justify-center text-base font-bold mx-auto select-none"
+                  style={{
+                    background: 'linear-gradient(145deg, #1a1a1a 0%, #3d3d3d 100%)',
+                    color: '#ffffff',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.16), 0 2px 8px rgba(0,0,0,0.12)',
+                  }}
                 >
                   EC
                 </div>
-                <p className="text-base font-medium" style={{ color: '#1a1a1a' }}>
+                <div
+                  className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 flex items-center justify-center"
+                  style={{ background: '#4A7C59', borderColor: 'var(--ec-page-bg)' }}
+                >
+                  <Sparkles size={10} color="#fff" />
+                </div>
+              </div>
+
+              <div>
+                <h2 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--ec-text)' }}>
                   How can I help you today?
-                </p>
-                <p className="text-sm mt-1" style={{ color: '#9e9e9e' }}>
-                  Your companion is ready — protected by ESL.
+                </h2>
+                <p className="text-sm mt-1.5" style={{ color: 'var(--ec-text-subtle)' }}>
+                  Your AI companion — guided by your values, protected by ESL
                 </p>
               </div>
-              <div className="flex flex-wrap gap-2 justify-center max-w-[520px]">
-                {EXAMPLE_PROMPTS.map(p => (
+
+              {/* Prompt cards */}
+              <div className="grid grid-cols-2 gap-3 w-full max-w-[500px]">
+                {EXAMPLE_PROMPTS.map(({ text, icon: Icon, desc }) => (
                   <button
-                    key={p}
-                    onClick={() => handleSend(p)}
-                    className="px-3.5 py-1.5 rounded-full text-sm transition-colors hover:bg-[#f0f0f0]"
+                    key={text}
+                    onClick={() => handleSend(text)}
+                    className="prompt-card flex flex-col items-start gap-2 p-4 rounded-2xl text-left active:scale-[0.98]"
                     style={{
-                      border: '1px solid rgba(0,0,0,0.10)',
-                      color: '#6b6b6b',
-                      background: '#fafafa',
+                      background: 'var(--ec-card-bg)',
+                      border: '1px solid var(--ec-card-border)',
+                      boxShadow: 'var(--ec-card-shadow)',
                     }}
                   >
-                    {p}
+                    <div
+                      className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+                      style={{ background: 'rgba(74,124,89,0.1)' }}
+                    >
+                      <Icon size={15} style={{ color: '#4A7C59' }} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium leading-snug" style={{ color: 'var(--ec-text)' }}>{text}</p>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--ec-text-muted)' }}>{desc}</p>
+                    </div>
                   </button>
                 ))}
               </div>
@@ -526,8 +556,8 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                       <div
                         className="px-4 py-2.5 rounded-2xl rounded-tr-sm text-sm leading-relaxed"
                         style={{
-                          background: 'rgba(0,0,0,0.06)',
-                          color: '#0a0a0a',
+                          background: 'var(--ec-surface-2)',
+                          color: 'var(--ec-text)',
                         }}
                       >
                         {msg.content}
@@ -565,29 +595,29 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                 </div>
 
                 {/* Message body */}
-                <div
-                  className="pl-4 text-sm w-full"
-                  style={{
-                    borderLeft: '3px solid rgba(74,124,89,0.3)',
-                    marginLeft: '1.75rem',
-                  }}
-                >
+                <div className="pl-9 text-sm w-full">
                   {msg.streaming && isThinking && !msg.content ? (
-                    <div className="flex gap-1 items-center h-5">
-                      {[0,1,2].map(i => (
-                        <span key={i} className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: `${i * 0.15}s`, color: '#9e9e9e' }} />
-                      ))}
+                    <div className="flex items-center gap-2 h-6">
+                      <div className="flex gap-1">
+                        {[0,1,2].map(i => (
+                          <span key={i} className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ animationDelay: `${i * 0.18}s`, background: '#c0c0c0' }} />
+                        ))}
+                      </div>
+                      <span className="text-xs" style={{ color: '#b0b0b0' }}>Thinking…</span>
                     </div>
                   ) : msg.content ? (
                     <>
                       {msg.streaming && activeTool && (
-                        <div className="flex items-center gap-2 text-xs mb-2" style={{ color: '#9e9e9e' }}>
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#9e9e9e] animate-pulse" />
-                          {activeTool === 'web_search' && 'Searching the web\u2026'}
-                          {activeTool === 'query_calendar' && 'Checking your calendar\u2026'}
-                          {activeTool === 'query_memory' && 'Recalling context\u2026'}
-                          {activeTool === 'get_user_goals' && 'Checking your goals\u2026'}
-                          {activeTool === 'create_note' && 'Saving note\u2026'}
+                        <div
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs mb-3"
+                          style={{ background: 'rgba(74,124,89,0.08)', color: '#4A7C59', border: '1px solid rgba(74,124,89,0.18)' }}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#4A7C59] animate-pulse" />
+                          {activeTool === 'web_search' && 'Searching the web…'}
+                          {activeTool === 'query_calendar' && 'Checking your calendar…'}
+                          {activeTool === 'query_memory' && 'Recalling context…'}
+                          {activeTool === 'get_user_goals' && 'Checking your goals…'}
+                          {activeTool === 'create_note' && 'Saving note…'}
                         </div>
                       )}
                       <div className="chat-prose max-w-none">
@@ -652,11 +682,11 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
       {/* ── Input card ── */}
       <div className="shrink-0 px-4 pb-4">
         <div
-          className="mx-auto max-w-[720px] rounded-2xl"
+          className="mx-auto max-w-[700px] rounded-2xl transition-shadow focus-within:shadow-[0_2px_20px_rgba(0,0,0,0.12)]"
           style={{
-            background: '#ffffff',
-            border: '1px solid rgba(0,0,0,0.12)',
-            boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+            background: 'var(--ec-card-bg)',
+            border: '1px solid var(--ec-border)',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.07)',
           }}
         >
           {/* Textarea */}
@@ -671,10 +701,10 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                   handleSend()
                 }
               }}
-              placeholder="Reply…"
+              placeholder="Message your companion…"
               rows={1}
-              className="w-full resize-none text-sm outline-none bg-transparent leading-relaxed"
-              style={{ color: '#0a0a0a', maxHeight: '140px', overflowY: 'auto' }}
+              className="w-full resize-none text-sm outline-none bg-transparent leading-relaxed placeholder:text-[#b0b0b0]"
+              style={{ color: 'var(--ec-text)', maxHeight: '140px', overflowY: 'auto' }}
             />
           </div>
 
