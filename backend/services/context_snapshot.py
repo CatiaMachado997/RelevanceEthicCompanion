@@ -48,11 +48,12 @@ class ContextSnapshotService:
                     WHERE t.user_id = %s
                       AND t.status NOT IN ('done', 'cancelled')
                       AND t.due_date IS NOT NULL
+                      AND t.due_date >= %s
                       AND t.due_date <= %s
                     ORDER BY t.due_date ASC, t.priority DESC
                     LIMIT 10
                     """,
-                    (user_id, in_7_days),
+                    (user_id, now, in_7_days),
                 )
                 snapshot["tasks_due_soon"] = [
                     {
