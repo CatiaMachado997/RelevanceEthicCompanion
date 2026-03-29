@@ -91,3 +91,96 @@ def test_archive_project_esl_veto():
         mock_cls.return_value.evaluate_action = AsyncMock(return_value=decision)
         response = client.delete("/api/projects/some-id")
     assert response.status_code == 403
+
+
+# ── Task tests ───────────────────────────────────────────────────────────────
+
+def test_list_tasks_returns_list():
+    """GET /api/tasks should return 200 and a list."""
+    from main import app
+    client = TestClient(app)
+    with patch("routes.tasks.get_current_read_user_id", return_value="user-1"), \
+         patch("routes.tasks.get_user_tasks", return_value=[]):
+        response = client.get("/api/tasks")
+    assert response.status_code == 200
+    assert isinstance(response.json(), list)
+
+
+def test_create_task_esl_veto():
+    """POST /api/tasks should return 403 when ESL vetoes."""
+    from main import app
+    client = TestClient(app)
+    decision = MagicMock()
+    decision.status = "VETOED"
+    decision.reason = "test veto"
+    with patch("routes.tasks.get_current_user_id", return_value="user-1"), \
+         patch("routes.tasks.EthicalSafeguardLayer") as mock_cls:
+        mock_cls.return_value.evaluate_action = AsyncMock(return_value=decision)
+        response = client.post("/api/tasks", json={"title": "Test task"})
+    assert response.status_code == 403
+
+
+def test_update_task_esl_veto():
+    """PATCH /api/tasks/{id} should return 403 when ESL vetoes."""
+    from main import app
+    client = TestClient(app)
+    decision = MagicMock()
+    decision.status = "VETOED"
+    decision.reason = "test veto"
+    with patch("routes.tasks.get_current_user_id", return_value="user-1"), \
+         patch("routes.tasks.EthicalSafeguardLayer") as mock_cls:
+        mock_cls.return_value.evaluate_action = AsyncMock(return_value=decision)
+        response = client.patch("/api/tasks/some-id", json={"status": "done"})
+    assert response.status_code == 403
+
+
+def test_delete_task_esl_veto():
+    """DELETE /api/tasks/{id} should return 403 when ESL vetoes."""
+    from main import app
+    client = TestClient(app)
+    decision = MagicMock()
+    decision.status = "VETOED"
+    decision.reason = "test veto"
+    with patch("routes.tasks.get_current_user_id", return_value="user-1"), \
+         patch("routes.tasks.EthicalSafeguardLayer") as mock_cls:
+        mock_cls.return_value.evaluate_action = AsyncMock(return_value=decision)
+        response = client.delete("/api/tasks/some-id")
+    assert response.status_code == 403
+
+
+def test_extract_tasks_returns_suggestions():
+    """POST /api/tasks/extract should return a list of suggestions (not stored)."""
+    from main import app
+    client = TestClient(app)
+    decision = MagicMock()
+    decision.status = "APPROVED"
+    mock_ai_response = MagicMock()
+    mock_ai_response.content = '{"tasks": [{"title": "Review doc", "description": "Check the spec", "priority": 3}]}'
+    with patch("routes.tasks.get_current_user_id", return_value="user-1"), \
+         patch("routes.tasks.EthicalSafeguardLayer") as mock_cls, \
+         patch("routes.tasks.ChatGroq") as mock_llm:
+        mock_cls.return_value.evaluate_action = AsyncMock(return_value=decision)
+        mock_llm.return_value.invoke = MagicMock(return_value=mock_ai_response)
+        response = client.post("/api/tasks/extract", json={"text": "Review the spec document."})
+    assert response.status_code == 200
+    data = response.json()
+    assert "suggestions" in data
+    assert isinstance(data["suggestions"], list)
+
+
+def test_extract_tasks_bad_json_returns_empty():
+    """POST /api/tasks/extract returns empty suggestions if LLM returns bad JSON."""
+    from main import app
+    client = TestClient(app)
+    decision = MagicMock()
+    decision.status = "APPROVED"
+    mock_ai_response = MagicMock()
+    mock_ai_response.content = "not valid json"
+    with patch("routes.tasks.get_current_user_id", return_value="user-1"), \
+         patch("routes.tasks.EthicalSafeguardLayer") as mock_cls, \
+         patch("routes.tasks.ChatGroq") as mock_llm:
+        mock_cls.return_value.evaluate_action = AsyncMock(return_value=decision)
+        mock_llm.return_value.invoke = MagicMock(return_value=mock_ai_response)
+        response = client.post("/api/tasks/extract", json={"text": "bad text"})
+    assert response.status_code == 200
+    assert response.json()["suggestions"] == []
