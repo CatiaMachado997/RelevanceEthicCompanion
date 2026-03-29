@@ -938,6 +938,47 @@ export interface ExtractedTask {
   priority?: number;
 }
 
+// ==================== Context API ====================
+
+export interface ContextSnapshotTask {
+  id: string
+  title: string
+  status: string
+  due_date: string | null
+  priority: number
+  project_title: string | null
+}
+
+export interface ContextSnapshotProject {
+  id: string
+  title: string
+  open_tasks: number
+  done_tasks: number
+}
+
+export interface ContextSnapshotEvent {
+  title: string
+  start_time: string | null
+  location: string | null
+}
+
+export interface ContextSnapshotGoal {
+  id: string
+  title: string
+  priority: number
+  target_date: string | null
+}
+
+export interface ContextSnapshot {
+  computed_at: string
+  tasks_due_soon: ContextSnapshotTask[]
+  overdue_count: number
+  active_projects: ContextSnapshotProject[]
+  upcoming_events: ContextSnapshotEvent[]
+  active_goals: ContextSnapshotGoal[]
+  calendar_pressure: 'light' | 'moderate' | 'heavy'
+}
+
 export const tasksApi = {
   list: async (params?: { project_id?: string; status?: string }): Promise<Task[]> => {
     const query = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
@@ -984,6 +1025,11 @@ export const tasksApi = {
   },
 }
 
+export const contextApi = {
+  snapshot: (): Promise<ContextSnapshot> =>
+    apiRequest<ContextSnapshot>('/api/context/snapshot'),
+}
+
 export const api = {
   values: valuesApi,
   chat: chatApi,
@@ -1000,6 +1046,7 @@ export const api = {
   documents: documentsApi,
   projects: projectsApi,
   tasks: tasksApi,
+  context: contextApi,
 };
 
 export default api;
