@@ -546,7 +546,7 @@ class ContextManager:
                 user_id=props['user_id'],
                 content=props['content'],
                 source=props['source'],
-                timestamp=datetime.fromisoformat(props['timestamp'].replace('Z', '+00:00')),
+                timestamp=props['timestamp'] if isinstance(props['timestamp'], datetime) else datetime.fromisoformat(str(props['timestamp']).replace('Z', '+00:00')),
                 metadata=metadata
             ))
         return entries
