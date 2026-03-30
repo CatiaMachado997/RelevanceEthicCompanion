@@ -481,24 +481,32 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
   }
 
   const handleConfirmTask = async (suggestion: ExtractedTaskType) => {
-    await api.tasks.create({
-      title: suggestion.title,
-      description: suggestion.description ?? undefined,
-      priority: suggestion.priority ?? 5,
-      source_origin: 'chat_extract',
-    })
-    setExtractedSuggestions(prev => prev.filter(s => s.title !== suggestion.title))
+    try {
+      await api.tasks.create({
+        title: suggestion.title,
+        description: suggestion.description ?? undefined,
+        priority: suggestion.priority ?? 5,
+        source_origin: 'chat_extract',
+      })
+      setExtractedSuggestions(prev => prev.filter(s => s.title !== suggestion.title))
+    } catch {
+      // silently ignore
+    }
   }
 
   const handleSaveNote = async (content: string, msgKey: string) => {
-    await api.values.create({
-      type: 'preference',
-      value: content.slice(0, 1000),
-      priority: 5,
-      metadata: { subtype: 'note', source: 'chat_response' },
-    })
-    setSavedNoteFor(msgKey)
-    setTimeout(() => setSavedNoteFor(null), 3000)
+    try {
+      await api.values.create({
+        type: 'preference',
+        value: content.slice(0, 1000),
+        priority: 5,
+        metadata: { subtype: 'note', source: 'chat_response' },
+      })
+      setSavedNoteFor(msgKey)
+      setTimeout(() => setSavedNoteFor(null), 3000)
+    } catch {
+      // silently ignore — note saving is best-effort
+    }
   }
 
   const isEmpty = !loadingHistory && messages.length === 0
