@@ -247,7 +247,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
   const [plusMenuOpen, setPlusMenuOpen] = useState(false)
 
   const [extractingFor, setExtractingFor] = useState<string | null>(null)
-  const [extractedSuggestions, setExtractedSuggestions] = useState<ExtractedTaskType[]>([])
+  const [extractedSuggestions, setExtractedSuggestions] = useState<Array<ExtractedTaskType & { _key: string }>>([])
   const [extractLoading, setExtractLoading] = useState(false)
   const [savedNoteFor, setSavedNoteFor] = useState<string | null>(null)
 
@@ -472,7 +472,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
     setExtractLoading(true)
     try {
       const result = await api.tasks.extract(content)
-      setExtractedSuggestions(result.suggestions ?? [])
+      setExtractedSuggestions((result.suggestions ?? []).map((s, i) => ({ ...s, _key: `${s.title}-${i}` })))
     } catch {
       setExtractedSuggestions([])
     } finally {
@@ -480,7 +480,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
     }
   }
 
-  const handleConfirmTask = async (suggestion: ExtractedTaskType) => {
+  const handleConfirmTask = async (suggestion: ExtractedTaskType & { _key: string }) => {
     try {
       await api.tasks.create({
         title: suggestion.title,
@@ -488,7 +488,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
         priority: suggestion.priority ?? 5,
         source_origin: 'chat_extract',
       })
-      setExtractedSuggestions(prev => prev.filter(s => s.title !== suggestion.title))
+      setExtractedSuggestions(prev => prev.filter(s => s._key !== suggestion._key))
     } catch {
       // silently ignore
     }
@@ -706,7 +706,8 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => handleExtractTasks(msg.content, msg.id)}
-                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-colors hover:opacity-80"
+                        disabled={extractLoading && extractingFor === msg.id}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-colors ${extractLoading && extractingFor === msg.id ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80'}`}
                         style={{
                           background: 'var(--ec-surface-2, rgba(0,0,0,0.04))',
                           color: 'var(--ec-text-subtle)',
@@ -754,8 +755,8 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                           <p className="text-xs" style={{ color: 'var(--ec-text-subtle)' }}>No tasks found.</p>
                         ) : (
                           <ul className="space-y-2">
-                            {extractedSuggestions.map((s, si) => (
-                              <li key={si} className="flex items-start justify-between gap-3">
+                            {extractedSuggestions.map((s) => (
+                              <li key={s._key} className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
                                   <p className="text-sm font-medium truncate" style={{ color: 'var(--ec-text)' }}>
                                     {s.title}
@@ -768,6 +769,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                                 </div>
                                 <button
                                   onClick={() => handleConfirmTask(s)}
+                                  aria-label={`Add task: ${s.title}`}
                                   className="shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors hover:opacity-80"
                                   style={{ background: '#4A7C59', color: '#fff' }}
                                 >
@@ -779,6 +781,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                         )}
                         <button
                           onClick={() => { setExtractingFor(null); setExtractedSuggestions([]) }}
+                          aria-label="Dismiss extracted tasks"
                           className="mt-2 text-xs hover:opacity-70"
                           style={{ color: 'var(--ec-text-subtle)' }}
                         >
