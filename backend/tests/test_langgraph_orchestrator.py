@@ -139,3 +139,18 @@ async def test_intent_classifier_plan():
     state = {**base_state(), "message": "/plan launch campaign next quarter"}
     result = await intent_classifier_node(state)
     assert result["intent"] == "plan"
+
+@pytest.mark.asyncio
+async def test_esl_gateway_approved():
+    from orchestrator.nodes.esl import esl_gateway_node
+    from esl.models import ESLDecision, ESLDecisionStatus
+    mock_decision = ESLDecision(
+        status=ESLDecisionStatus.APPROVED, reason="OK",
+        violated_values=[], applied_rules=[], confidence=0.95
+    )
+    mock_esl = MagicMock()
+    mock_esl.evaluate_action = AsyncMock(return_value=mock_decision)
+    state = {**base_state(), "proposed_content": "Here is your summary.", "user_context": {}}
+    with patch("orchestrator.nodes.esl.get_esl", return_value=mock_esl):
+        result = await esl_gateway_node(state)
+    assert result["esl_decision"].status == ESLDecisionStatus.APPROVED
