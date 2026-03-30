@@ -13,7 +13,9 @@ import {
   ThumbsUp, ThumbsDown, RotateCcw, Plus, Cpu,
   Paperclip, Globe, Calendar, Target, StickyNote,
   BarChart2, ShieldCheck, Sparkles,
+  BookmarkPlus, ListTodo, CheckCircle,
 } from 'lucide-react'
+import type { ExtractedTask as ExtractedTaskType } from '@/lib/api'
 import { Skeleton } from '@/components/ui/skeleton'
 
 interface Message {
@@ -244,6 +246,11 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
   const [attachedFile, setAttachedFile] = useState<{ name: string; content: string } | null>(null)
   const [plusMenuOpen, setPlusMenuOpen] = useState(false)
 
+  const [extractingFor, setExtractingFor] = useState<string | null>(null)
+  const [extractedSuggestions, setExtractedSuggestions] = useState<Array<ExtractedTaskType & { _key: string }>>([])
+  const [extractLoading, setExtractLoading] = useState(false)
+  const [savedNoteFor, setSavedNoteFor] = useState<string | null>(null)
+
   const endRef       = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const textareaRef  = useRef<HTMLTextAreaElement>(null)
@@ -459,6 +466,49 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
 
   const handleStop = () => streamRef.current?.cancel()
 
+  const handleExtractTasks = async (content: string, msgKey: string) => {
+    setExtractingFor(msgKey)
+    setExtractedSuggestions([])
+    setExtractLoading(true)
+    try {
+      const result = await api.tasks.extract(content)
+      setExtractedSuggestions((result.suggestions ?? []).map((s, i) => ({ ...s, _key: `${s.title}-${i}` })))
+    } catch {
+      setExtractedSuggestions([])
+    } finally {
+      setExtractLoading(false)
+    }
+  }
+
+  const handleConfirmTask = async (suggestion: ExtractedTaskType & { _key: string }) => {
+    try {
+      await api.tasks.create({
+        title: suggestion.title,
+        description: suggestion.description ?? undefined,
+        priority: suggestion.priority ?? 5,
+        source_origin: 'chat_extract',
+      })
+      setExtractedSuggestions(prev => prev.filter(s => s._key !== suggestion._key))
+    } catch {
+      // silently ignore
+    }
+  }
+
+  const handleSaveNote = async (content: string, msgKey: string) => {
+    try {
+      await api.values.create({
+        type: 'preference',
+        value: content.slice(0, 1000),
+        priority: 5,
+        metadata: { subtype: 'note', source: 'chat_response' },
+      })
+      setSavedNoteFor(msgKey)
+      setTimeout(() => setSavedNoteFor(null), 3000)
+    } catch {
+      // silently ignore — note saving is best-effort
+    }
+  }
+
   const isEmpty = !loadingHistory && messages.length === 0
 
   return (
@@ -646,6 +696,99 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                         if (lastUser) handleSend(lastUser.content)
                       } : undefined}
                     />
+                  </div>
+                )}
+
+                {/* Follow-up actions — only on completed, non-streaming messages */}
+                {!msg.streaming && msg.content && (
+                  <div className="pl-9 mt-2">
+                    {/* Action buttons */}
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleExtractTasks(msg.content, msg.id)}
+                        disabled={extractLoading && extractingFor === msg.id}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-colors ${extractLoading && extractingFor === msg.id ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80'}`}
+                        style={{
+                          background: 'var(--ec-surface-2, rgba(0,0,0,0.04))',
+                          color: 'var(--ec-text-subtle)',
+                          border: '1px solid var(--ec-card-border)',
+                        }}
+                        title="Extract tasks from this response"
+                      >
+                        <ListTodo size={11} />
+                        Extract tasks
+                      </button>
+                      <button
+                        onClick={() => handleSaveNote(msg.content, msg.id)}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-colors hover:opacity-80"
+                        style={{
+                          background: savedNoteFor === msg.id
+                            ? 'rgba(74,124,89,0.10)'
+                            : 'var(--ec-surface-2, rgba(0,0,0,0.04))',
+                          color: savedNoteFor === msg.id ? '#4A7C59' : 'var(--ec-text-subtle)',
+                          border: '1px solid var(--ec-card-border)',
+                        }}
+                        title="Save this response as a note"
+                      >
+                        {savedNoteFor === msg.id
+                          ? <><CheckCircle size={11} /> Saved</>
+                          : <><BookmarkPlus size={11} /> Save as note</>
+                        }
+                      </button>
+                    </div>
+
+                    {/* Extract panel */}
+                    {extractingFor === msg.id && (
+                      <div
+                        className="mt-3 rounded-xl p-4"
+                        style={{
+                          background: 'var(--ec-card-bg)',
+                          border: '1px solid var(--ec-card-border)',
+                        }}
+                      >
+                        <p className="text-xs font-medium mb-2" style={{ color: 'var(--ec-text)' }}>
+                          Extracted tasks
+                        </p>
+                        {extractLoading ? (
+                          <p className="text-xs" style={{ color: 'var(--ec-text-subtle)' }}>Analysing…</p>
+                        ) : extractedSuggestions.length === 0 ? (
+                          <p className="text-xs" style={{ color: 'var(--ec-text-subtle)' }}>No tasks found.</p>
+                        ) : (
+                          <ul className="space-y-2">
+                            {extractedSuggestions.map((s) => (
+                              <li key={s._key} className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium truncate" style={{ color: 'var(--ec-text)' }}>
+                                    {s.title}
+                                  </p>
+                                  {s.description && (
+                                    <p className="text-xs mt-0.5 line-clamp-2" style={{ color: 'var(--ec-text-subtle)' }}>
+                                      {s.description}
+                                    </p>
+                                  )}
+                                </div>
+                                <button
+                                  onClick={() => handleConfirmTask(s)}
+                                  aria-label={`Add task: ${s.title}`}
+                                  className="shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors hover:opacity-80"
+                                  style={{ background: '#4A7C59', color: '#fff' }}
+                                >
+                                  Add
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <button
+                          onClick={() => { setExtractingFor(null); setExtractedSuggestions([]) }}
+                          aria-label="Dismiss extracted tasks"
+                          className="mt-2 text-xs hover:opacity-70"
+                          style={{ color: 'var(--ec-text-subtle)' }}
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
