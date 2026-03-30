@@ -1306,58 +1306,33 @@ This ports `_daily_tokens`, `_estimate_tokens`, `_check_token_warning` from `orc
 
 ---
 
-## Task 13: Langfuse Observability
+## Task 13: Langfuse Observability — Configure Keys + Verify
 
-**Files:** `backend/orchestrator/nodes/esl.py`, `backend/orchestrator/graph.py`
+**Note:** The Langfuse singleton and ESL tracing code is already written in Task 6 (`esl.py` `_get_langfuse()` singleton + `lf.trace()` call inside `esl_gateway_node`). This task only configures the environment and verifies traces appear.
 
-- [ ] **Step 1: Add Langfuse trace to ESLGateway node**
-
-  In `backend/orchestrator/nodes/esl.py`, wrap the `evaluate_action` call:
-  ```python
-  from config import settings
-  import logging
-  logger = logging.getLogger(__name__)
-
-  # In esl_gateway_node(), after getting decision:
-  try:
-      if settings.LANGFUSE_PUBLIC_KEY:
-          from langfuse import Langfuse
-          lf = Langfuse(
-              public_key=settings.LANGFUSE_PUBLIC_KEY,
-              secret_key=settings.LANGFUSE_SECRET_KEY,
-              host=settings.LANGFUSE_HOST,
-          )
-          lf.trace(
-              name="esl_decision",
-              user_id=state["user_id"],
-              metadata={
-                  "status": decision.status.value,
-                  "reason": decision.reason,
-                  "confidence": decision.confidence,
-                  "violated_values": decision.violated_values,
-              }
-          )
-  except Exception as e:
-      logger.warning(f"Langfuse trace failed (non-blocking): {e}")
-  ```
-
-- [ ] **Step 2: Add LANGFUSE keys to .env**
+- [ ] **Step 1: Add LANGFUSE keys to .env**
   ```
   LANGFUSE_PUBLIC_KEY=pk-lf-...    # from langfuse.com or self-hosted
   LANGFUSE_SECRET_KEY=sk-lf-...
   LANGFUSE_HOST=https://cloud.langfuse.com
   ```
 
-- [ ] **Step 3: Run a manual chat test and verify trace appears in Langfuse dashboard**
+- [ ] **Step 2: Add keys to .env.example**
+  ```
+  LANGFUSE_PUBLIC_KEY=         # Required for observability
+  LANGFUSE_SECRET_KEY=
+  LANGFUSE_HOST=https://cloud.langfuse.com
+  ```
+
+- [ ] **Step 3: Verify trace appears in Langfuse dashboard**
 
   Start backend: `cd backend && python main.py`
-  Send a chat message via the frontend or curl.
-  Check Langfuse dashboard for a `esl_decision` trace.
+  Send a chat message. Check Langfuse dashboard for an `esl_decision` trace with status, reason, and confidence fields.
 
 - [ ] **Step 4: Commit**
   ```bash
-  git add backend/orchestrator/nodes/esl.py backend/.env.example
-  git commit -m "feat: add Langfuse ESL decision tracing"
+  git add backend/.env.example
+  git commit -m "chore: add Langfuse env vars to .env.example"
   ```
 
 ---
@@ -1658,11 +1633,11 @@ This ports `_daily_tokens`, `_estimate_tokens`, `_check_token_warning` from `orc
 
   Add `timezone` and `language` dropdowns to the Profile section. On save, include in `PUT /api/settings/` body.
 
-- [ ] **Step 4: Add Security section**
+- [ ] **Step 5: Add Security section**
 
-  Add "Sign out all devices" button → calls Supabase `signOut({ scope: 'global' })` + clears cookie + redirects to `/login`.
+  Add "Sign out all devices" button → calls Supabase `signOut({ scope: 'global' })` + calls `DELETE /api/auth/session` to clear cookie + redirects to `/login`.
 
-- [ ] **Step 5: Test settings persist across sessions**
+- [ ] **Step 6: Test settings persist across sessions**
 
   - Change notification setting → reload page → setting persists
   - Change theme → reload page → theme persists from localStorage (no flicker)
