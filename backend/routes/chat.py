@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from datetime import datetime, UTC
 import json
 
-from services.orchestrator_v2 import OrchestratorV2
+# OrchestratorV2 imported lazily inside get_orchestrator() — not needed when USE_LANGGRAPH=True
 from services.context_manager import ContextManager
 from esl.models import ActionType
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
@@ -98,8 +98,9 @@ GROQ_MODELS = [
 DEFAULT_MODEL = "llama-3.3-70b-versatile"
 
 
-def get_orchestrator(model: str = DEFAULT_MODEL) -> OrchestratorV2:
+def get_orchestrator(model: str = DEFAULT_MODEL):
     """Get OrchestratorV2 instance with Tavily web search when API key is available"""
+    from services.orchestrator_v2 import OrchestratorV2  # lazy import — not needed when USE_LANGGRAPH=True
     context_manager = get_context_manager()
     tavily_client = None
     relevance_engine = None
@@ -239,7 +240,7 @@ async def send_message(
     request: Request,
     body: ChatRequest,
     user_id: str = Depends(get_current_user_id),
-    orchestrator: OrchestratorV2 = Depends(get_orchestrator)
+    orchestrator=Depends(get_orchestrator)
 ):
     """
     Send a chat message with ESL protection
@@ -354,7 +355,7 @@ async def suggest_proactive_action(
     suggestion_content: str,
     rationale: str,
     user_id: str = Depends(get_current_user_id),
-    orchestrator: OrchestratorV2 = Depends(get_orchestrator)
+    orchestrator=Depends(get_orchestrator)
 ):
     """
     Suggest a proactive AI action (goes through ESL)
