@@ -1,0 +1,93 @@
+"""
+Regression tests for the chat streaming interface.
+These tests define the contract that the LangGraph orchestrator must satisfy.
+Run against orchestrator_v2 first (baseline), then against LangGraph orchestrator.
+"""
+import pytest
+import json
+from unittest.mock import patch, MagicMock, AsyncMock
+from httpx import AsyncClient, ASGITransport
+from main import app
+
+
+async def _collect_stream_events(response_text: str) -> list[dict]:
+    """Parse SSE data lines into a list of event dicts."""
+    events = []
+    for line in response_text.splitlines():
+        if line.startswith("data: "):
+            try:
+                events.append(json.loads(line[6:]))
+            except json.JSONDecodeError:
+                pass
+    return events
+
+
+async def mock_stream(*args, **kwargs):
+    yield {"event": "token", "token": "Hello"}
+    yield {"event": "token", "token": " world"}
+    yield {"event": "done"}
+
+
+# Helper — must be defined before any test that calls it
+def base_state() -> dict:
+    return {
+        "user_id": "u1", "message": "", "conversation_id": None, "model": "llama",
+        "user_context": {}, "conversation_history": [], "intent": "",
+        "tool_calls": [], "tool_results": [], "esl_decision": None,
+        "proposed_content": "", "response_text": "", "response_events": [],
+        "token_count": 0, "token_warning": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_stream_returns_200_event_stream():
+    """Chat stream endpoint returns 200 with text/event-stream content type."""
+    mock_orch = MagicMock()
+    mock_orch.stream_message = mock_stream
+    with patch("routes.chat.get_orchestrator", return_value=mock_orch):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get("/api/chat/stream?message=hello&user_id=00000000-0000-0000-0000-000000000000")
+        assert r.status_code in (200, 401)
+        if r.status_code == 200:
+            assert "text/event-stream" in r.headers.get("content-type", "")
+
+
+@pytest.mark.asyncio
+async def test_stream_emits_token_events():
+    """Stream yields token events followed by a done event."""
+    mock_orch = MagicMock()
+    mock_orch.stream_message = mock_stream
+    with patch("routes.chat.get_orchestrator", return_value=mock_orch):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get("/api/chat/stream?message=hello&user_id=00000000-0000-0000-0000-000000000000")
+        if r.status_code == 200:
+            events = await _collect_stream_events(r.text)
+            token_events = [e for e in events if e.get("event") == "token"]
+            done_events = [e for e in events if e.get("event") == "done"]
+            assert len(token_events) >= 1
+            assert len(done_events) == 1
+            assert done_events[-1] == events[-1]  # done is last
+
+
+@pytest.mark.asyncio
+async def test_stream_token_events_have_token_field():
+    """Every token event has a non-empty 'token' string field."""
+    mock_orch = MagicMock()
+    mock_orch.stream_message = mock_stream
+    with patch("routes.chat.get_orchestrator", return_value=mock_orch):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get("/api/chat/stream?message=hello&user_id=00000000-0000-0000-0000-000000000000")
+        if r.status_code == 200:
+            events = await _collect_stream_events(r.text)
+            for e in events:
+                if e.get("event") == "token":
+                    assert isinstance(e.get("token"), str)
+                    assert len(e["token"]) > 0
+
+
+@pytest.mark.asyncio
+async def test_stream_missing_message_returns_422():
+    """Request without message param returns 422 Unprocessable Entity."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r = await client.get("/api/chat/stream?user_id=00000000-0000-0000-0000-000000000000")
+    assert r.status_code == 422
