@@ -91,3 +91,51 @@ async def test_stream_missing_message_returns_422():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         r = await client.get("/api/chat/stream?user_id=00000000-0000-0000-0000-000000000000")
     assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_context_builder_populates_state():
+    """ContextBuilder node adds user_context and conversation_history to state."""
+    from orchestrator.nodes.context import context_builder_node
+    from unittest.mock import AsyncMock
+
+    mock_cm = MagicMock()
+    mock_cm.get_user_context = AsyncMock(return_value=MagicMock(
+        active_goals=[], user_values=[], focus_mode=False,
+        additional_context={}
+    ))
+    mock_cm.get_conversation_history = AsyncMock(return_value=[])
+
+    state = {
+        "user_id": "test-user", "message": "hello", "conversation_id": None,
+        "model": "llama", "user_context": {}, "conversation_history": [],
+        "intent": "", "tool_calls": [], "tool_results": [],
+        "esl_decision": None, "proposed_content": "", "response_text": "",
+        "response_events": [], "token_count": 0, "token_warning": None,
+    }
+    with patch("orchestrator.nodes.context.get_context_manager", return_value=mock_cm):
+        result = await context_builder_node(state)
+    assert "user_context" in result
+    assert "conversation_history" in result
+
+
+@pytest.mark.asyncio
+async def test_intent_classifier_chat():
+    from orchestrator.nodes.intent import intent_classifier_node
+    state = {**base_state(), "message": "what should I focus on today?"}
+    result = await intent_classifier_node(state)
+    assert result["intent"] == "chat"
+
+@pytest.mark.asyncio
+async def test_intent_classifier_search():
+    from orchestrator.nodes.intent import intent_classifier_node
+    state = {**base_state(), "message": "/search latest AI news"}
+    result = await intent_classifier_node(state)
+    assert result["intent"] == "search"
+
+@pytest.mark.asyncio
+async def test_intent_classifier_plan():
+    from orchestrator.nodes.intent import intent_classifier_node
+    state = {**base_state(), "message": "/plan launch campaign next quarter"}
+    result = await intent_classifier_node(state)
+    assert result["intent"] == "plan"
