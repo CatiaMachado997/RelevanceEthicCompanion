@@ -4,11 +4,10 @@ import { useEffect, useState } from 'react'
 import { transparencyApi, insightApi, contextApi, type ContextSnapshot } from '@/lib/api'
 import Link from 'next/link'
 import {
-  MessageSquare, Shield, ArrowRight, Target,
-  Calendar, Clock, AlertTriangle, CheckSquare, FolderOpen, Zap,
+  MessageSquare, Shield, ArrowRight,
+  Calendar, Clock, AlertTriangle, CheckSquare, FolderOpen,
 } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Card } from '@/components/ui/card'
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 
 interface ESLLog {
@@ -73,8 +72,11 @@ export default function DashboardPage() {
       try {
         const insightData = await insightApi.daily()
         setDailyInsight(insightData?.insight ?? null)
-      } catch {}
-      setInsightLoading(false)
+      } catch {
+        // no insight available
+      } finally {
+        setInsightLoading(false)
+      }
     }
     load()
   }, [])
@@ -229,7 +231,7 @@ export default function DashboardPage() {
                 <div className="flex flex-wrap gap-2">
                   {snapshot.upcoming_events.map((ev, i) => (
                     <div
-                      key={i}
+                      key={`${ev.title}-${ev.start_time ?? i}`}
                       className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm"
                       style={{ background: 'var(--ec-surface-2, rgba(0,0,0,0.04))', color: 'var(--ec-text)' }}
                     >
@@ -321,7 +323,7 @@ export default function DashboardPage() {
                   const status = log.decision?.status ?? 'APPROVED'
                   const colors = ESL_COLORS[status] ?? ESL_COLORS.APPROVED
                   return (
-                    <li key={i} className="flex items-center gap-2">
+                    <li key={log.id ?? i} className="flex items-center gap-2">
                       <span
                         className="text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0"
                         style={{ background: colors.bg, color: colors.text, border: `1px solid ${colors.border}` }}
