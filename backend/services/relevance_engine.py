@@ -11,7 +11,7 @@ from typing import List, Dict, Any
 from datetime import datetime, timedelta
 
 from services.context_manager import ContextManager
-from services.orchestrator_v2 import OrchestratorV2, ActionType, UrgencyLevel
+# OrchestratorV2, ActionType, UrgencyLevel imported lazily inside scan_upcoming_events()
 from services.llm_service_legacy import LLMService
 
 
@@ -30,7 +30,7 @@ class RelevanceEngine:
         user_id: str,
         window_minutes: int = 15,
         hours_ahead: int = 2,
-        orchestrator: OrchestratorV2 | None = None,
+        orchestrator=None,
     ) -> List[Dict[str, Any]]:
         """
         Scan for events starting within the next window and propose summaries.
@@ -50,7 +50,10 @@ class RelevanceEngine:
         window = now + timedelta(minutes=window_minutes)
 
         # Prepare orchestrator if not provided
-        orch = orchestrator or OrchestratorV2(self.context_manager)
+        if orchestrator is None:
+            from services.orchestrator_v2 import OrchestratorV2  # lazy import
+            orchestrator = OrchestratorV2(self.context_manager)
+        orch = orchestrator
 
         results: List[Dict[str, Any]] = []
         for ev in events:

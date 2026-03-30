@@ -1,12 +1,13 @@
 from fastapi.testclient import TestClient
 from fastapi import FastAPI # Import FastAPI
-from services.orchestrator_v2 import OrchestratorV2
 from routes.chat import get_orchestrator, router as chat_router # Import the router directly
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, AsyncMock
 import pytest
 
-# Create a mock orchestrator
-mock_orchestrator = MagicMock(spec=OrchestratorV2)
+# Create a mock orchestrator with async methods (OrchestratorV2 removed in Task 10)
+mock_orchestrator = MagicMock()
+mock_orchestrator.handle_user_message = AsyncMock()
+mock_orchestrator.suggest_proactive_action = AsyncMock()
 
 def get_mock_orchestrator():
     return mock_orchestrator

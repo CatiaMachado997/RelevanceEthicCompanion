@@ -19,7 +19,9 @@ async def test_stream_endpoint_returns_event_stream():
     mock_orchestrator = MagicMock()
     mock_orchestrator.stream_message = mock_stream_message
 
-    with patch("routes.chat.get_orchestrator", return_value=mock_orchestrator):
+    with patch("routes.chat.get_orchestrator", return_value=mock_orchestrator), \
+         patch("routes.chat.app_settings") as mock_settings:
+        mock_settings.USE_LANGGRAPH = False
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get(
                 "/api/chat/stream?message=hello&user_id=00000000-0000-0000-0000-000000000000"
@@ -36,7 +38,9 @@ async def test_stream_endpoint_yields_done_event():
     mock_orchestrator = MagicMock()
     mock_orchestrator.stream_message = mock_stream_message
 
-    with patch("routes.chat.get_orchestrator", return_value=mock_orchestrator):
+    with patch("routes.chat.get_orchestrator", return_value=mock_orchestrator), \
+         patch("routes.chat.app_settings") as mock_settings:
+        mock_settings.USE_LANGGRAPH = False
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get(
                 "/api/chat/stream?message=hello&user_id=00000000-0000-0000-0000-000000000000"

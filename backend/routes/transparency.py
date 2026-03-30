@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional
 from pydantic import BaseModel, Field
 
-from services.orchestrator_v2 import OrchestratorV2
+# OrchestratorV2 imported lazily inside get_orchestrator() below
 from services.context_manager import ContextManager
 from esl.audit import ESLAuditLogger
 from utils.db import get_db, get_db_connection
@@ -62,8 +62,9 @@ def get_audit_logger() -> ESLAuditLogger:
     except Exception:
         return ESLAuditLogger()
 
-def get_orchestrator() -> OrchestratorV2:
+def get_orchestrator():
     """Get OrchestratorV2 instance"""
+    from services.orchestrator_v2 import OrchestratorV2  # lazy import
     context_manager = ContextManager()
     return OrchestratorV2(context_manager)
 
@@ -122,7 +123,7 @@ async def get_esl_logs(
 async def get_esl_report(
     user_id: str = Depends(get_current_read_user_id),
     days: int = 7,
-    orchestrator: OrchestratorV2 = Depends(get_orchestrator)
+    orchestrator=Depends(get_orchestrator)
 ):
     """
     Get comprehensive ESL transparency report
