@@ -941,42 +941,42 @@ export interface ExtractedTask {
 // ==================== Context API ====================
 
 export interface ContextSnapshotTask {
-  id: string
-  title: string
-  status: string
-  due_date: string | null
-  priority: number
-  project_title: string | null
+  id: string;
+  title: string;
+  status: string;
+  due_date: string | null;
+  priority: number;
+  project_title: string | null;
 }
 
 export interface ContextSnapshotProject {
-  id: string
-  title: string
-  open_tasks: number
-  done_tasks: number
+  id: string;
+  title: string;
+  open_tasks: number;
+  done_tasks: number;
 }
 
 export interface ContextSnapshotEvent {
-  title: string
-  start_time: string | null
-  location: string | null
+  title: string;
+  start_time: string | null;
+  location: string | null;
 }
 
 export interface ContextSnapshotGoal {
-  id: string
-  title: string
-  priority: number
-  target_date: string | null
+  id: string;
+  title: string;
+  priority: number;
+  target_date: string | null;
 }
 
 export interface ContextSnapshot {
-  computed_at: string
-  tasks_due_soon: ContextSnapshotTask[]
-  overdue_count: number
-  active_projects: ContextSnapshotProject[]
-  upcoming_events: ContextSnapshotEvent[]
-  active_goals: ContextSnapshotGoal[]
-  calendar_pressure: 'light' | 'moderate' | 'heavy'
+  computed_at: string;
+  tasks_due_soon: ContextSnapshotTask[];
+  overdue_count: number;
+  active_projects: ContextSnapshotProject[];
+  upcoming_events: ContextSnapshotEvent[];
+  active_goals: ContextSnapshotGoal[];
+  calendar_pressure: 'light' | 'moderate' | 'heavy';
 }
 
 export const tasksApi = {
