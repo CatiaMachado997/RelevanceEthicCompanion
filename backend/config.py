@@ -74,6 +74,9 @@ class Settings(BaseSettings):
     LANGFUSE_SECRET_KEY: Optional[str] = None
     LANGFUSE_HOST: str = "https://cloud.langfuse.com"
 
+    # Feature flags
+    USE_LANGGRAPH: bool = False
+
     # Dev mode: override mock user ID to match the real user who connected OAuth
     DEV_USER_ID: str = "00000000-0000-0000-0000-000000000000"
 
