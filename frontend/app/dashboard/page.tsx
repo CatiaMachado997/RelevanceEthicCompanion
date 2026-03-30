@@ -1,17 +1,15 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { transparencyApi, goalsApi, valuesApi, eventsApi, insightApi, type Goal, type CalendarEvent } from '@/lib/api'
+import { transparencyApi, insightApi, contextApi, type ContextSnapshot } from '@/lib/api'
 import Link from 'next/link'
-import { MessageSquare, Heart, Shield, ArrowRight, Target, Calendar, Clock, Info } from 'lucide-react'
+import {
+  MessageSquare, Shield, ArrowRight,
+  Calendar, Clock, AlertTriangle, CheckSquare, FolderOpen,
+} from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card } from '@/components/ui/card'
-import {
-  PieChart,
-  Pie,
-  Cell,
-  ResponsiveContainer,
-} from 'recharts'
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 
 interface ESLLog {
   id?: string
@@ -32,14 +30,22 @@ const ESL_COLORS = {
   MODIFIED: { bg: 'rgba(155,122,61,0.10)', text: '#9B7A3D', border: 'rgba(155,122,61,0.20)' },
 }
 
+const PRESSURE_LABEL: Record<string, string> = {
+  light: 'Light day',
+  moderate: 'Moderate load',
+  heavy: 'Heavy schedule',
+}
+const PRESSURE_COLOR: Record<string, string> = {
+  light: '#4A7C59',
+  moderate: '#9B7A3D',
+  heavy: '#B04A3A',
+}
+
 export default function DashboardPage() {
-  const [goalCount, setGoalCount] = useState<number | null>(null)
-  const [valueCount, setValueCount] = useState<number | null>(null)
-  const [eslCount, setEslCount] = useState<number | null>(null)
-  const [approvalRate, setApprovalRate] = useState<number | null>(null)
-  const [recentGoals, setRecentGoals] = useState<Goal[]>([])
+  const [snapshot, setSnapshot] = useState<ContextSnapshot | null>(null)
   const [eslActivity, setEslActivity] = useState<ESLLog[]>([])
-  const [upcomingEvents, setUpcomingEvents] = useState<CalendarEvent[]>([])
+  const [approvalRate, setApprovalRate] = useState<number | null>(null)
+  const [eslCount, setEslCount] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [dailyInsight, setDailyInsight] = useState<string | null>(null)
   const [insightLoading, setInsightLoading] = useState(true)
@@ -47,31 +53,23 @@ export default function DashboardPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [goals, values, report, logs, events] = await Promise.allSettled([
-          goalsApi.list(),
-          valuesApi.list(),
+        const [snap, report, logs] = await Promise.allSettled([
+          contextApi.snapshot(),
           transparencyApi.report(),
           transparencyApi.logs(),
-          eventsApi.upcoming(24),
         ])
-        if (goals.status === 'fulfilled') {
-          const g = goals.value?.goals ?? []
-          setGoalCount(g.length)
-          setRecentGoals(g.slice(0, 3) as Goal[])
-        }
-        if (values.status === 'fulfilled') setValueCount((values.value?.values ?? []).length)
+        if (snap.status === 'fulfilled') setSnapshot(snap.value)
         if (report.status === 'fulfilled') {
           setEslCount(report.value?.total_decisions ?? 0)
           const rate = report.value?.approval_rate ?? 0
           setApprovalRate(rate > 1 ? rate : rate * 100)
         }
-        if (logs.status === 'fulfilled') setEslActivity((logs.value?.logs ?? []).slice(0, 5) as unknown as ESLLog[])
-        if (events.status === 'fulfilled') setUpcomingEvents((events.value?.events ?? []).slice(0, 3))
+        if (logs.status === 'fulfilled')
+          setEslActivity((logs.value?.logs ?? []).slice(0, 5) as unknown as ESLLog[])
       } finally {
         setLoading(false)
       }
 
-      // Fetch daily insight separately (can take longer due to LLM)
       try {
         const insightData = await insightApi.daily()
         setDailyInsight(insightData?.insight ?? null)
@@ -81,276 +79,274 @@ export default function DashboardPage() {
     load()
   }, [])
 
-  const now = new Date()
-  const hour = now.getHours()
-  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
-  const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
-
-  function formatEventTime(iso: string | null): string {
-    if (!iso) return ''
-    const d = new Date(iso)
-    const diffMs = d.getTime() - Date.now()
-    const diffMin = Math.round(diffMs / 60000)
-    if (diffMin < 0) return 'Started'
-    if (diffMin < 60) return `in ${diffMin}m`
-    const diffH = Math.round(diffMin / 60)
-    if (diffH < 24) return `in ${diffH}h`
-    return d.toLocaleDateString('en-US', { weekday: 'short', hour: '2-digit', minute: '2-digit' })
-  }
-
-  const stats = [
-    { label: 'Active Goals', value: goalCount, icon: Target, href: '/dashboard/goals' },
-    { label: 'Values Set', value: valueCount, icon: Heart, href: '/dashboard/values' },
-    { label: 'ESL Decisions Today', value: eslCount, icon: Shield, href: '/dashboard/transparency' },
-  ]
+  const pieData = approvalRate !== null
+    ? [
+        { name: 'Approved', value: Math.round(approvalRate) },
+        { name: 'Other', value: Math.max(0, 100 - Math.round(approvalRate)) },
+      ]
+    : []
 
   return (
-    <div className="space-y-5">
+    <div className="p-6 max-w-4xl mx-auto space-y-8">
 
-      {/* Greeting card */}
-      <Card className="rounded-2xl p-6 border border-[rgba(0,0,0,0.08)] shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-        <p className="text-sm mb-1" style={{ color: '#6b6b6b' }}>{dateStr}</p>
-        <h2 className="text-2xl font-semibold" style={{ color: '#0a0a0a' }}>{greeting}</h2>
-      </Card>
-
-      {/* Daily insight */}
-      {(insightLoading || dailyInsight) && (
-        <div
-          className="rounded-2xl p-5 border border-[rgba(0,0,0,0.08)] shadow-[0_1px_3px_rgba(0,0,0,0.08)]"
-          style={{ background: 'linear-gradient(135deg, #f9f6fa 0%, #ffffff 100%)' }}
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-sm" style={{ color: '#695e6e' }}>✦</span>
-            <p className="text-xs font-medium" style={{ color: '#695e6e' }}>
-              Today&apos;s insight from your companion
-            </p>
-          </div>
-          {insightLoading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-3/4" />
-            </div>
-          ) : (
-            <p className="text-sm leading-relaxed" style={{ color: '#1c1520' }}>
-              {dailyInsight}
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Stats row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {stats.map(({ label, value, icon: Icon, href }) => (
-          <Link
-            key={label}
-            href={href}
-            className="rounded-2xl p-5 flex items-center gap-4 transition-shadow duration-150 hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)] bg-white border border-[rgba(0,0,0,0.08)] shadow-[0_1px_3px_rgba(0,0,0,0.08)]"
-          >
-            <div className="w-10 h-10 rounded-xl bg-[#f5f5f5] flex items-center justify-center shrink-0">
-              <Icon size={18} style={{ color: '#000000' }} />
-            </div>
-            <div>
-              {loading ? (
-                <Skeleton className="h-7 w-10 mb-1" />
-              ) : (
-                <p className="text-2xl font-semibold" style={{ color: '#0a0a0a' }}>
-                  {value ?? '—'}
-                </p>
-              )}
-              <p className="text-xs" style={{ color: '#6b6b6b' }}>{label}</p>
-            </div>
-          </Link>
-        ))}
-      </div>
-
-      {/* Two-column: chat shortcut + active goals */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-        {/* Chat shortcut */}
-        <Card className="rounded-2xl p-5 flex flex-col justify-between border border-[rgba(0,0,0,0.08)] shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-          <div className="flex items-center gap-2 mb-3">
-            <MessageSquare size={16} style={{ color: '#000000' }} />
-            <h3 className="text-sm font-semibold" style={{ color: '#0a0a0a' }}>Chat</h3>
-          </div>
-          <p className="text-sm mb-4" style={{ color: '#6b6b6b' }}>
-            Ask your companion anything. Every response goes through ESL.
-          </p>
-          <Link
-            href="/dashboard/chat"
-            className="inline-flex items-center gap-1.5 text-sm font-medium"
-            style={{ color: '#000000' }}
-          >
-            Open chat <ArrowRight size={14} />
-          </Link>
-        </Card>
-
-        {/* Active goals */}
-        <Card className="rounded-2xl p-5 border border-[rgba(0,0,0,0.08)] shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <Target size={16} style={{ color: '#000000' }} />
-              <h3 className="text-sm font-semibold" style={{ color: '#0a0a0a' }}>Active Goals</h3>
-            </div>
-            <Link href="/dashboard/goals" className="text-xs" style={{ color: '#000000' }}>
-              View all
-            </Link>
-          </div>
-          {loading ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map(i => <Skeleton key={i} className="h-5 w-full" />)}
-            </div>
-          ) : recentGoals.length === 0 ? (
-            <p className="text-sm" style={{ color: '#9e9e9e' }}>No active goals yet.</p>
-          ) : (
-            <ul className="space-y-2">
-              {recentGoals.map(g => (
-                <li key={g.id} className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: '#4A7C59' }} />
-                  <span className="text-sm truncate" style={{ color: '#0a0a0a' }}>{g.title}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-      </div>
-
-      {/* Upcoming Events */}
-      <div className="rounded-2xl p-5" style={CARD_STYLE}>
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Calendar size={16} style={{ color: '#000000' }} />
-            <h3 className="text-sm font-semibold" style={{ color: '#0a0a0a' }}>Upcoming</h3>
-          </div>
-          <Link href="/dashboard/integrations" className="text-xs" style={{ color: '#9e9e9e' }}>
-            Manage
-          </Link>
-        </div>
-        {loading ? (
-          <div className="space-y-2">
-            {[1, 2].map(i => <Skeleton key={i} className="h-10 w-full" />)}
-          </div>
-        ) : upcomingEvents.length === 0 ? (
-          <div className="flex flex-col gap-2">
-            <p className="text-sm" style={{ color: '#9e9e9e' }}>No upcoming events.</p>
-            <Link
-              href="/dashboard/integrations"
-              className="inline-flex items-center gap-1 text-xs font-medium"
-              style={{ color: '#000000' }}
+      {/* ── Today section ──────────────────────────────────────── */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-semibold" style={{ color: 'var(--ec-text)' }}>
+            Today
+          </h2>
+          {snapshot && (
+            <span
+              className="text-xs px-2 py-0.5 rounded-full font-medium"
+              style={{
+                background: `${PRESSURE_COLOR[snapshot.calendar_pressure]}18`,
+                color: PRESSURE_COLOR[snapshot.calendar_pressure],
+                border: `1px solid ${PRESSURE_COLOR[snapshot.calendar_pressure]}30`,
+              }}
             >
-              Connect Google Calendar <ArrowRight size={12} />
-            </Link>
+              {PRESSURE_LABEL[snapshot.calendar_pressure]}
+            </span>
+          )}
+        </div>
+
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[0, 1].map(i => <Skeleton key={i} className="h-32 rounded-2xl" />)}
           </div>
         ) : (
-          <ul className="space-y-2.5">
-            {upcomingEvents.map(event => (
-              <li key={event.id} className="flex items-start gap-3">
-                <div
-                  className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
-                  style={{ background: '#f5f5f5' }}
-                >
-                  <Clock size={13} style={{ color: '#695e6e' }} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-sm truncate font-medium" style={{ color: '#0a0a0a' }}>{event.title}</p>
-                    {event.explanation && (
-                      <div className="relative group shrink-0">
-                        <span className="cursor-help" style={{ color: '#b0a6b4' }}>
-                          <Info size={12} />
-                        </span>
-                        <div
-                          className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-20
-                            hidden group-hover:block w-52 px-3 py-2 rounded-xl text-xs leading-relaxed
-                            pointer-events-none"
-                          style={{
-                            background: '#1a1a1a',
-                            color: '#f5f5f5',
-                            boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
-                          }}
-                        >
-                          {event.explanation}
-                          {/* Arrow */}
-                          <span
-                            className="absolute left-1/2 -translate-x-1/2 top-full"
-                            style={{ borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: '5px solid #1a1a1a', display: 'block', width: 0, height: 0 }}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+            {/* Tasks due soon */}
+            <div style={CARD_STYLE} className="p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <CheckSquare size={14} style={{ color: 'var(--ec-text-subtle)' }} />
+                <span className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--ec-text-subtle)' }}>
+                  Due soon
+                </span>
+                {snapshot && snapshot.overdue_count > 0 && (
+                  <span
+                    className="ml-auto text-xs px-1.5 py-0.5 rounded-full font-medium flex items-center gap-1"
+                    style={{ background: 'rgba(176,74,58,0.10)', color: '#B04A3A' }}
+                  >
+                    <AlertTriangle size={10} />
+                    {snapshot.overdue_count} overdue
+                  </span>
+                )}
+              </div>
+              {!snapshot || snapshot.tasks_due_soon.length === 0 ? (
+                <p className="text-sm" style={{ color: 'var(--ec-text-subtle)' }}>
+                  No tasks due in the next 7 days.{' '}
+                  <Link href="/dashboard/tasks" className="underline">Add one</Link>
+                </p>
+              ) : (
+                <ul className="space-y-2">
+                  {snapshot.tasks_due_soon.slice(0, 4).map(t => (
+                    <li key={t.id} className="flex items-start gap-2">
+                      <span
+                        className="w-1.5 h-1.5 rounded-full shrink-0"
+                        style={{
+                          background: t.status === 'in_progress' ? '#4A7C59' : 'var(--ec-text-subtle)',
+                          marginTop: '6px',
+                        }}
+                      />
+                      <div className="min-w-0">
+                        <p className="text-sm truncate" style={{ color: 'var(--ec-text)' }}>{t.title}</p>
+                        <p className="text-[11px]" style={{ color: 'var(--ec-text-subtle)' }}>
+                          {t.project_title ? `${t.project_title} · ` : ''}
+                          {t.due_date
+                            ? new Date(t.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+                            : 'No due date'}
+                        </p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Link
+                href="/dashboard/tasks"
+                className="mt-3 flex items-center gap-1 text-xs hover:opacity-70 transition-opacity"
+                style={{ color: '#4A7C59' }}
+              >
+                All tasks <ArrowRight size={11} />
+              </Link>
+            </div>
+
+            {/* Active projects */}
+            <div style={CARD_STYLE} className="p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <FolderOpen size={14} style={{ color: 'var(--ec-text-subtle)' }} />
+                <span className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--ec-text-subtle)' }}>
+                  Active projects
+                </span>
+              </div>
+              {!snapshot || snapshot.active_projects.length === 0 ? (
+                <p className="text-sm" style={{ color: 'var(--ec-text-subtle)' }}>
+                  No active projects.{' '}
+                  <Link href="/dashboard/projects" className="underline">Create one</Link>
+                </p>
+              ) : (
+                <ul className="space-y-2.5">
+                  {snapshot.active_projects.slice(0, 4).map(p => {
+                    const total = p.open_tasks + p.done_tasks
+                    const pct = total > 0 ? Math.round((p.done_tasks / total) * 100) : 0
+                    return (
+                      <li key={p.id}>
+                        <div className="flex items-center justify-between mb-0.5">
+                          <p className="text-sm truncate flex-1 mr-2" style={{ color: 'var(--ec-text)' }}>{p.title}</p>
+                          <span className="text-[11px] shrink-0" style={{ color: 'var(--ec-text-subtle)' }}>
+                            {p.open_tasks} open
+                          </span>
+                        </div>
+                        <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--ec-card-border)' }}>
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{ width: `${pct}%`, background: '#4A7C59' }}
                           />
                         </div>
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-xs" style={{ color: '#9e9e9e' }}>
-                    {formatEventTime(event.start_time)}
-                  </p>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+              <Link
+                href="/dashboard/projects"
+                className="mt-3 flex items-center gap-1 text-xs hover:opacity-70 transition-opacity"
+                style={{ color: '#4A7C59' }}
+              >
+                All projects <ArrowRight size={11} />
+              </Link>
+            </div>
+
+            {/* Upcoming events — only rendered when events exist */}
+            {snapshot && snapshot.upcoming_events.length > 0 && (
+              <div style={CARD_STYLE} className="p-5 md:col-span-2">
+                <div className="flex items-center gap-2 mb-3">
+                  <Calendar size={14} style={{ color: 'var(--ec-text-subtle)' }} />
+                  <span className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--ec-text-subtle)' }}>
+                    Next 24 hours
+                  </span>
                 </div>
-              </li>
-            ))}
-          </ul>
+                <div className="flex flex-wrap gap-2">
+                  {snapshot.upcoming_events.map((ev, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm"
+                      style={{ background: 'var(--ec-surface-2, rgba(0,0,0,0.04))', color: 'var(--ec-text)' }}
+                    >
+                      <Clock size={12} style={{ color: 'var(--ec-text-subtle)' }} />
+                      <span>{ev.title}</span>
+                      {ev.start_time && (
+                        <span style={{ color: 'var(--ec-text-subtle)' }}>
+                          {new Date(ev.start_time).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+          </div>
         )}
       </div>
 
-      {/* ESL Approval Rate sparkline */}
-      {!loading && approvalRate !== null && (
-        <div className="rounded-2xl p-4" style={{ background: '#ffffff', border: '1px solid #e4dee7' }}>
-          <p className="text-xs font-medium mb-2" style={{ color: '#695e6e' }}>ESL Approval Rate</p>
-          <div className="flex items-center gap-3">
-            <ResponsiveContainer width={60} height={60}>
-              <PieChart>
-                <Pie
-                  data={[{ value: approvalRate }, { value: 100 - approvalRate }]}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={20}
-                  outerRadius={28}
-                  dataKey="value"
-                  startAngle={90}
-                  endAngle={-270}
-                >
-                  <Cell fill="#4A7C59" />
-                  <Cell fill="#f5f5f5" />
-                </Pie>
-              </PieChart>
-            </ResponsiveContainer>
-            <span className="text-2xl font-bold" style={{ color: '#332b36' }}>{approvalRate.toFixed(0)}%</span>
-          </div>
+      {/* ── Daily insight ─────────────────────────────────────── */}
+      <div style={CARD_STYLE} className="p-6">
+        <div className="flex items-center gap-2 mb-3">
+          <MessageSquare size={14} style={{ color: 'var(--ec-text-subtle)' }} />
+          <span className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--ec-text-subtle)' }}>
+            Daily insight
+          </span>
         </div>
-      )}
-
-      {/* ESL activity strip */}
-      <Card className="rounded-2xl p-5 border border-[rgba(0,0,0,0.08)] shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Shield size={16} style={{ color: '#000000' }} />
-            <h3 className="text-sm font-semibold" style={{ color: '#0a0a0a' }}>Recent ESL Decisions</h3>
+        {insightLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-full rounded" />
+            <Skeleton className="h-4 w-3/4 rounded" />
           </div>
-          <Link href="/dashboard/transparency" className="text-xs" style={{ color: '#000000' }}>
-            View report
-          </Link>
-        </div>
-        {loading ? (
-          <div className="flex gap-2">
-            {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-6 w-20 rounded-full" />)}
-          </div>
-        ) : eslActivity.length === 0 ? (
-          <p className="text-sm" style={{ color: '#9e9e9e' }}>No decisions recorded yet.</p>
+        ) : dailyInsight ? (
+          <p className="text-sm leading-relaxed" style={{ color: 'var(--ec-text)' }}>{dailyInsight}</p>
         ) : (
-          <div className="flex flex-wrap gap-2">
-            {eslActivity.map((log, idx) => {
-              const status = log.decision?.status ?? 'APPROVED'
-              const c = ESL_COLORS[status] ?? ESL_COLORS.APPROVED
-              return (
-                <span
-                  key={log.id ?? idx}
-                  className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium"
-                  style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}
-                  title={log.decision?.reason}
-                >
-                  {status}
-                </span>
-              )
-            })}
-          </div>
+          <p className="text-sm" style={{ color: 'var(--ec-text-subtle)' }}>
+            No insight available today.{' '}
+            <Link href="/dashboard/chat" className="underline">Start a chat</Link> to generate one.
+          </p>
         )}
-      </Card>
+      </div>
+
+      {/* ── ESL activity ─────────────────────────────────────── */}
+      <div style={CARD_STYLE} className="p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Shield size={14} style={{ color: 'var(--ec-text-subtle)' }} />
+            <span className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--ec-text-subtle)' }}>
+              ESL activity
+            </span>
+          </div>
+          {eslCount !== null && (
+            <span className="text-xs" style={{ color: 'var(--ec-text-subtle)' }}>
+              {eslCount} decisions
+            </span>
+          )}
+        </div>
+
+        <div className="flex gap-6 items-start">
+          {/* Pie chart */}
+          {pieData.length > 0 && (
+            <div className="shrink-0">
+              <ResponsiveContainer width={80} height={80}>
+                <PieChart>
+                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={22} outerRadius={36} dataKey="value" strokeWidth={0}>
+                    <Cell fill="#4A7C59" />
+                    <Cell fill="rgba(0,0,0,0.06)" />
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              <p className="text-center text-xs mt-1" style={{ color: 'var(--ec-text-subtle)' }}>
+                {Math.round(approvalRate ?? 0)}% approved
+              </p>
+            </div>
+          )}
+
+          {/* Recent logs */}
+          <div className="flex-1 min-w-0">
+            {loading ? (
+              <div className="space-y-2">
+                {[0,1,2].map(i => <Skeleton key={i} className="h-6 rounded" />)}
+              </div>
+            ) : eslActivity.length === 0 ? (
+              <p className="text-sm" style={{ color: 'var(--ec-text-subtle)' }}>No recent ESL decisions.</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {eslActivity.map((log, i) => {
+                  const status = log.decision?.status ?? 'APPROVED'
+                  const colors = ESL_COLORS[status] ?? ESL_COLORS.APPROVED
+                  return (
+                    <li key={i} className="flex items-center gap-2">
+                      <span
+                        className="text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0"
+                        style={{ background: colors.bg, color: colors.text, border: `1px solid ${colors.border}` }}
+                      >
+                        {status}
+                      </span>
+                      <span className="text-xs truncate" style={{ color: 'var(--ec-text-subtle)' }}>
+                        {log.decision?.reason?.slice(0, 60) ?? '—'}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+            <Link
+              href="/dashboard/transparency"
+              className="mt-3 flex items-center gap-1 text-xs hover:opacity-70 transition-opacity"
+              style={{ color: '#4A7C59' }}
+            >
+              Full transparency log <ArrowRight size={11} />
+            </Link>
+          </div>
+        </div>
+      </div>
+
     </div>
   )
 }
