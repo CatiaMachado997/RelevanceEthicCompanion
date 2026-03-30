@@ -5,7 +5,7 @@ Loads environment variables and application settings
 
 from pydantic import computed_field, ConfigDict
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Optional
 
 
 class Settings(BaseSettings):
@@ -68,6 +68,11 @@ class Settings(BaseSettings):
 
     # Frontend URL
     FRONTEND_URL: str = "http://localhost:3000"
+
+    # Langfuse (optional — observability for LangGraph nodes)
+    LANGFUSE_PUBLIC_KEY: Optional[str] = None
+    LANGFUSE_SECRET_KEY: Optional[str] = None
+    LANGFUSE_HOST: str = "https://cloud.langfuse.com"
 
     # Dev mode: override mock user ID to match the real user who connected OAuth
     DEV_USER_ID: str = "00000000-0000-0000-0000-000000000000"
