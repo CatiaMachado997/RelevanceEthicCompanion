@@ -358,7 +358,7 @@ class FeedbackProcessor:
                         (str(user_id),)
                     )
                     rows = cur.fetchall()
-            return {row[0]: float(row[1]) for row in rows} if rows else {}
+            return {row['signal_type']: float(row['multiplier']) for row in rows} if rows else {}
         except Exception as e:
             logger.warning(f"Could not fetch relevance adjustments for {user_id}: {e}")
             return {}

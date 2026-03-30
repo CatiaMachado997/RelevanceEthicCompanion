@@ -51,7 +51,7 @@ class MemoryQueryTool(BaseTool):
             results = await self.context_manager.query_semantic_memory(
                 user_id=self.user_id,
                 query=query,
-                limit=limit
+                limit=int(limit)
             )
 
             if not results:
