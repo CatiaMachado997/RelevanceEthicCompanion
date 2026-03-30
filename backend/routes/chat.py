@@ -20,6 +20,7 @@ from utils.rate_limit import limiter
 from tavily import TavilyClient
 from services.relevance_scoring import RelevanceScoringEngine as RelevanceScoring
 from config import settings
+from config import settings as app_settings
 from utils.weaviate_client import get_weaviate_client
 from utils.db import get_db_connection
 from services.embedding_service import EmbeddingService
@@ -121,6 +122,15 @@ async def stream_chat(
     user_id: str = Depends(get_current_read_user_id),
 ):
     """Server-Sent Events endpoint for streaming chat responses."""
+    if app_settings.USE_LANGGRAPH:
+        import json as _json
+        from orchestrator.graph import stream_langgraph
+        async def _lg_stream():
+            async for event in stream_langgraph(user_id, message, model, conversation_id):
+                yield f"data: {_json.dumps(event)}\n\n"
+        return StreamingResponse(_lg_stream(), media_type="text/event-stream")
+    # TODO(sprint2a): non-streaming /api/chat/ path still uses orchestrator_v2
+    # Remove when orchestrator_v2.py is deleted in Task 10
     orchestrator = get_orchestrator(model=model)
 
     async def event_generator():
