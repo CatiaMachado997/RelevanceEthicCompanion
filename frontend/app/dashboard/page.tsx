@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react'
 import { transparencyApi, insightApi, contextApi, type ContextSnapshot } from '@/lib/api'
 import Link from 'next/link'
 import {
-  MessageSquare, Shield, ArrowRight,
-  Calendar, Clock, AlertTriangle, CheckSquare, FolderOpen,
+  MessageSquare, Shield, ArrowRight, Target,
+  Calendar, Clock, AlertTriangle, CheckSquare, FolderOpen, Zap,
 } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card } from '@/components/ui/card'
