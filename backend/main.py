@@ -170,6 +170,7 @@ from routes import auth, values, chat, goals, transparency, relevance, data_sour
 from routes import settings as settings_router
 from routes.insight import router as insight_router
 from routes.health import router as health_router
+from routes.status import router as status_router
 
 # Register routers
 app.include_router(health_router)
@@ -190,6 +191,12 @@ app.include_router(documents.router)
 app.include_router(projects.router)
 app.include_router(tasks.router)
 app.include_router(context.router)
+app.include_router(status_router)
+
+# Sprint 2a: Expose all routes as MCP tools
+from fastapi_mcp import FastApiMCP
+mcp = FastApiMCP(app)
+mcp.mount_http()
 
 
 if __name__ == "__main__":
