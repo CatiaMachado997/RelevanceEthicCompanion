@@ -719,6 +719,8 @@ export interface UserSettings {
   weight_time_sensitivity?: number
   weight_personal_values?: number
   weight_context_relevance?: number
+  timezone?: string
+  language?: string
   updated_at?: string
 }
 
