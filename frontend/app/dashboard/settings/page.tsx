@@ -1,11 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Bell, Lock, Calendar, CheckCircle2, XCircle, RefreshCw, SlidersHorizontal } from 'lucide-react'
+import { Bell, Lock, Calendar, CheckCircle2, XCircle, RefreshCw, SlidersHorizontal, Globe, LogOut } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { dataSourcesApi, DataSource, settingsApi, UserSettings } from '@/lib/api'
 import { PageHeader } from '@/components/ui/page-header'
+import { supabase } from '@/lib/supabase'
+import { useRouter } from 'next/navigation'
 
 const CARD_STYLE = {
   background: 'var(--ec-card-bg)',
@@ -44,7 +46,24 @@ function ToggleRow({
   )
 }
 
+const TIMEZONES = [
+  'UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+  'America/Sao_Paulo', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Europe/Moscow',
+  'Asia/Dubai', 'Asia/Kolkata', 'Asia/Singapore', 'Asia/Tokyo', 'Australia/Sydney',
+]
+
+const LANGUAGES = [
+  { value: 'en', label: 'English' },
+  { value: 'es', label: 'Español' },
+  { value: 'fr', label: 'Français' },
+  { value: 'de', label: 'Deutsch' },
+  { value: 'pt', label: 'Português' },
+  { value: 'ja', label: '日本語' },
+  { value: 'zh', label: '中文' },
+]
+
 export default function SettingsPage() {
+  const router = useRouter()
   const [dataSources, setDataSources] = useState<DataSource[]>([])
   const [syncing, setSyncing] = useState<string | null>(null)
 
@@ -53,6 +72,20 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+
+  // Appearance — localStorage only
+  const [appearance, setAppearance] = useState<Record<string, unknown>>(() => {
+    try { return JSON.parse(localStorage.getItem('ec_appearance') || '{}') }
+    catch { return {} }
+  })
+
+  const saveAppearance = (update: Record<string, unknown>) => {
+    const next = { ...appearance, ...update }
+    setAppearance(next)
+    localStorage.setItem('ec_appearance', JSON.stringify(next))
+  }
+
+  const [signingOut, setSigningOut] = useState(false)
 
   useEffect(() => {
     dataSourcesApi.list().then(({ sources }) => setDataSources(sources)).catch(console.error)
@@ -80,6 +113,7 @@ export default function SettingsPage() {
       const {
         email_notifications, push_notifications, esl_alerts, share_analytics, pii_protection,
         weight_goal_alignment, weight_time_sensitivity, weight_personal_values, weight_context_relevance,
+        timezone, language,
       } = settings
       await settingsApi.update({
         email_notifications, push_notifications, esl_alerts, share_analytics, pii_protection,
@@ -87,6 +121,8 @@ export default function SettingsPage() {
         weight_time_sensitivity: weight_time_sensitivity ?? 1.0,
         weight_personal_values: weight_personal_values ?? 1.0,
         weight_context_relevance: weight_context_relevance ?? 1.0,
+        timezone,
+        language,
       })
       setDirty(false)
       setSaveSuccess(true)
@@ -95,6 +131,18 @@ export default function SettingsPage() {
       setSaveError(e instanceof Error ? e.message : 'Failed to save')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleSignOutAll = async () => {
+    setSigningOut(true)
+    try {
+      await supabase.auth.signOut({ scope: 'global' })
+      router.push('/login')
+    } catch (e) {
+      console.error('Sign out failed', e)
+    } finally {
+      setSigningOut(false)
     }
   }
 
@@ -135,6 +183,80 @@ export default function SettingsPage() {
   return (
     <div className="max-w-4xl space-y-4 md:space-y-6">
       <PageHeader title="Settings" subtitle="Preferences and privacy" />
+
+      {/* Appearance */}
+      <div className="rounded-2xl p-5" style={CARD_STYLE}>
+        <div className="flex items-center gap-2 mb-4">
+          <SlidersHorizontal size={15} style={{ color: '#000000' }} />
+          <h3 className="text-sm font-semibold" style={{ color: '#0a0a0a' }}>Appearance</h3>
+        </div>
+        <div className="space-y-3">
+          <ToggleRow
+            label="Compact Mode"
+            description="Reduce spacing and padding throughout the app"
+            checked={!!appearance.compact}
+            onCheckedChange={v => saveAppearance({ compact: v })}
+          />
+          <ToggleRow
+            label="Reduce Motion"
+            description="Minimise animations for accessibility"
+            checked={!!appearance.reduceMotion}
+            onCheckedChange={v => saveAppearance({ reduceMotion: v })}
+          />
+        </div>
+      </div>
+
+      {/* Profile — timezone & language */}
+      <div className="rounded-2xl p-5" style={CARD_STYLE}>
+        <div className="flex items-center gap-2 mb-4">
+          <Globe size={15} style={{ color: '#000000' }} />
+          <h3 className="text-sm font-semibold" style={{ color: '#0a0a0a' }}>Region & Language</h3>
+        </div>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <Label className="text-sm font-medium" style={{ color: '#0a0a0a' }}>Timezone</Label>
+              <p className="text-xs mt-0.5" style={{ color: '#9e9e9e' }}>Used for scheduling and time-based ESL rules</p>
+            </div>
+            <select
+              value={settings.timezone ?? ''}
+              onChange={e => {
+                setSettings(prev => ({ ...prev, timezone: e.target.value || undefined }))
+                setDirty(true)
+                setSaveSuccess(false)
+              }}
+              className="text-sm rounded-lg px-2 py-1.5 border outline-none"
+              style={{ border: '1px solid rgba(0,0,0,0.12)', color: '#0a0a0a', background: '#fafafa' }}
+            >
+              <option value="">— select —</option>
+              {TIMEZONES.map(tz => (
+                <option key={tz} value={tz}>{tz}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <Label className="text-sm font-medium" style={{ color: '#0a0a0a' }}>Language</Label>
+              <p className="text-xs mt-0.5" style={{ color: '#9e9e9e' }}>Preferred language for responses</p>
+            </div>
+            <select
+              value={settings.language ?? ''}
+              onChange={e => {
+                setSettings(prev => ({ ...prev, language: e.target.value || undefined }))
+                setDirty(true)
+                setSaveSuccess(false)
+              }}
+              className="text-sm rounded-lg px-2 py-1.5 border outline-none"
+              style={{ border: '1px solid rgba(0,0,0,0.12)', color: '#0a0a0a', background: '#fafafa' }}
+            >
+              <option value="">— select —</option>
+              {LANGUAGES.map(lang => (
+                <option key={lang.value} value={lang.value}>{lang.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
 
       {/* Connected Data Sources */}
       <div className="rounded-2xl p-5" style={CARD_STYLE}>
@@ -249,6 +371,23 @@ export default function SettingsPage() {
             checked={settings.pii_protection}
             onCheckedChange={handleToggle('pii_protection')}
           />
+          <div className="pt-2 border-t" style={{ borderColor: 'rgba(0,0,0,0.08)' }}>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium" style={{ color: '#0a0a0a' }}>Sign out of all devices</p>
+                <p className="text-xs mt-0.5" style={{ color: '#9e9e9e' }}>Revoke all active sessions immediately</p>
+              </div>
+              <button
+                onClick={handleSignOutAll}
+                disabled={signingOut}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-opacity disabled:opacity-50 hover:opacity-80"
+                style={{ border: '1px solid rgba(176,74,58,0.35)', color: '#B04A3A', background: 'rgba(176,74,58,0.06)' }}
+              >
+                <LogOut size={12} />
+                {signingOut ? 'Signing out…' : 'Sign out all'}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
