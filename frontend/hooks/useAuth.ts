@@ -85,7 +85,7 @@ export function useAuth() {
     // Clear local state immediately — don't wait for auth event
     localStorage.removeItem('ec_display')
     localStorage.removeItem('ec_lastRoute')
-    window.location.href = '/login'
+    if (typeof window !== 'undefined') window.location.href = '/login'
   }, [])
 
   return {
