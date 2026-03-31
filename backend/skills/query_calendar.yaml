@@ -1,0 +1,9 @@
+name: query_calendar
+description: Get the user's upcoming calendar events
+mcp_tool: /api/data-sources/calendar/events
+esl_action_type: content_generation
+requires_confirmation: false
+parameters:
+  hours_ahead:
+    type: integer
+    default: 48
