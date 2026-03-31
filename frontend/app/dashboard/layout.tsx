@@ -45,7 +45,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [])
 
   useEffect(() => {
-    if (!isDev && !loading && !isAuthenticated) router.push('/login')
+    if (!isDev && !loading && !isAuthenticated) {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('ec_lastRoute', window.location.pathname)
+      }
+      router.push('/login')
+    }
   }, [loading, isAuthenticated, router, isDev])
 
   if (!isDev && loading) return null
