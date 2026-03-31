@@ -50,6 +50,7 @@ export default function GoalsPage() {
 
   const [milestones, setMilestones] = useState<Record<string, Milestone[]>>({})
   const [milestoneInput, setMilestoneInput] = useState<Record<string, string>>({})
+  const [milestoneError, setMilestoneError] = useState<Record<string, string>>({})
 
   const loadMilestones = async (goalId: string) => {
     try {
@@ -228,15 +229,25 @@ export default function GoalsPage() {
                 e.preventDefault()
                 const title = (milestoneInput[goal.id] || '').trim()
                 if (!title) return
-                await api.goals.milestones.create(goal.id, title)
-                setMilestoneInput(prev => ({ ...prev, [goal.id]: '' }))
-                loadMilestones(goal.id)
+                try {
+                  await api.goals.milestones.create(goal.id, title)
+                  setMilestoneInput(prev => ({ ...prev, [goal.id]: '' }))
+                  loadMilestones(goal.id)
+                } catch (err) {
+                  setMilestoneError(prev => ({
+                    ...prev,
+                    [goal.id]: err instanceof Error ? err.message : 'Failed to add milestone',
+                  }))
+                }
               }}
             >
               <input
                 type="text"
                 value={milestoneInput[goal.id] ?? ''}
-                onChange={e => setMilestoneInput(prev => ({ ...prev, [goal.id]: e.target.value }))}
+                onChange={e => {
+                  setMilestoneInput(prev => ({ ...prev, [goal.id]: e.target.value }))
+                  setMilestoneError(prev => ({ ...prev, [goal.id]: '' }))
+                }}
                 placeholder="Add milestone…"
                 className="flex-1 text-xs px-2 py-1 rounded-lg outline-none"
                 style={{ background: '#f5f2ef', color: '#1c1520', border: '1px solid transparent' }}
@@ -249,6 +260,9 @@ export default function GoalsPage() {
                 Add
               </button>
             </form>
+            {milestoneError[goal.id] && (
+              <p className="text-xs mt-1" style={{ color: '#B04A3A' }}>{milestoneError[goal.id]}</p>
+            )}
           </div>
         </div>
         {goal.target_date && (
