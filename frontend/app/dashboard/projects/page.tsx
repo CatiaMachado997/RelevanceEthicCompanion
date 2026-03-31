@@ -83,6 +83,7 @@ export default function ProjectsPage() {
       setTitle('')
       setDescription('')
     } catch (e) {
+      console.error('Project create failed:', e)
       setCreateError(e instanceof Error ? e.message : 'Failed to create project')
     } finally {
       setCreating(false)

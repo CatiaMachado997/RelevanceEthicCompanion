@@ -103,6 +103,7 @@ export default function TasksPage() {
       setCreateTitle('')
       setCreateDesc('')
     } catch (e) {
+      console.error('Task create failed:', e)
       setCreateError(e instanceof Error ? e.message : 'Failed to create task')
     } finally {
       setCreating(false)
