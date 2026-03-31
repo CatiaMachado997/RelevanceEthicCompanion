@@ -112,13 +112,29 @@ def _extract_bearer_token(request: Request) -> str:
     return token
 
 
+def _extract_token(request: Request) -> str:
+    """Extract JWT from Authorization header; fall back to HttpOnly cookie."""
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header:
+        parts = auth_header.split(" ", 1)
+        if len(parts) == 2 and parts[0].lower() == "bearer" and parts[1].strip():
+            return parts[1].strip()
+
+    # Cookie fallback — used when the frontend sends HttpOnly session cookie
+    token = request.cookies.get("ec_session", "")
+    if token:
+        return token
+
+    raise _auth_error("Missing Authorization header or session cookie")
+
+
 async def get_current_user(request: Request) -> UserPrincipal:
     if _is_dev_fallback_enabled():
         logger.warning("Auth enforcement disabled in development, using mock user fallback")
         return UserPrincipal(user_id=MOCK_USER_ID, email=None, claims={"sub": MOCK_USER_ID})
 
     try:
-        token = _extract_bearer_token(request)
+        token = _extract_token(request)
         claims = _decode_supabase_token(token)
     except HTTPException:
         raise
