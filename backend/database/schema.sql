@@ -433,6 +433,28 @@ CREATE INDEX IF NOT EXISTS idx_source_items_embedding_pending
     ON public.source_items (embedding_status)
     WHERE embedding_status = 'pending';
 
+-- ==================== Data Sources Table (Sprint 2 connector framework) ====================
+-- OAuth-connected external data sources (Google Calendar, Gmail, Slack, etc.)
+
+CREATE TABLE IF NOT EXISTS public.data_sources (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    source_type TEXT NOT NULL CHECK (source_type IN ('google_calendar', 'gmail', 'slack', 'notes', 'browsing_history')),
+    oauth_token_encrypted TEXT,
+    oauth_refresh_token_encrypted TEXT,
+    token_expires_at TIMESTAMP WITH TIME ZONE,
+    enabled BOOLEAN DEFAULT TRUE,
+    last_sync TIMESTAMP WITH TIME ZONE,
+    metadata JSONB DEFAULT '{}',
+    sync_error_message TEXT,
+    sync_error_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_data_sources_user_id ON public.data_sources(user_id);
+CREATE INDEX IF NOT EXISTS idx_data_sources_source_type ON public.data_sources(source_type);
+CREATE INDEX IF NOT EXISTS idx_data_sources_enabled ON public.data_sources(enabled);
+
 -- ==================== Helpful Queries ====================
 
 -- Get user's boundaries

@@ -225,6 +225,8 @@ CREATE TABLE IF NOT EXISTS data_sources (
     enabled BOOLEAN DEFAULT TRUE,
     last_sync TIMESTAMP WITH TIME ZONE,
     metadata JSONB DEFAULT '{}',
+    sync_error_message TEXT,
+    sync_error_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
