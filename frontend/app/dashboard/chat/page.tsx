@@ -241,6 +241,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
   const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL)
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
   const [rateLimitWarning, setRateLimitWarning] = useState<{ level: string; message: string } | null>(null)
+  const rateLimitDismissedRef = useRef(false)
   const [rateLimitExceeded, setRateLimitExceeded] = useState<{ retryAfter: string; message: string } | null>(null)
 
   const [attachedFile, setAttachedFile] = useState<{ name: string; content: string } | null>(null)
@@ -376,7 +377,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
       const s = api.chat.stream(userMessage, {
         model: selectedModel,
         conversation_id: activeConvId,
-        onRateLimitWarning: (level, message) => setRateLimitWarning({ level, message }),
+        onRateLimitWarning: (level, message) => { if (!rateLimitDismissedRef.current) setRateLimitWarning({ level, message }) },
         onRateLimitExceeded: (retryAfter, message) => {
           setRateLimitExceeded({ retryAfter, message })
           setIsLoading(false)
@@ -818,7 +819,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
             color: rateLimitWarning.level === 'high' ? '#9B6A2A' : '#7A7A2A',
           }}>
           <p className="text-xs">{rateLimitWarning.message}</p>
-          <button onClick={() => setRateLimitWarning(null)} className="shrink-0 text-lg leading-none opacity-50 hover:opacity-100">×</button>
+          <button onClick={() => { rateLimitDismissedRef.current = true; setRateLimitWarning(null) }} className="shrink-0 text-lg leading-none opacity-50 hover:opacity-100">×</button>
         </div>
       )}
 
@@ -840,6 +841,10 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
               onChange={e => { setInput(e.target.value); resizeTextarea() }}
               onKeyDown={e => {
                 if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  handleSend()
+                }
+                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                   e.preventDefault()
                   handleSend()
                 }
