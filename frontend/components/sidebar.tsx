@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { useTheme } from "next-themes"
 import { useEffect, useState } from "react"
 import { api } from "@/lib/api"
+import { UserStatus } from "@/components/UserStatus"
 
 interface Conversation {
   id: string
@@ -293,6 +294,11 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
           <LogOut size={16} strokeWidth={1.8} />
           Sign out
         </button>
+
+        {/* User status picker */}
+        <div className="px-1 mt-1">
+          <UserStatus />
+        </div>
 
         {/* User row — links to profile */}
         <Link
