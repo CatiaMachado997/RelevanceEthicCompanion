@@ -73,11 +73,15 @@ export default function SettingsPage() {
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
-  // Appearance — localStorage only
-  const [appearance, setAppearance] = useState<Record<string, unknown>>(() => {
-    try { return JSON.parse(localStorage.getItem('ec_appearance') || '{}') }
-    catch { return {} }
-  })
+  // Appearance — localStorage only (useEffect for SSR safety)
+  const [appearance, setAppearance] = useState<Record<string, unknown>>({})
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('ec_appearance')
+      if (saved) setAppearance(JSON.parse(saved))
+    } catch {}
+  }, [])
 
   const saveAppearance = (update: Record<string, unknown>) => {
     const next = { ...appearance, ...update }
@@ -224,6 +228,7 @@ export default function SettingsPage() {
                 setSettings(prev => ({ ...prev, timezone: e.target.value || undefined }))
                 setDirty(true)
                 setSaveSuccess(false)
+                setSaveError(null)
               }}
               className="text-sm rounded-lg px-2 py-1.5 border outline-none"
               style={{ border: '1px solid rgba(0,0,0,0.12)', color: '#0a0a0a', background: '#fafafa' }}
@@ -245,6 +250,7 @@ export default function SettingsPage() {
                 setSettings(prev => ({ ...prev, language: e.target.value || undefined }))
                 setDirty(true)
                 setSaveSuccess(false)
+                setSaveError(null)
               }}
               className="text-sm rounded-lg px-2 py-1.5 border outline-none"
               style={{ border: '1px solid rgba(0,0,0,0.12)', color: '#0a0a0a', background: '#fafafa' }}
