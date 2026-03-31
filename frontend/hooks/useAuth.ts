@@ -82,6 +82,10 @@ export function useAuth() {
   const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut()
     if (error) throw error
+    // Clear local state immediately — don't wait for auth event
+    localStorage.removeItem('ec_display')
+    localStorage.removeItem('ec_lastRoute')
+    window.location.href = '/login'
   }, [])
 
   return {

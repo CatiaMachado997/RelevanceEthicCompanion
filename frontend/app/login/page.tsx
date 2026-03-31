@@ -4,6 +4,15 @@ import { useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { Shield, ArrowRight, Mail, CheckCircle } from 'lucide-react'
 
+function friendlyAuthError(msg: string): string {
+  if (msg.includes('Invalid login credentials')) return 'Incorrect email or password.'
+  if (msg.includes('Email not confirmed')) return 'Please verify your email first.'
+  if (msg.includes('Too many requests')) return 'Too many attempts. Please wait a moment.'
+  if (msg.includes('rate limit')) return 'Too many attempts. Please wait a moment.'
+  if (msg.includes('Unable to validate email')) return 'Please enter a valid email address.'
+  return msg
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
@@ -20,7 +29,7 @@ export default function LoginPage() {
       await signIn(email)
       setSent(true)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Sign in failed. Please try again.')
+      setError(friendlyAuthError(err instanceof Error ? err.message : 'Sign in failed. Please try again.'))
     } finally {
       setIsSubmitting(false)
     }
@@ -174,7 +183,9 @@ export default function LoginPage() {
                 </div>
 
                 {error && (
-                  <p className="text-xs px-1" style={{ color: '#b04a3a' }}>{error}</p>
+                  <div className="rounded-lg px-4 py-3 text-sm" style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c' }}>
+                    {error}
+                  </div>
                 )}
 
                 <button
