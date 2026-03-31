@@ -372,6 +372,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
         const conv = await api.chat.conversations.create()
         activeConvId = conv.id
         router.replace(`/dashboard/chat/${activeConvId}`)
+        window.dispatchEvent(new Event('ec:conversation-created'))
       }
 
       const s = api.chat.stream(userMessage, {

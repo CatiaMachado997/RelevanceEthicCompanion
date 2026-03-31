@@ -47,10 +47,28 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.chat.conversations.list()
-      .then(res => setConversations(res.conversations ?? []))
-      .catch(() => setConversations([]))
-      .finally(() => setLoading(false))
+    let cancelled = false
+
+    const load = () => {
+      api.chat.conversations.list()
+        .then(res => { if (!cancelled) setConversations(res.conversations ?? []) })
+        .catch(() => {})
+        .finally(() => { if (!cancelled) setLoading(false) })
+    }
+
+    load()
+    const interval = setInterval(load, 10_000)
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [])
+
+  useEffect(() => {
+    const handler = () => {
+      api.chat.conversations.list()
+        .then(res => setConversations(res.conversations ?? []))
+        .catch(() => {})
+    }
+    window.addEventListener('ec:conversation-created', handler)
+    return () => window.removeEventListener('ec:conversation-created', handler)
   }, [])
 
   const filtered = searchQuery
@@ -87,7 +105,10 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
             <p className="text-xs text-[#A3A3A3] px-3 py-2">Loading…</p>
           )}
           {!loading && filtered.length === 0 && (
-            <p className="text-xs text-[#A3A3A3] px-3 py-2">No conversations yet.</p>
+            <div className="px-3 py-6 text-center text-[#A3A3A3]">
+              <p className="text-sm">No conversations yet.</p>
+              <p className="text-xs mt-1">Start chatting to create one.</p>
+            </div>
           )}
           {filtered.map(conv => (
             <button
