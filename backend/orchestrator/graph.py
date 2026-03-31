@@ -7,6 +7,7 @@ from orchestrator.nodes.intent import intent_classifier_node
 from orchestrator.nodes.tools import tool_planner_node, tool_execution_node
 from orchestrator.nodes.esl import esl_gateway_node
 from orchestrator.nodes.response import response_formatter_node, explain_veto_node
+from orchestrator.subgraphs.deep_research import deep_research_node
 from esl.models import ESLDecisionStatus
 
 
@@ -15,6 +16,13 @@ def _route_after_esl(state: AgentState) -> str:
     if decision and decision.status == ESLDecisionStatus.VETOED:
         return "explain_veto"
     return "response_formatter"
+
+
+def _route_after_intent(state: AgentState) -> str:
+    """Route deep research intents to the research subgraph."""
+    if state.get("intent") == "research_deep":
+        return "deep_research"
+    return "tool_planner"
 
 
 def _route_after_tools(state: AgentState) -> str:
@@ -30,16 +38,19 @@ def build_graph():
     g.add_node("intent_classifier", intent_classifier_node)
     g.add_node("tool_planner", tool_planner_node)
     g.add_node("tool_execution", tool_execution_node)
+    g.add_node("deep_research", deep_research_node)
     g.add_node("esl_gateway", esl_gateway_node)
     g.add_node("response_formatter", response_formatter_node)
     g.add_node("explain_veto", explain_veto_node)
 
     g.set_entry_point("context_builder")
     g.add_edge("context_builder", "intent_classifier")
-    g.add_edge("intent_classifier", "tool_planner")
+    g.add_conditional_edges("intent_classifier", _route_after_intent,
+                            {"deep_research": "deep_research", "tool_planner": "tool_planner"})
     g.add_conditional_edges("tool_planner", _route_after_tools,
                             {"tool_execution": "tool_execution", "esl_gateway": "esl_gateway"})
     g.add_edge("tool_execution", "esl_gateway")
+    g.add_edge("deep_research", "esl_gateway")
     g.add_conditional_edges("esl_gateway", _route_after_esl,
                             {"response_formatter": "response_formatter", "explain_veto": "explain_veto"})
     g.add_edge("response_formatter", END)
