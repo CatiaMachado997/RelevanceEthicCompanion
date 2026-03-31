@@ -1,18 +1,64 @@
 "use client"
 
+import { useEffect, useState } from "react"
+import { useRouter, useParams } from "next/navigation"
 import {
   SecondarySidebar,
   SecondarySidebarSection,
   SecondarySidebarPromo,
 } from "@/components/secondary-sidebar"
 import { Button } from "@/components/ui/button"
-import { Plus, MessageSquare, Clock, Sparkles } from "lucide-react"
+import { Plus, MessageSquare, Sparkles, Clock } from "lucide-react"
+import api from "@/lib/api"
+
+interface Conversation {
+  id: string
+  title: string
+  created_at: string
+  updated_at: string
+}
 
 interface ChatSidebarProps {
   onNewChat?: () => void
 }
 
+function formatRelativeTime(dateString: string): string {
+  const date = new Date(dateString)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+  if (diffMins < 1) return 'Just now'
+  if (diffMins < 60) return `${diffMins}m ago`
+  if (diffHours < 24) return `${diffHours}h ago`
+  if (diffDays === 1) return 'Yesterday'
+  if (diffDays < 7) return `${diffDays}d ago`
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
 export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
+  const router = useRouter()
+  const params = useParams()
+  const activeId = params?.id as string | undefined
+
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.chat.conversations.list()
+      .then(res => setConversations(res.conversations ?? []))
+      .catch(() => setConversations([]))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const filtered = searchQuery
+    ? conversations.filter(c =>
+        c.title.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : conversations
+
   return (
     <SecondarySidebar
       title="Conversations"
@@ -20,13 +66,14 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
         <Button
           size="sm"
           className="rounded-full bg-[#171717] hover:bg-[#4338CA] h-8 w-8 p-0"
-          onClick={onNewChat}
+          onClick={onNewChat ?? (() => router.push('/dashboard/chat'))}
         >
           <Plus className="h-4 w-4" />
         </Button>
       }
       showSearch
       searchPlaceholder="Search conversations..."
+      onSearch={setSearchQuery}
       footer={
         <SecondarySidebarPromo
           title="AI with Ethics"
@@ -36,16 +83,37 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
     >
       <SecondarySidebarSection title="Recent">
         <div className="space-y-1">
-          {/* Example recent chats - in real implementation, this would be dynamic */}
-          <button className="w-full flex items-start gap-3 p-3 rounded-lg hover:bg-[#F5F5F5] transition-colors text-left">
-            <div className="w-8 h-8 rounded-lg bg-[#171717]/10 flex items-center justify-center shrink-0">
-              <MessageSquare className="h-4 w-4 text-[#171717]" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-[#171717] truncate">Current Session</p>
-              <p className="text-xs text-[#171717] truncate">Active conversation</p>
-            </div>
-          </button>
+          {loading && (
+            <p className="text-xs text-[#A3A3A3] px-3 py-2">Loading…</p>
+          )}
+          {!loading && filtered.length === 0 && (
+            <p className="text-xs text-[#A3A3A3] px-3 py-2">No conversations yet.</p>
+          )}
+          {filtered.map(conv => (
+            <button
+              key={conv.id}
+              onClick={() => router.push(`/dashboard/chat/${conv.id}`)}
+              className={`w-full flex items-start gap-3 p-3 rounded-lg transition-colors text-left ${
+                activeId === conv.id
+                  ? 'bg-[#F0F0F0]'
+                  : 'hover:bg-[#F5F5F5]'
+              }`}
+            >
+              <div className="w-8 h-8 rounded-lg bg-[#171717]/10 flex items-center justify-center shrink-0">
+                <MessageSquare className="h-4 w-4 text-[#171717]" />
+              </div>
+              <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                <span className="truncate text-sm font-medium leading-tight text-[#171717]">
+                  {conv.title || 'New chat'}
+                </span>
+                {conv.updated_at && (
+                  <span className="text-xs text-[#A3A3A3]">
+                    {formatRelativeTime(conv.updated_at)}
+                  </span>
+                )}
+              </div>
+            </button>
+          ))}
         </div>
       </SecondarySidebarSection>
 
