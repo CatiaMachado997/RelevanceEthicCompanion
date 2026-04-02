@@ -76,15 +76,18 @@ async def stream_langgraph(
 ) -> AsyncGenerator[dict, None]:
     """
     Stream SSE events from the LangGraph orchestrator.
+    Uses astream_events(version="v2") for true token-level streaming.
 
-    STREAMING NOTE (Sprint 2a known limitation):
-    LangGraph's ainvoke() buffers the full graph run before returning.
-    For Sprint 2a, the response appears as a single batch of token events after
-    the full LLM call completes — no incremental character streaming.
-    The SSE protocol is preserved (token events + done event), so the frontend
-    handles it correctly, but the UX shows a delay then the full response at once.
-    True token-level streaming via graph.astream_events() will be addressed in Sprint 2b.
+    Token flow:
+      - on_chat_model_stream events from tool_planner / tool_execution / deep_research
+        yield individual tokens as the LLM generates them.
+      - ESL decision is attached to the final done event.
+      - Tool use/result events are yielded from tool_execution output.
+      - Veto explanation tokens come from explain_veto_node output.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
     initial_state: AgentState = {
         "user_id": user_id, "message": message, "conversation_id": conversation_id,
         "model": model, "user_context": {}, "conversation_history": [],
@@ -93,27 +96,103 @@ async def stream_langgraph(
         "response_events": [], "token_count": 0, "token_warning": None,
     }
     graph = get_graph()
-    final_state = await graph.ainvoke(initial_state)
 
-    # Check token warning
-    if final_state.get("token_warning"):
-        yield final_state["token_warning"]
+    # Nodes whose LLM calls generate the final user-visible response
+    RESPONSE_NODES = frozenset({"tool_planner", "tool_execution", "deep_research"})
 
-    # Yield tool_use/tool_result events first (from ToolExecution node)
-    for event in final_state.get("response_events", []):
-        if event.get("event") in ("tool_use", "tool_result"):
-            yield event
+    response_text = ""
+    esl_data = {}
+    tool_events_yielded = False
+    done_yielded = False
 
-    # Then yield token + done events (from ResponseFormatter node)
-    for event in final_state.get("response_events", []):
-        if event.get("event") not in ("tool_use", "tool_result"):
-            yield event
+    try:
+        async for event in graph.astream_events(initial_state, version="v2"):
+            kind = event.get("event", "")
+            metadata = event.get("metadata", {})
+            node = metadata.get("langgraph_node", "")
 
-    # Store conversation turns after streaming completes
+            # ── True token streaming from LLM calls in content-generating nodes ──
+            if kind == "on_chat_model_stream" and node in RESPONSE_NODES:
+                chunk = event.get("data", {}).get("chunk")
+                if chunk is None:
+                    continue
+                # Extract text content (skip tool_call chunks)
+                content = getattr(chunk, "content", "")
+                if isinstance(content, list):
+                    # Handle content blocks (e.g. {"type": "text", "text": "..."})
+                    content = "".join(
+                        block.get("text", "") if isinstance(block, dict) else str(block)
+                        for block in content
+                    )
+                if isinstance(content, str) and content:
+                    response_text += content
+                    yield {"event": "token", "token": content}
+
+            # ── Tool use/result events (emitted BEFORE tokens if tools ran) ──
+            elif kind == "on_chain_end" and node == "tool_execution" and not tool_events_yielded:
+                tool_events_yielded = True
+                output = event.get("data", {}).get("output") or {}
+                for ev in output.get("response_events", []):
+                    if ev.get("event") in ("tool_use", "tool_result"):
+                        yield ev
+
+            # ── Token warning ──
+            elif kind == "on_chain_end" and node in ("tool_execution", "tool_planner"):
+                output = event.get("data", {}).get("output") or {}
+                warning = output.get("token_warning")
+                if warning:
+                    yield warning
+
+            # ── ESL decision (capture for done event) ──
+            elif kind == "on_chain_end" and node == "esl_gateway":
+                output = event.get("data", {}).get("output") or {}
+                decision = output.get("esl_decision")
+                if decision:
+                    try:
+                        esl_data = {
+                            "status": decision.status.value,
+                            "reason": decision.reason,
+                            "violated_values": getattr(decision, "violated_values", []),
+                        }
+                    except Exception:
+                        esl_data = {}
+
+            # ── Veto path — yield veto explanation tokens ──
+            elif kind == "on_chain_end" and node == "explain_veto":
+                output = event.get("data", {}).get("output") or {}
+                veto_text = output.get("response_text", "")
+                if veto_text and not response_text:
+                    response_text = veto_text
+                    yield {"event": "token", "token": veto_text}
+
+            # ── Graph completion — yield done event ──
+            elif kind == "on_chain_end" and event.get("name") == "LangGraph":
+                final_output = event.get("data", {}).get("output") or {}
+                # If streaming captured nothing (edge case), fall back to response_text in state
+                if not response_text:
+                    response_text = final_output.get("response_text", "")
+                    if response_text:
+                        yield {"event": "token", "token": response_text}
+
+                if not done_yielded:
+                    done_yielded = True
+                    yield {"event": "done", "esl_decision": esl_data}
+
+    except Exception as e:
+        logger.error(f"stream_langgraph error: {e}", exc_info=True)
+        if not done_yielded:
+            yield {"event": "error", "message": str(e)}
+            yield {"event": "done", "esl_decision": {}}
+        return
+
+    if not done_yielded:
+        yield {"event": "done", "esl_decision": esl_data}
+
+    # Store conversation turns non-blocking
     await _post_stream_store(
         user_id=user_id,
         user_msg=message,
-        assistant_msg=final_state.get("response_text", ""),
+        assistant_msg=response_text,
         conversation_id=conversation_id,
     )
 
