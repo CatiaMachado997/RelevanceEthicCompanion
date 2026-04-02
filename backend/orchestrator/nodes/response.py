@@ -1,10 +1,16 @@
-"""ResponseFormatter and ExplainVeto — produce final SSE event list."""
+"""ResponseFormatter and ExplainVeto — produce SSE metadata for done event."""
 from orchestrator.state import AgentState
 from esl.models import ESLDecisionStatus
 
 
 async def response_formatter_node(state: AgentState) -> dict:
-    """Build SSE event list from approved/modified response."""
+    """
+    Post-ESL formatter: handles MODIFIED case; produces done-event metadata.
+
+    With astream_events() streaming, tokens have already been yielded by
+    stream_langgraph() as on_chat_model_stream events. This node computes
+    the final ESL metadata for the done event and handles the MODIFIED case.
+    """
     decision = state.get("esl_decision")
     text = state.get("proposed_content", "")
 
@@ -13,32 +19,31 @@ async def response_formatter_node(state: AgentState) -> dict:
         if decision.modified_action and decision.modified_action.content:
             text = decision.modified_action.content
 
-    events = []
-    # Emit tokens (chunk into ~20-char pieces for streaming feel)
-    chunk_size = 20
-    for i in range(0, len(text), chunk_size):
-        events.append({"event": "token", "token": text[i:i+chunk_size]})
-
-    # Attach ESL decision metadata to done event
     esl_data = {}
     if decision:
         esl_data = {
             "status": decision.status.value,
             "reason": decision.reason,
-            "violated_values": decision.violated_values,
+            "violated_values": getattr(decision, "violated_values", []),
         }
-    events.append({"event": "done", "esl_decision": esl_data})
 
-    return {"response_text": text, "response_events": events}
+    # response_events only carries the done event metadata now;
+    # actual tokens already streamed via astream_events.
+    return {
+        "response_text": text,
+        "response_events": [{"event": "done", "esl_decision": esl_data}],
+    }
 
 
 async def explain_veto_node(state: AgentState) -> dict:
-    """Build a user-friendly veto explanation as SSE events."""
+    """Build a user-friendly veto explanation."""
     decision = state.get("esl_decision")
     reason = decision.reason if decision else "Action blocked by ESL."
     text = f"I can't respond to that right now. {reason}"
-    events = [
-        {"event": "token", "token": text},
-        {"event": "done", "esl_decision": {"status": "VETOED", "reason": reason}},
-    ]
-    return {"response_text": text, "response_events": events}
+    return {
+        "response_text": text,
+        "response_events": [
+            {"event": "token", "token": text},
+            {"event": "done", "esl_decision": {"status": "VETOED", "reason": reason}},
+        ],
+    }
