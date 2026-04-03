@@ -262,6 +262,7 @@ export const chatApi = {
           onDone?: (data: { esl_decision?: Record<string, unknown>; citations?: CitationSource[] }) => void
           model?: string
           conversation_id?: string
+          active_sources?: string[]
         },
   ): Promise<void> & { cancel: () => void } => {
     const callbacks =
@@ -277,7 +278,9 @@ export const chatApi = {
       rejectRef = reject
       const modelParam = callbacks.model ? `&model=${encodeURIComponent(callbacks.model)}` : ''
       const convParam = callbacks.conversation_id ? `&conversation_id=${encodeURIComponent(callbacks.conversation_id)}` : ''
-      const url = `${API_URL}/api/chat/stream?message=${encodeURIComponent(message)}${modelParam}${convParam}`
+      const sourcesParam = callbacks.active_sources?.length
+        ? `&active_sources=${encodeURIComponent(callbacks.active_sources.join(','))}` : ''
+      const url = `${API_URL}/api/chat/stream?message=${encodeURIComponent(message)}${modelParam}${convParam}${sourcesParam}`
       es = new EventSource(url, { withCredentials: true })
 
       es.onmessage = (e) => {
