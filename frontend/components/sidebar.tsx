@@ -10,7 +10,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/useAuth"
 import { useTheme } from "next-themes"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { api } from "@/lib/api"
 import { UserStatus } from "@/components/UserStatus"
 
@@ -74,11 +74,19 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
 
   useEffect(() => { setMounted(true) }, [])
 
-  useEffect(() => {
+  const refreshConversations = useCallback(() => {
     api.chat.conversations.list()
       .then(r => setConversations(r.conversations))
       .catch(() => {})
-  }, [pathname])
+  }, [])
+
+  useEffect(() => { refreshConversations() }, [pathname, refreshConversations])
+
+  // Refresh immediately when a new conversation is created (e.g., first message sent)
+  useEffect(() => {
+    window.addEventListener('ec:conversation-created', refreshConversations)
+    return () => window.removeEventListener('ec:conversation-created', refreshConversations)
+  }, [refreshConversations])
 
   useEffect(() => {
     const fetchCount = () => {

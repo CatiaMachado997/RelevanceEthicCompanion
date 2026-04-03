@@ -54,7 +54,7 @@ class UpdateSettingsRequest(BaseModel):
 
 @router.get("/", response_model=dict)
 async def get_settings(
-    user_id: str = Depends(get_current_user_id),
+    user_id: str = Depends(get_current_read_user_id),
 ):
     """Fetch user settings. Returns defaults if no row exists yet."""
     try:

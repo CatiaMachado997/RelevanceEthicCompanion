@@ -900,7 +900,7 @@ export interface Project {
 export const projectsApi = {
   list: async (status?: string): Promise<Project[]> => {
     const query = status ? `?status=${status}` : ''
-    return apiRequest<Project[]>(`/api/projects${query}`)
+    return apiRequest<Project[]>(`/api/projects/${query}`)
   },
 
   get: async (id: string): Promise<Project> => {
@@ -908,7 +908,7 @@ export const projectsApi = {
   },
 
   create: async (data: { title: string; description?: string; goal_id?: string }): Promise<Project> => {
-    return apiRequest<Project>('/api/projects', {
+    return apiRequest<Project>('/api/projects/', {
       method: 'POST',
       body: JSON.stringify(data),
     })
@@ -996,7 +996,7 @@ export interface ContextSnapshot {
 export const tasksApi = {
   list: async (params?: { project_id?: string; status?: string }): Promise<Task[]> => {
     const query = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
-    return apiRequest<Task[]>(`/api/tasks${query}`)
+    return apiRequest<Task[]>(`/api/tasks/${query}`)
   },
 
   get: async (id: string): Promise<Task> => {
@@ -1012,7 +1012,7 @@ export const tasksApi = {
     source_origin?: string;
     ai_confidence?: number;
   }): Promise<Task> => {
-    return apiRequest<Task>('/api/tasks', {
+    return apiRequest<Task>('/api/tasks/', {
       method: 'POST',
       body: JSON.stringify(data),
     })

@@ -80,9 +80,11 @@ export function useAuth() {
   }, [])
 
   const signOut = useCallback(async () => {
+    // Clear backend session cookie first — before Supabase signOut fires SIGNED_OUT
+    // to avoid race where redirect lands before cookie is cleared
+    await clearSessionCookie()
     const { error } = await supabase.auth.signOut()
     if (error) throw error
-    // Clear local state immediately — don't wait for auth event
     localStorage.removeItem('ec_display')
     localStorage.removeItem('ec_lastRoute')
     if (typeof window !== 'undefined') window.location.href = '/login'
