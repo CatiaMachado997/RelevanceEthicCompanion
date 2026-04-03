@@ -93,7 +93,7 @@ async def stream_langgraph(
         "model": model, "user_context": {}, "conversation_history": [],
         "intent": "", "tool_calls": [], "tool_results": [],
         "esl_decision": None, "proposed_content": "", "response_text": "",
-        "response_events": [], "token_count": 0, "token_warning": None,
+        "response_events": [], "citations": [], "token_count": 0, "token_warning": None,
     }
     graph = get_graph()
 
@@ -102,6 +102,7 @@ async def stream_langgraph(
 
     response_text = ""
     esl_data = {}
+    citations: list = []
     tool_events_yielded = False
     done_yielded = False
 
@@ -128,13 +129,15 @@ async def stream_langgraph(
                     response_text += content
                     yield {"event": "token", "token": content}
 
-            # ── Tool use/result events (emitted BEFORE tokens if tools ran) ──
+            # ── Tool use/result events + citations (emitted BEFORE tokens if tools ran) ──
             elif kind == "on_chain_end" and node == "tool_execution" and not tool_events_yielded:
                 tool_events_yielded = True
                 output = event.get("data", {}).get("output") or {}
                 for ev in output.get("response_events", []):
                     if ev.get("event") in ("tool_use", "tool_result"):
                         yield ev
+                # Capture citation sources for the done event
+                citations = output.get("citations", [])
 
             # ── Token warning ──
             elif kind == "on_chain_end" and node in ("tool_execution", "tool_planner"):
@@ -176,7 +179,7 @@ async def stream_langgraph(
 
                 if not done_yielded:
                     done_yielded = True
-                    yield {"event": "done", "esl_decision": esl_data}
+                    yield {"event": "done", "esl_decision": esl_data, "citations": citations}
 
     except Exception as e:
         logger.error(f"stream_langgraph error: {e}", exc_info=True)
@@ -186,7 +189,7 @@ async def stream_langgraph(
         return
 
     if not done_yielded:
-        yield {"event": "done", "esl_decision": esl_data}
+        yield {"event": "done", "esl_decision": esl_data, "citations": citations}
 
     # Store conversation turns non-blocking
     await _post_stream_store(

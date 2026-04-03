@@ -29,6 +29,9 @@ class AgentState(TypedDict):
     response_text: str          # final response to stream to user
     response_events: list       # list of SSE event dicts to yield
 
+    # Citations — sources consulted by tool calls
+    citations: list  # [{"tool": str, "label": str, "icon": str}, ...]
+
     # Token tracking
     token_count: int
     token_warning: Optional[dict]
