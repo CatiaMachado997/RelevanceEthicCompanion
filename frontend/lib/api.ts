@@ -10,6 +10,12 @@ const DEFAULT_TIMEOUT_MS = 30000 // 30 second timeout
 type AccessTokenProvider = () => string | null | Promise<string | null>
 type UnauthorizedHandler = () => void
 
+export interface CitationSource {
+  tool: string
+  label: string
+  icon: string
+}
+
 const authConfig: {
   getAccessToken: AccessTokenProvider | null
   onUnauthorized: UnauthorizedHandler | null
@@ -253,6 +259,7 @@ export const chatApi = {
           onToolResult?: (tool: string) => void
           onRateLimitWarning?: (level: string, message: string) => void
           onRateLimitExceeded?: (retryAfter: string, message: string) => void
+          onDone?: (data: { esl_decision?: Record<string, unknown>; citations?: CitationSource[] }) => void
           model?: string
           conversation_id?: string
         },
@@ -301,6 +308,7 @@ export const chatApi = {
             return
           }
           if (data.event === 'done') {
+            callbacks.onDone?.({ esl_decision: data.esl_decision, citations: data.citations })
             es!.close()
             if (!settled) { settled = true; resolve() }
             return
@@ -318,6 +326,7 @@ export const chatApi = {
             return
           }
           if (data.done) {
+            callbacks.onDone?.({ esl_decision: data.esl_decision, citations: data.citations })
             es!.close()
             if (!settled) { settled = true; resolve() }
             return
