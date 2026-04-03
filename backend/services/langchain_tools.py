@@ -382,37 +382,59 @@ class NoteCreateTool(BaseTool):
 
 # ==================== Tool Factory ====================
 
+# Maps tool name → source identifier used by the active_sources filter.
+# None = always included (write tools, utility tools).
+_TOOL_SOURCE_MAP: dict = {
+    "query_memory":   "memory",
+    "query_calendar": "calendar",
+    "get_user_goals": "goals",
+    "web_search":     "web",
+    "create_note":    None,  # always available
+}
+
+
 def create_langchain_tools(
     context_manager,
     user_id: str,
     tavily_client=None,
-    relevance_engine=None
+    relevance_engine=None,
+    active_sources: list | None = None,
 ) -> list:
     """
-    Factory function to create all LangChain tools with dependencies injected.
+    Factory function to create LangChain tools with dependencies injected.
 
     Args:
         context_manager: ContextManager instance for M1/M2 access
         user_id: Current user ID
         tavily_client: Optional Tavily client for web search
         relevance_engine: Optional RelevanceScoring engine
+        active_sources: Optional list of source IDs to include (e.g. ["calendar","goals"]).
+                        Empty list or None means all sources are active.
 
     Returns:
-        List of initialized LangChain tools
+        List of initialized LangChain tools, filtered by active_sources.
     """
-    tools = [
+    filter_sources = set(active_sources) if active_sources else set()
+
+    candidates = [
         MemoryQueryTool(context_manager=context_manager, user_id=user_id),
         CalendarQueryTool(context_manager=context_manager, user_id=user_id),
         UserGoalsTool(context_manager=context_manager, user_id=user_id),
         NoteCreateTool(context_manager=context_manager, user_id=user_id),
     ]
 
-    # Add web search if Tavily client is provided (relevance_engine is optional)
     if tavily_client:
-        tools.append(WebSearchTool(
+        candidates.append(WebSearchTool(
             tavily_client=tavily_client,
             relevance_engine=relevance_engine,
-            user_id=user_id
+            user_id=user_id,
         ))
 
-    return tools
+    if not filter_sources:
+        return candidates  # all sources active
+
+    return [
+        t for t in candidates
+        if _TOOL_SOURCE_MAP.get(t.name) is None          # always-on tools
+        or _TOOL_SOURCE_MAP.get(t.name) in filter_sources  # explicitly enabled
+    ]

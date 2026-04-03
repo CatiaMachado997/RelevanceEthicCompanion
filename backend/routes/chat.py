@@ -120,14 +120,16 @@ async def stream_chat(
     message: str,
     model: str = DEFAULT_MODEL,
     conversation_id: Optional[str] = None,
+    active_sources: str = "",  # comma-separated: "calendar,web,goals,memory" — empty = all
     user_id: str = Depends(get_current_read_user_id),
 ):
     """Server-Sent Events endpoint for streaming chat responses."""
     if app_settings.USE_LANGGRAPH:
         import json as _json
         from orchestrator.graph import stream_langgraph
+        sources = [s.strip() for s in active_sources.split(",") if s.strip()] if active_sources else []
         async def _lg_stream():
-            async for event in stream_langgraph(user_id, message, model, conversation_id):
+            async for event in stream_langgraph(user_id, message, model, conversation_id, active_sources=sources):
                 yield f"data: {_json.dumps(event)}\n\n"
         return StreamingResponse(_lg_stream(), media_type="text/event-stream")
     # TODO(sprint2a): non-streaming /api/chat/ path still uses orchestrator_v2

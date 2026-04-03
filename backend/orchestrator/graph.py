@@ -73,6 +73,7 @@ async def stream_langgraph(
     message: str,
     model: str = "llama-3.3-70b-versatile",
     conversation_id: Optional[str] = None,
+    active_sources: Optional[list] = None,
 ) -> AsyncGenerator[dict, None]:
     """
     Stream SSE events from the LangGraph orchestrator.
@@ -91,6 +92,7 @@ async def stream_langgraph(
     initial_state: AgentState = {
         "user_id": user_id, "message": message, "conversation_id": conversation_id,
         "model": model, "user_context": {}, "conversation_history": [],
+        "active_sources": active_sources or [],
         "intent": "", "tool_calls": [], "tool_results": [],
         "esl_decision": None, "proposed_content": "", "response_text": "",
         "response_events": [], "citations": [], "token_count": 0, "token_warning": None,

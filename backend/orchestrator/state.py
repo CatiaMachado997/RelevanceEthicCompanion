@@ -17,6 +17,9 @@ class AgentState(TypedDict):
     # Intent
     intent: str                 # "chat" | "research_quick" | "plan" | "search" | "file_question"
 
+    # Source filtering — empty list means all sources enabled
+    active_sources: list        # e.g. ["calendar", "goals"] — empty = all
+
     # Tool execution
     tool_calls: list            # tool calls planned by ToolPlanner
     tool_results: list          # results from ToolExecution
