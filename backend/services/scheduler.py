@@ -84,6 +84,36 @@ class BackgroundScheduler:
             max_instances=1,
         )
 
+        # Pre-meeting brief — every 15 minutes alongside calendar sync
+        self.scheduler.add_job(
+            func=self._generate_pre_meeting_briefs,
+            trigger=IntervalTrigger(minutes=15),
+            id='pre_meeting_briefs',
+            name='Generate pre-meeting briefs for upcoming events',
+            replace_existing=True,
+            max_instances=1,
+        )
+
+        # Daily focus plan — every day at 8 AM
+        self.scheduler.add_job(
+            func=self._generate_daily_focus_plan,
+            trigger=CronTrigger(hour=8, minute=0),
+            id='daily_focus_plan',
+            name='Generate daily focus plan for all users',
+            replace_existing=True,
+            max_instances=1,
+        )
+
+        # Deadline warnings — every day at 8 AM
+        self.scheduler.add_job(
+            func=self._generate_deadline_warnings,
+            trigger=CronTrigger(hour=8, minute=5),
+            id='deadline_warnings',
+            name='Warn users about tasks due within 24 hours',
+            replace_existing=True,
+            max_instances=1,
+        )
+
         # Start scheduler
         self.scheduler.start()
         self._running = True
@@ -93,6 +123,9 @@ class BackgroundScheduler:
         logger.info("   - Token cleanup: Daily at 3 AM")
         logger.info("   - Health check: Every hour")
         logger.info("   - Weekly digest: Every Monday at 8 AM")
+        logger.info("   - Pre-meeting briefs: Every 15 minutes")
+        logger.info("   - Daily focus plan: Daily at 8:00 AM")
+        logger.info("   - Deadline warnings: Daily at 8:05 AM")
 
     def stop(self):
         """Stop all background tasks"""
@@ -274,6 +307,312 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
 
         except Exception as e:
             logger.error(f"[Scheduler] Weekly digest job failed: {e}")
+
+    async def _generate_pre_meeting_briefs(self):
+        """
+        Generate a pre-meeting brief for any meeting starting within 60 minutes
+        that doesn't already have one. Runs every 15 minutes.
+        """
+        logger.info("[Scheduler] Checking for upcoming meetings requiring briefs…")
+        try:
+            from routes.notifications import create_notification
+            from services.context_manager import ContextManager
+            from langchain_core.messages import HumanMessage
+            from langchain_groq import ChatGroq
+            from config import settings
+
+            now = datetime.utcnow()
+            window_start = now
+            window_end = datetime(now.year, now.month, now.day, now.hour, now.minute) \
+                         .__class__(now.year, now.month, now.day, now.hour, now.minute)
+            # Events starting between now and 60 minutes from now
+            import datetime as dt_module
+            window_end = now + dt_module.timedelta(minutes=60)
+
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    # Get events starting in the next 60 minutes for all users
+                    cur.execute(
+                        """
+                        SELECT e.user_id, e.title, e.start_time, e.location, e.description
+                        FROM events e
+                        WHERE e.start_time >= %s
+                          AND e.start_time <= %s
+                        ORDER BY e.start_time ASC
+                        """,
+                        (now, window_end),
+                    )
+                    upcoming = cur.fetchall()
+
+            if not upcoming:
+                logger.info("[Scheduler] No upcoming meetings in the next 60 minutes.")
+                return
+
+            ctx = ContextManager()
+            llm = ChatGroq(
+                model="llama-3.1-8b-instant",
+                groq_api_key=settings.GROQ_API_KEY,
+                temperature=0.5,
+            )
+
+            briefs_created = 0
+            for row in upcoming:
+                user_id = str(row["user_id"])
+                event_title = row["title"] or "Meeting"
+                event_start = row["start_time"]
+                event_location = row.get("location") or ""
+                event_start_iso = event_start.isoformat() if event_start else ""
+
+                # Dedup: skip if brief already exists for this event start time
+                with get_db_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """
+                            SELECT 1 FROM user_notifications
+                            WHERE user_id = %s
+                              AND metadata->>'subtype' = 'pre_meeting_brief'
+                              AND metadata->>'event_start' = %s
+                            LIMIT 1
+                            """,
+                            (user_id, event_start_iso),
+                        )
+                        if cur.fetchone():
+                            continue  # Brief already sent for this event
+
+                try:
+                    # Gather user context for the brief
+                    goals = await ctx.get_active_goals(user_id)
+                    goal_text = "\n".join(
+                        f"- {g.get('title', g) if isinstance(g, dict) else g.title}"
+                        for g in goals[:3]
+                    )
+
+                    minutes_until = int((event_start.replace(tzinfo=None) - now).total_seconds() / 60)
+                    location_note = f" at {event_location}" if event_location else ""
+
+                    prompt = (
+                        f"A user has a meeting in {minutes_until} minutes: \"{event_title}\"{location_note}.\n"
+                        f"Active goals:\n{goal_text or 'None'}\n\n"
+                        "Write a brief 2–3 sentence pre-meeting note. "
+                        "Mention what to focus on and one useful question to consider. "
+                        "Be specific and practical, not generic."
+                    )
+
+                    response = await llm.ainvoke([HumanMessage(content=prompt)])
+                    brief_text = (response.content or "").strip()
+
+                    if brief_text:
+                        with get_db_connection() as conn:
+                            create_notification(
+                                conn,
+                                user_id=user_id,
+                                type="brief",
+                                title=f"Pre-meeting brief: {event_title}",
+                                message=brief_text[:500],
+                                metadata={
+                                    "subtype": "pre_meeting_brief",
+                                    "event_title": event_title,
+                                    "event_start": event_start_iso,
+                                    "source": "scheduler",
+                                },
+                            )
+                        briefs_created += 1
+
+                except Exception as e:
+                    logger.warning(f"[Scheduler] Pre-meeting brief failed for user {user_id}: {e}")
+
+            logger.info(f"[Scheduler] Pre-meeting briefs complete: {briefs_created} created.")
+
+        except Exception as e:
+            logger.error(f"[Scheduler] Pre-meeting brief job failed: {e}")
+
+    async def _generate_daily_focus_plan(self):
+        """
+        Generate a daily focus plan for all users at 8 AM.
+        Uses today's events, tasks due soon, and active goals to suggest priorities.
+        """
+        logger.info("[Scheduler] Generating daily focus plans…")
+        try:
+            from routes.notifications import create_notification
+            from services.context_manager import ContextManager
+            from services.context_snapshot import ContextSnapshotService
+            from langchain_core.messages import HumanMessage
+            from langchain_groq import ChatGroq
+            from config import settings
+            import datetime as dt_module
+
+            today_str = datetime.utcnow().strftime("%Y-%m-%d")
+
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT id FROM users LIMIT 100")
+                    users = cur.fetchall()
+
+            ctx = ContextManager()
+            snapshot_svc = ContextSnapshotService()
+            llm = ChatGroq(
+                model="llama-3.1-8b-instant",
+                groq_api_key=settings.GROQ_API_KEY,
+                temperature=0.6,
+            )
+
+            for user_row in users:
+                user_id = str(user_row["id"])
+                try:
+                    # Dedup: skip if daily focus already sent today
+                    with get_db_connection() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                """
+                                SELECT 1 FROM user_notifications
+                                WHERE user_id = %s
+                                  AND metadata->>'subtype' = 'daily_focus'
+                                  AND created_at::date = CURRENT_DATE
+                                LIMIT 1
+                                """,
+                                (user_id,),
+                            )
+                            if cur.fetchone():
+                                continue
+
+                    snapshot = snapshot_svc.compute(user_id)
+
+                    events = snapshot.get("upcoming_events", [])
+                    tasks = snapshot.get("tasks_due_soon", [])
+                    goals = snapshot.get("active_goals", [])
+
+                    if not events and not tasks and not goals:
+                        continue  # No data for this user
+
+                    events_text = "\n".join(
+                        f"- {e['title']} at {e['start_time'][:16] if e.get('start_time') else 'TBD'}"
+                        for e in events[:4]
+                    ) or "None"
+                    tasks_text = "\n".join(
+                        f"- {t['title']} (due {t['due_date'][:10] if t.get('due_date') else 'soon'}, priority {t.get('priority', 5)})"
+                        for t in tasks[:5]
+                    ) or "None"
+                    goals_text = "\n".join(
+                        f"- {g['title']}"
+                        for g in goals[:3]
+                    ) or "None"
+                    pressure = snapshot.get("calendar_pressure", "light")
+
+                    prompt = (
+                        f"Today's schedule ({today_str}) — calendar pressure: {pressure}.\n"
+                        f"Upcoming events:\n{events_text}\n"
+                        f"Tasks due soon:\n{tasks_text}\n"
+                        f"Active goals:\n{goals_text}\n\n"
+                        "Write a concise daily focus plan (3 bullet points max). "
+                        "Each bullet: one concrete priority. "
+                        "Be direct and actionable, not motivational."
+                    )
+
+                    response = await llm.ainvoke([HumanMessage(content=prompt)])
+                    plan_text = (response.content or "").strip()
+
+                    if plan_text:
+                        with get_db_connection() as conn:
+                            create_notification(
+                                conn,
+                                user_id=user_id,
+                                type="info",
+                                title="Your focus for today",
+                                message=plan_text[:500],
+                                metadata={"subtype": "daily_focus", "source": "scheduler"},
+                            )
+
+                except Exception as e:
+                    logger.warning(f"[Scheduler] Daily focus failed for user {user_id}: {e}")
+
+            logger.info("[Scheduler] Daily focus plans complete.")
+
+        except Exception as e:
+            logger.error(f"[Scheduler] Daily focus job failed: {e}")
+
+    async def _generate_deadline_warnings(self):
+        """
+        Warn users about tasks due within the next 24 hours.
+        Runs at 8:05 AM daily. No LLM needed — pure SQL-driven notifications.
+        """
+        logger.info("[Scheduler] Checking for deadline warnings…")
+        try:
+            from routes.notifications import create_notification
+            import datetime as dt_module
+
+            now = datetime.utcnow()
+            in_24h = now + dt_module.timedelta(hours=24)
+
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT t.id, t.user_id, t.title, t.due_date, t.priority,
+                               p.title AS project_title
+                        FROM tasks t
+                        LEFT JOIN projects p ON p.id = t.project_id
+                        WHERE t.status NOT IN ('done', 'cancelled')
+                          AND t.due_date IS NOT NULL
+                          AND t.due_date >= %s
+                          AND t.due_date <= %s
+                        ORDER BY t.due_date ASC, t.priority DESC
+                        """,
+                        (now, in_24h),
+                    )
+                    due_tasks = cur.fetchall()
+
+            if not due_tasks:
+                logger.info("[Scheduler] No deadline warnings needed.")
+                return
+
+            warnings_created = 0
+            for row in due_tasks:
+                task_id = str(row["id"])
+                user_id = str(row["user_id"])
+                task_title = row["title"]
+                due_date = row["due_date"]
+                project_title = row.get("project_title")
+
+                # Dedup: one warning per task per day
+                with get_db_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """
+                            SELECT 1 FROM user_notifications
+                            WHERE user_id = %s
+                              AND metadata->>'subtype' = 'deadline_warning'
+                              AND metadata->>'task_id' = %s
+                              AND created_at::date = CURRENT_DATE
+                            LIMIT 1
+                            """,
+                            (user_id, task_id),
+                        )
+                        if cur.fetchone():
+                            continue
+
+                due_str = due_date.strftime("%-I:%M %p") if due_date else "today"
+                context_note = f" ({project_title})" if project_title else ""
+                message = f"Due at {due_str}{context_note}. Don't let it slip through."
+
+                with get_db_connection() as conn:
+                    create_notification(
+                        conn,
+                        user_id=user_id,
+                        type="warning",
+                        title=f"Due soon: {task_title}",
+                        message=message,
+                        metadata={
+                            "subtype": "deadline_warning",
+                            "task_id": task_id,
+                            "source": "scheduler",
+                        },
+                    )
+                warnings_created += 1
+
+            logger.info(f"[Scheduler] Deadline warnings complete: {warnings_created} created.")
+
+        except Exception as e:
+            logger.error(f"[Scheduler] Deadline warnings job failed: {e}")
 
     async def _health_check(self):
         """
