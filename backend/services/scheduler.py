@@ -114,6 +114,16 @@ class BackgroundScheduler:
             max_instances=1,
         )
 
+        # Project status snapshot — every Friday at 5 PM
+        self.scheduler.add_job(
+            func=self._generate_project_status_snapshot,
+            trigger=CronTrigger(day_of_week='fri', hour=17, minute=0),
+            id='project_status_snapshot',
+            name='Generate weekly project status snapshot for all users',
+            replace_existing=True,
+            max_instances=1,
+        )
+
         # Start scheduler
         self.scheduler.start()
         self._running = True
@@ -126,6 +136,7 @@ class BackgroundScheduler:
         logger.info("   - Pre-meeting briefs: Every 15 minutes")
         logger.info("   - Daily focus plan: Daily at 8:00 AM")
         logger.info("   - Deadline warnings: Daily at 8:05 AM")
+        logger.info("   - Project status snapshot: Every Friday at 5:00 PM")
 
     def stop(self):
         """Stop all background tasks"""
@@ -613,6 +624,121 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
 
         except Exception as e:
             logger.error(f"[Scheduler] Deadline warnings job failed: {e}")
+
+    async def _generate_project_status_snapshot(self):
+        """
+        Generate a weekly project status snapshot for each user.
+        Runs every Friday at 5 PM. Summarises active projects — progress,
+        stalls, and one suggested action for the week ahead.
+        """
+        logger.info("[Scheduler] Generating project status snapshots…")
+        try:
+            from routes.notifications import create_notification
+            from langchain_core.messages import HumanMessage
+            from langchain_groq import ChatGroq
+            from config import settings
+
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT p.id, p.user_id, p.title,
+                               COUNT(t.id) FILTER (
+                                   WHERE t.status NOT IN ('done', 'cancelled')
+                               ) AS open_tasks,
+                               COUNT(t.id) FILTER (
+                                   WHERE t.status = 'done'
+                               ) AS done_tasks,
+                               COUNT(t.id) FILTER (
+                                   WHERE t.status NOT IN ('done', 'cancelled')
+                                     AND t.due_date IS NOT NULL
+                                     AND t.due_date < NOW()
+                               ) AS overdue_tasks
+                        FROM projects p
+                        LEFT JOIN tasks t ON t.project_id = p.id
+                        WHERE p.status = 'active'
+                        GROUP BY p.id, p.user_id, p.title
+                        ORDER BY p.user_id, p.updated_at DESC
+                        """,
+                    )
+                    projects = cur.fetchall()
+
+            if not projects:
+                logger.info("[Scheduler] No active projects for status snapshot.")
+                return
+
+            # Group by user
+            from collections import defaultdict
+            by_user: dict = defaultdict(list)
+            for row in projects:
+                by_user[str(row["user_id"])].append(row)
+
+            llm = ChatGroq(
+                model="llama-3.1-8b-instant",
+                groq_api_key=settings.GROQ_API_KEY,
+                temperature=0.5,
+            )
+
+            snapshots_created = 0
+            for user_id, user_projects in by_user.items():
+                try:
+                    # Dedup: one snapshot per user per week (check last 6 days)
+                    with get_db_connection() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                """
+                                SELECT 1 FROM user_notifications
+                                WHERE user_id = %s
+                                  AND metadata->>'subtype' = 'project_status_snapshot'
+                                  AND created_at >= NOW() - INTERVAL '6 days'
+                                LIMIT 1
+                                """,
+                                (user_id,),
+                            )
+                            if cur.fetchone():
+                                continue
+
+                    project_lines = "\n".join(
+                        f"- {p['title']}: {p['open_tasks']} open task(s), "
+                        f"{p['done_tasks']} done"
+                        + (f", {p['overdue_tasks']} overdue" if p["overdue_tasks"] else "")
+                        for p in user_projects[:5]
+                    )
+
+                    prompt = (
+                        "Weekly project review. Active projects:\n"
+                        f"{project_lines}\n\n"
+                        "Write a 2–3 sentence status summary for this user. "
+                        "Acknowledge momentum where it exists. Flag stalled projects. "
+                        "Suggest one concrete action for next week. Be direct."
+                    )
+
+                    response = await llm.ainvoke([HumanMessage(content=prompt)])
+                    summary = (response.content or "").strip()
+
+                    if summary:
+                        with get_db_connection() as conn:
+                            create_notification(
+                                conn,
+                                user_id=user_id,
+                                type="info",
+                                title="Weekly project snapshot",
+                                message=summary[:500],
+                                metadata={
+                                    "subtype": "project_status_snapshot",
+                                    "project_count": len(user_projects),
+                                    "source": "scheduler",
+                                },
+                            )
+                        snapshots_created += 1
+
+                except Exception as e:
+                    logger.warning(f"[Scheduler] Project snapshot failed for user {user_id}: {e}")
+
+            logger.info(f"[Scheduler] Project status snapshots complete: {snapshots_created} created.")
+
+        except Exception as e:
+            logger.error(f"[Scheduler] Project status snapshot job failed: {e}")
 
     async def _health_check(self):
         """

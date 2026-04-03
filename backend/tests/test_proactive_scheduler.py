@@ -216,6 +216,116 @@ class TestDailyFocusPlan:
 # _generate_pre_meeting_briefs
 # ─────────────────────────────────────────────
 
+# ─────────────────────────────────────────────
+# _generate_project_status_snapshot
+# ─────────────────────────────────────────────
+
+class TestProjectStatusSnapshot:
+    @pytest.mark.asyncio
+    async def test_no_active_projects_does_nothing(self):
+        sched = make_scheduler()
+
+        def db_side_effect():
+            ctx = MagicMock()
+            conn = MagicMock()
+            cur = MagicMock()
+            cur.__enter__ = MagicMock(return_value=cur)
+            cur.__exit__ = MagicMock(return_value=False)
+            conn.__enter__ = MagicMock(return_value=conn)
+            conn.__exit__ = MagicMock(return_value=False)
+            conn.cursor = MagicMock(return_value=cur)
+            cur.fetchall.return_value = []
+            ctx.__enter__ = MagicMock(return_value=conn)
+            ctx.__exit__ = MagicMock(return_value=False)
+            return ctx
+
+        with patch("services.scheduler.get_db_connection", side_effect=db_side_effect), \
+             patch("langchain_groq.ChatGroq"):
+            await sched._generate_project_status_snapshot()
+
+    @pytest.mark.asyncio
+    async def test_skips_user_already_snapshotted_this_week(self):
+        sched = make_scheduler()
+        project_row = {
+            "id": "proj-1", "user_id": "user-6",
+            "title": "Product Launch", "open_tasks": 3, "done_tasks": 7, "overdue_tasks": 0,
+        }
+
+        call_count = {"n": 0}
+
+        def db_side_effect():
+            ctx = MagicMock()
+            conn = MagicMock()
+            cur = MagicMock()
+            cur.__enter__ = MagicMock(return_value=cur)
+            cur.__exit__ = MagicMock(return_value=False)
+            conn.__enter__ = MagicMock(return_value=conn)
+            conn.__exit__ = MagicMock(return_value=False)
+            conn.cursor = MagicMock(return_value=cur)
+
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                cur.fetchall.return_value = [project_row]
+            else:
+                cur.fetchone.return_value = {"1": 1}  # dedup hit
+
+            ctx.__enter__ = MagicMock(return_value=conn)
+            ctx.__exit__ = MagicMock(return_value=False)
+            return ctx
+
+        llm_called = []
+
+        with patch("services.scheduler.get_db_connection", side_effect=db_side_effect), \
+             patch("langchain_groq.ChatGroq") as mock_llm_cls:
+            mock_llm_cls.return_value.ainvoke = AsyncMock(side_effect=lambda _: llm_called.append(1))
+            await sched._generate_project_status_snapshot()
+            assert len(llm_called) == 0
+
+    @pytest.mark.asyncio
+    async def test_generates_snapshot_when_no_prior_notification(self):
+        sched = make_scheduler()
+        project_row = {
+            "id": "proj-2", "user_id": "user-7",
+            "title": "Q3 Report", "open_tasks": 5, "done_tasks": 2, "overdue_tasks": 1,
+        }
+
+        call_count = {"n": 0}
+
+        def db_side_effect():
+            ctx = MagicMock()
+            conn = MagicMock()
+            cur = MagicMock()
+            cur.__enter__ = MagicMock(return_value=cur)
+            cur.__exit__ = MagicMock(return_value=False)
+            conn.__enter__ = MagicMock(return_value=conn)
+            conn.__exit__ = MagicMock(return_value=False)
+            conn.cursor = MagicMock(return_value=cur)
+
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                cur.fetchall.return_value = [project_row]
+            elif call_count["n"] == 2:
+                cur.fetchone.return_value = None  # no dedup hit
+
+            ctx.__enter__ = MagicMock(return_value=conn)
+            ctx.__exit__ = MagicMock(return_value=False)
+            return ctx
+
+        mock_response = MagicMock()
+        mock_response.content = "Q3 Report is progressing well with 2 tasks done. One task is overdue — prioritise it Monday morning."
+
+        with patch("services.scheduler.get_db_connection", side_effect=db_side_effect), \
+             patch("langchain_groq.ChatGroq") as mock_llm_cls:
+            mock_llm_cls.return_value.ainvoke = AsyncMock(return_value=mock_response)
+            await sched._generate_project_status_snapshot()
+            # LLM was called once for the one user
+            assert mock_llm_cls.return_value.ainvoke.call_count == 1
+
+
+# ─────────────────────────────────────────────
+# _generate_pre_meeting_briefs
+# ─────────────────────────────────────────────
+
 class TestPreMeetingBriefs:
     @pytest.mark.asyncio
     async def test_no_upcoming_events_does_nothing(self):
