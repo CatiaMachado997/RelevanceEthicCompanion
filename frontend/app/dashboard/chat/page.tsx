@@ -53,6 +53,15 @@ const GROQ_MODELS = [
 ]
 const DEFAULT_MODEL = GROQ_MODELS[0].id
 
+const SOURCE_OPTIONS = [
+  { id: 'calendar', label: 'Calendar', icon: Calendar },
+  { id: 'web',      label: 'Web',      icon: Globe },
+  { id: 'goals',    label: 'Goals',    icon: Target },
+  { id: 'memory',   label: 'Memory',   icon: StickyNote },
+] as const
+type SourceId = typeof SOURCE_OPTIONS[number]['id']
+const ALL_SOURCE_IDS = SOURCE_OPTIONS.map(s => s.id) as SourceId[]
+
 const EXAMPLE_PROMPTS = [
   { text: "What's on my agenda today?",       icon: Calendar,     desc: 'Review upcoming events' },
   { text: "Help me prioritize my goals",       icon: Target,       desc: 'Align work with values' },
@@ -278,6 +287,8 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
   const [attachedFile, setAttachedFile] = useState<{ name: string; content: string } | null>(null)
   const [plusMenuOpen, setPlusMenuOpen] = useState(false)
 
+  const [activeSources, setActiveSources] = useState<Set<SourceId>>(new Set(ALL_SOURCE_IDS))
+
   const [extractingFor, setExtractingFor] = useState<string | null>(null)
   const [extractedSuggestions, setExtractedSuggestions] = useState<Array<ExtractedTaskType & { _key: string }>>([])
   const [extractLoading, setExtractLoading] = useState(false)
@@ -406,9 +417,14 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
         window.dispatchEvent(new Event('ec:conversation-created'))
       }
 
+      const selectedSources = activeSources.size < ALL_SOURCE_IDS.length
+        ? Array.from(activeSources)
+        : undefined  // undefined = all sources = no filter param sent
+
       const s = api.chat.stream(userMessage, {
         model: selectedModel,
         conversation_id: activeConvId,
+        active_sources: selectedSources,
         onRateLimitWarning: (level, message) => { if (!rateLimitDismissedRef.current) setRateLimitWarning({ level, message }) },
         onRateLimitExceeded: (retryAfter, message) => {
           setRateLimitExceeded({ retryAfter, message })
@@ -1009,6 +1025,35 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                   </button>
                 </div>
               )}
+            </div>
+
+            {/* Center: source toggles */}
+            <div className="flex items-center gap-1">
+              {SOURCE_OPTIONS.map(({ id, label, icon: Icon }) => {
+                const on = activeSources.has(id)
+                return (
+                  <button
+                    key={id}
+                    onClick={() => setActiveSources(prev => {
+                      const next = new Set(prev)
+                      if (next.has(id)) { next.delete(id) } else { next.add(id) }
+                      // Keep at least one source active
+                      if (next.size === 0) return prev
+                      return next
+                    })}
+                    title={on ? `Disable ${label}` : `Enable ${label}`}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium transition-all"
+                    style={{
+                      background: on ? 'rgba(0,0,0,0.07)' : 'transparent',
+                      color: on ? '#3d3d3d' : '#c0c0c0',
+                      border: `1px solid ${on ? 'rgba(0,0,0,0.12)' : 'transparent'}`,
+                    }}
+                  >
+                    <Icon size={10} />
+                    <span className="hidden sm:inline">{label}</span>
+                  </button>
+                )
+              })}
             </div>
 
             {/* Right: model selector + send/stop */}
