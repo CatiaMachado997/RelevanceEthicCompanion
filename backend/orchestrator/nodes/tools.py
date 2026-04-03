@@ -41,12 +41,70 @@ def _build_system_prompt(state: AgentState) -> str:
     ctx = state.get("user_context", {})
     goals = ctx.get("active_goals", [])
     values = ctx.get("user_values", [])
-    return (
-        "You are Ethic Companion, a personal work assistant that respects the user's values and boundaries.\n"
-        f"User's active goals: {goals}\n"
-        f"User's values: {values}\n"
-        "Answer helpfully and concisely. Use tools when you need live data."
+    snapshot = ctx.get("snapshot", {})
+
+    # Format goals
+    goal_lines = "\n".join(
+        f"  - {g.get('title', g) if isinstance(g, dict) else str(g)}"
+        for g in goals[:5]
+    ) or "  (none)"
+
+    # Format values
+    value_lines = "\n".join(
+        f"  - {v.get('value', v) if isinstance(v, dict) else str(v)}"
+        for v in values[:5]
+    ) or "  (none)"
+
+    # Format snapshot sections (only when non-empty)
+    snapshot_sections = []
+
+    events = snapshot.get("upcoming_events", [])
+    if events:
+        event_lines = "\n".join(
+            f"  - {e['title']} at {e['start_time'][:16] if e.get('start_time') else 'TBD'}"
+            + (f" ({e['location']})" if e.get("location") else "")
+            for e in events[:5]
+        )
+        snapshot_sections.append(f"Today's events:\n{event_lines}")
+
+    tasks = snapshot.get("tasks_due_soon", [])
+    if tasks:
+        task_lines = "\n".join(
+            f"  - {t['title']} (due {t['due_date'][:10] if t.get('due_date') else 'soon'}"
+            + (f", project: {t['project_title']}" if t.get("project_title") else "")
+            + ")"
+            for t in tasks[:5]
+        )
+        snapshot_sections.append(f"Tasks due soon:\n{task_lines}")
+
+    overdue = snapshot.get("overdue_count", 0)
+    if overdue:
+        snapshot_sections.append(f"Overdue tasks: {overdue}")
+
+    projects = snapshot.get("active_projects", [])
+    if projects:
+        project_lines = "\n".join(
+            f"  - {p['title']} ({p['open_tasks']} open, {p['done_tasks']} done)"
+            for p in projects[:5]
+        )
+        snapshot_sections.append(f"Active projects:\n{project_lines}")
+
+    pressure = snapshot.get("calendar_pressure", "")
+    if pressure and pressure != "light":
+        snapshot_sections.append(f"Calendar pressure: {pressure}")
+
+    context_block = "\n\n".join(snapshot_sections)
+
+    prompt = (
+        "You are Ethic Companion, a personal work assistant that respects the user's values and boundaries.\n\n"
+        f"User's active goals:\n{goal_lines}\n\n"
+        f"User's values:\n{value_lines}"
     )
+    if context_block:
+        prompt += f"\n\n{context_block}"
+    prompt += "\n\nAnswer helpfully and concisely. Use tools when you need live data beyond what's shown above."
+
+    return prompt
 
 
 async def tool_planner_node(state: AgentState) -> dict:

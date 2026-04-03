@@ -30,12 +30,22 @@ async def context_builder_node(state: AgentState) -> dict:
     history = await cm.get_conversation_history(
         state["user_id"], limit=20, conversation_id=state.get("conversation_id")
     )
+
+    # Compute 360° snapshot (tasks, projects, events) — non-blocking on failure
+    snapshot: dict = {}
+    try:
+        from services.context_snapshot import ContextSnapshotService
+        snapshot = ContextSnapshotService().compute(state["user_id"])
+    except Exception:
+        pass
+
     return {
         "user_context": {
             "active_goals": [g.__dict__ if hasattr(g, '__dict__') else g for g in (ctx.active_goals or [])],
             "user_values": [v.__dict__ if hasattr(v, '__dict__') else v for v in (ctx.user_values or [])],
             "focus_mode": getattr(ctx, "focus_mode", False),
             "additional_context": getattr(ctx, "additional_context", {}),
+            "snapshot": snapshot,
         },
         "conversation_history": history or [],
     }
