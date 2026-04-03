@@ -7,6 +7,35 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
+# Maps tool name → display metadata. None means the tool is a write tool (no citation shown).
+_TOOL_CITATION_META: dict = {
+    "query_calendar": {"label": "Google Calendar", "icon": "calendar"},
+    "query_memory":   {"label": "Memory",          "icon": "memory"},
+    "get_user_goals": {"label": "Goals",            "icon": "target"},
+    "web_search":     {"label": "Web Search",       "icon": "globe"},
+    "create_note":    None,  # write tool — omit from citations
+}
+
+
+def _build_citations(results: list) -> list:
+    """Derive citation pills from executed tool results (read tools only)."""
+    seen: set = set()
+    citations = []
+    for r in results:
+        tool = r.get("tool", "")
+        if tool in seen:
+            continue
+        seen.add(tool)
+        meta = _TOOL_CITATION_META.get(tool)
+        if meta is None:
+            continue  # write tool or unknown — skip
+        result_text = r.get("result", "")
+        # Skip tools that errored out or returned nothing useful
+        if result_text.startswith("Error") or result_text.startswith("No "):
+            continue
+        citations.append({"tool": tool, "label": meta["label"], "icon": meta["icon"]})
+    return citations
+
 
 def _build_system_prompt(state: AgentState) -> str:
     ctx = state.get("user_context", {})
@@ -99,6 +128,7 @@ async def tool_execution_node(state: AgentState) -> dict:
         "tool_results": results,
         "proposed_content": proposed,
         "response_events": events,
+        "citations": _build_citations(results),
         "token_count": state.get("token_count", 0) + tokens_used,
         "token_warning": warning,
     }
