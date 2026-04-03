@@ -124,6 +124,16 @@ class BackgroundScheduler:
             max_instances=1,
         )
 
+        # Related-items clustering — every Sunday at 6 PM
+        self.scheduler.add_job(
+            func=self._generate_related_items_clusters,
+            trigger=CronTrigger(day_of_week='sun', hour=18, minute=0),
+            id='related_items_clusters',
+            name='Cluster related tasks/events/goals and surface connections',
+            replace_existing=True,
+            max_instances=1,
+        )
+
         # Start scheduler
         self.scheduler.start()
         self._running = True
@@ -137,6 +147,7 @@ class BackgroundScheduler:
         logger.info("   - Daily focus plan: Daily at 8:00 AM")
         logger.info("   - Deadline warnings: Daily at 8:05 AM")
         logger.info("   - Project status snapshot: Every Friday at 5:00 PM")
+        logger.info("   - Related-items clustering: Every Sunday at 6:00 PM")
 
     def stop(self):
         """Stop all background tasks"""
@@ -739,6 +750,152 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
 
         except Exception as e:
             logger.error(f"[Scheduler] Project status snapshot job failed: {e}")
+
+    async def _generate_related_items_clusters(self):
+        """
+        Find clusters of related tasks, events, and goals that share significant keywords.
+        Runs every Sunday at 6 PM. Creates a notification when 2+ item types overlap on
+        the same topic, surfacing connections the user may not have noticed.
+        """
+        import re
+        from collections import defaultdict
+        logger.info("[Scheduler] Running related-items clustering…")
+
+        # Common English stop-words we exclude from keyword matching
+        STOP_WORDS = {
+            'the', 'and', 'for', 'with', 'this', 'that', 'from', 'have',
+            'will', 'been', 'are', 'our', 'your', 'their', 'about', 'some',
+            'into', 'more', 'when', 'than', 'then', 'they', 'what', 'also',
+            'just', 'been', 'like', 'each', 'make', 'over', 'such', 'after',
+        }
+
+        def keywords(text: str) -> set:
+            words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
+            return {w for w in words if w not in STOP_WORDS}
+
+        try:
+            from routes.notifications import create_notification
+            import datetime as dt_module
+
+            now = datetime.utcnow()
+            in_7_days = now + dt_module.timedelta(days=7)
+
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT id FROM users LIMIT 100")
+                    users = cur.fetchall()
+
+            notifications_created = 0
+
+            for user_row in users:
+                user_id = str(user_row["id"])
+                try:
+                    # Dedup: one cluster notification per user per week
+                    with get_db_connection() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                """
+                                SELECT 1 FROM user_notifications
+                                WHERE user_id = %s
+                                  AND metadata->>'subtype' = 'related_items_cluster'
+                                  AND created_at >= NOW() - INTERVAL '6 days'
+                                LIMIT 1
+                                """,
+                                (user_id,),
+                            )
+                            if cur.fetchone():
+                                continue
+
+                    # Collect items
+                    with get_db_connection() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                "SELECT title FROM tasks WHERE user_id = %s AND status NOT IN ('done','cancelled') LIMIT 30",
+                                (user_id,),
+                            )
+                            tasks = [r["title"] for r in cur.fetchall()]
+
+                            cur.execute(
+                                "SELECT title FROM events WHERE user_id = %s AND start_time >= %s AND start_time <= %s LIMIT 20",
+                                (user_id, now, in_7_days),
+                            )
+                            events = [r["title"] for r in cur.fetchall()]
+
+                            cur.execute(
+                                "SELECT title FROM goals WHERE user_id = %s AND status = 'active' LIMIT 10",
+                                (user_id,),
+                            )
+                            goals = [r["title"] for r in cur.fetchall()]
+
+                    if not (tasks and (events or goals)):
+                        continue  # not enough cross-type items to cluster
+
+                    # Build keyword → [(type, title)] index
+                    kw_index: dict = defaultdict(list)
+                    for t in tasks:
+                        for kw in keywords(t):
+                            kw_index[kw].append(("task", t))
+                    for e in events:
+                        for kw in keywords(e):
+                            kw_index[kw].append(("event", e))
+                    for g in goals:
+                        for kw in keywords(g):
+                            kw_index[kw].append(("goal", g))
+
+                    # Keep clusters with 2+ distinct item types
+                    clusters = {
+                        kw: items for kw, items in kw_index.items()
+                        if len({i[0] for i in items}) >= 2
+                    }
+
+                    if not clusters:
+                        continue
+
+                    # Pick the top 2 clusters (most diverse cross-type overlap)
+                    top = sorted(
+                        clusters.items(),
+                        key=lambda x: len({i[0] for i in x[1]}),
+                        reverse=True,
+                    )[:2]
+
+                    lines = []
+                    for kw, items in top:
+                        types = {i[0] for i in items}
+                        titles = list({i[1] for i in items})[:3]
+                        lines.append(
+                            f'"{kw.title()}": '
+                            + ", ".join(f'"{t}"' for t in titles)
+                            + f" ({', '.join(sorted(types))})"
+                        )
+
+                    message = (
+                        "Items across your tasks, events, and goals share a common thread:\n"
+                        + "\n".join(f"• {l}" for l in lines)
+                        + "\nConsider linking them or reviewing them together."
+                    )
+
+                    with get_db_connection() as conn:
+                        create_notification(
+                            conn,
+                            user_id=user_id,
+                            type="info",
+                            title="Connected items this week",
+                            message=message[:500],
+                            metadata={
+                                "subtype": "related_items_cluster",
+                                "cluster_keywords": [kw for kw, _ in top],
+                                "source": "scheduler",
+                            },
+                        )
+                    notifications_created += 1
+
+                except Exception as e:
+                    logger.warning(f"[Scheduler] Related-items clustering failed for user {user_id}: {e}")
+
+            logger.info(f"[Scheduler] Related-items clustering complete: {notifications_created} notifications.")
+
+        except Exception as e:
+            logger.error(f"[Scheduler] Related-items clustering job failed: {e}")
 
     async def _health_check(self):
         """
