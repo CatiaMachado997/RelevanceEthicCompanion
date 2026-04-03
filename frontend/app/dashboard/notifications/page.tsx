@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Bell, CheckCircle2, Info, AlertTriangle, ShieldAlert } from 'lucide-react'
+import { Bell, CheckCircle2, Info, AlertTriangle, ShieldAlert, Calendar, Crosshair } from 'lucide-react'
 import { notificationsApi, Notification } from '@/lib/api'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PageHeader } from '@/components/ui/page-header'
@@ -26,13 +26,16 @@ function iconForType(type: string) {
   if (type === 'goal_completed') return CheckCircle2
   if (type.includes('esl') || type.includes('block') || type.includes('shield')) return ShieldAlert
   if (type === 'warning') return AlertTriangle
+  if (type === 'brief') return Calendar
+  if (type === 'info') return Crosshair
   return Info
 }
 
 function getNotificationHref(type: string): string | null {
   if (type === 'goal_completed') return '/dashboard/goals'
   if (type.includes('esl') || type.includes('block') || type.includes('shield')) return '/dashboard/transparency'
-  if (type === 'warning') return '/dashboard/transparency'
+  if (type === 'warning') return '/dashboard/tasks'
+  if (type === 'brief') return '/dashboard/chat'
   return null
 }
 
