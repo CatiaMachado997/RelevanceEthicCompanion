@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { CodeBlock } from '@/components/chat/CodeBlock'
 import { ArtifactCard } from '@/components/chat/ArtifactCard'
-import api from '@/lib/api'
+import api, { CitationSource } from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
 import {
@@ -29,6 +29,7 @@ interface Message {
     status: 'APPROVED' | 'VETOED' | 'MODIFIED'
     reason: string
   }
+  citations?: CitationSource[]
 }
 
 const ESL_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -108,6 +109,36 @@ function ESLTag({ decision }: { decision: Message['esl_decision'] }) {
           {decision.reason}
         </p>
       )}
+    </div>
+  )
+}
+
+/* ─── Citation source pills ─── */
+const CITATION_ICONS: Record<string, JSX.Element | null> = {
+  calendar: <Calendar size={11} />,
+  globe:    <Globe size={11} />,
+  target:   <Target size={11} />,
+  memory:   <StickyNote size={11} />,
+}
+
+function CitationPills({ citations }: { citations?: CitationSource[] }) {
+  if (!citations || citations.length === 0) return null
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-2">
+      {citations.map(c => (
+        <span
+          key={c.tool}
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium"
+          style={{
+            background: 'var(--ec-surface-2, #f5f2ef)',
+            border: '1px solid var(--ec-card-border)',
+            color: 'var(--ec-text-muted)',
+          }}
+        >
+          {CITATION_ICONS[c.icon] ?? null}
+          {c.label}
+        </span>
+      ))}
     </div>
   )
 }
@@ -404,6 +435,13 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
           setActiveTool(tool)
         },
         onToolResult: () => setActiveTool(null),
+        onDone: ({ citations }) => {
+          if (citations && citations.length > 0) {
+            setMessages(prev => prev.map(m =>
+              m.id === assistantId ? { ...m, citations } : m
+            ))
+          }
+        },
       })
       streamRef.current = s
       await s
@@ -683,6 +721,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                       {msg.streaming && <Cursor />}
                     </>
                   ) : null}
+                  <CitationPills citations={msg.citations} />
                   {msg.esl_decision && <ESLTag decision={msg.esl_decision} />}
                 </div>
 
