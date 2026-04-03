@@ -115,7 +115,7 @@ async def tool_planner_node(state: AgentState) -> dict:
 
     cm = get_context_manager()
     user_id = state["user_id"]
-    tools = create_langchain_tools(cm, user_id)
+    tools = create_langchain_tools(cm, user_id, active_sources=state.get("active_sources") or [])
     llm = ChatGroq(
         model=state.get("model", "llama-3.3-70b-versatile"),
         api_key=settings.GROQ_API_KEY,
@@ -146,7 +146,7 @@ async def tool_execution_node(state: AgentState) -> dict:
 
     cm = get_context_manager()
     user_id = state["user_id"]
-    tools = create_langchain_tools(cm, user_id)
+    tools = create_langchain_tools(cm, user_id, active_sources=state.get("active_sources") or [])
     tool_map = {t.name: t for t in tools}
     llm = ChatGroq(
         model=state.get("model", "llama-3.3-70b-versatile"),
