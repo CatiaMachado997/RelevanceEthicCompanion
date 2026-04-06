@@ -2,21 +2,28 @@
 """
 Documents API routes.
 
-POST /api/documents/upload  — upload a file (PDF or plain text)
-GET  /api/documents/        — list user's documents
-DELETE /api/documents/{id}  — delete a document + its chunks
+POST /api/documents/upload      — upload a file (PDF or plain text)
+GET  /api/documents/            — list user's documents
+DELETE /api/documents/{id}      — delete a document + its chunks
+GET  /api/documents/{id}/view   — stream document bytes inline (Bearer or ?token=)
 """
+import io
 import logging
 import uuid
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi.responses import StreamingResponse
 
 from services.document_processor import DocumentProcessor
 from services.context_manager import ContextManager
 from services.embedding_service import EmbeddingService
 from utils.db import get_db_connection
-from utils.supabase_auth import get_current_user_id, get_current_read_user_id
+from utils.supabase_auth import (
+    get_current_user_id,
+    get_current_read_user_id,
+    _decode_supabase_token,
+)
 from utils.weaviate_client import get_weaviate_client
 from config import settings
 
@@ -97,16 +104,16 @@ async def upload_document(
             detail=f"File too large. Maximum size is {MAX_FILE_SIZE_BYTES // 1024 // 1024} MB.",
         )
 
-    # Create document record (status=processing)
+    # Create document record (status=processing), storing raw bytes for inline viewing
     document_id = str(uuid.uuid4())
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO documents (id, user_id, filename, content_type, size_bytes, status)
-                VALUES (%s, %s, %s, %s, %s, 'processing')
+                INSERT INTO documents (id, user_id, filename, content_type, size_bytes, status, raw_content)
+                VALUES (%s, %s, %s, %s, %s, 'processing', %s)
                 """,
-                (document_id, user_id, file.filename or "untitled", base_type, len(file_bytes)),
+                (document_id, user_id, file.filename or "untitled", base_type, len(file_bytes), file_bytes),
             )
 
     # Process synchronously
@@ -182,3 +189,69 @@ async def delete_document(
     except Exception as e:
         logger.error(f"Failed to delete document {document_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete document")
+
+
+@router.get("/{document_id}/view")
+async def view_document(
+    document_id: str,
+    request: Request,
+    token: str | None = None,
+):
+    """
+    Stream document bytes for inline viewing in an iframe.
+    Accepts auth via Bearer header OR ?token= query param (required for iframes,
+    which cannot set custom headers).
+    """
+    # Auth: try Bearer header first, fall back to ?token= query param
+    auth_header = request.headers.get("Authorization", "")
+    jwt = None
+    if auth_header.startswith("Bearer "):
+        jwt = auth_header[7:]
+    elif token:
+        jwt = token
+
+    if not jwt:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    # Verify JWT using the same decoder used by other auth helpers
+    try:
+        claims = _decode_supabase_token(jwt)
+        user_id = claims.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Token missing subject claim")
+        user_id = str(user_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("Token validation failed in view_document: %s", exc)
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, filename, content_type, raw_content
+                FROM documents
+                WHERE id = %s AND user_id = %s
+                """,
+                (document_id, user_id),
+            )
+            row = cur.fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    raw = row["raw_content"]
+    if raw is None:
+        raise HTTPException(status_code=404, detail="Document content not available")
+
+    content_type = row["content_type"] or "application/pdf"
+
+    return StreamingResponse(
+        io.BytesIO(raw if isinstance(raw, bytes) else raw.tobytes()),
+        media_type=content_type,
+        headers={
+            "Content-Disposition": f'inline; filename="{row["filename"]}"',
+            "Cache-Control": "private, max-age=300",
+        },
+    )
