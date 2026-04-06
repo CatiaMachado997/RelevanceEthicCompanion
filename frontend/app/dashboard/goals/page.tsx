@@ -413,7 +413,7 @@ export default function GoalsPage() {
                   type="text"
                   value={formTitle}
                   onChange={e => setFormTitle(e.target.value)}
-                  placeholder="e.g. Launch MVP"
+                  placeholder="e.g. Ship new feature by Q2"
                   className="w-full rounded-xl px-3 py-2 text-sm outline-none"
                   style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.10)', color: '#0a0a0a' }}
                 />
