@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { goalsApi, api, type Goal, type Milestone } from '@/lib/api'
-import { Plus, MoreHorizontal, Check, X, ChevronDown, ChevronRight } from 'lucide-react'
+import { Plus, MoreHorizontal, Check, X, ChevronDown, ChevronRight, Target } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card } from '@/components/ui/card'
 import { FilterChips } from '@/components/ui/filter-chips'
@@ -225,8 +225,10 @@ export default function GoalsPage() {
             {/* Add milestone input */}
             <form
               className="flex items-center gap-1.5"
+              onClick={e => e.stopPropagation()}
               onSubmit={async e => {
                 e.preventDefault()
+                e.stopPropagation()
                 const title = (milestoneInput[goal.id] || '').trim()
                 if (!title) return
                 try {
@@ -244,6 +246,7 @@ export default function GoalsPage() {
               <input
                 type="text"
                 value={milestoneInput[goal.id] ?? ''}
+                onClick={e => e.stopPropagation()}
                 onChange={e => {
                   setMilestoneInput(prev => ({ ...prev, [goal.id]: e.target.value }))
                   setMilestoneError(prev => ({ ...prev, [goal.id]: '' }))
@@ -254,6 +257,7 @@ export default function GoalsPage() {
               />
               <button
                 type="submit"
+                onClick={e => e.stopPropagation()}
                 className="text-xs px-2 py-1 rounded-lg"
                 style={{ background: '#000', color: '#fff' }}
               >
@@ -346,6 +350,21 @@ export default function GoalsPage() {
         selected={statusFilter}
         onChange={setStatusFilter}
       />
+
+      {/* Empty state */}
+      {goals.length === 0 && !loading && (
+        <div className="py-10 text-center space-y-3">
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto" style={{ background: 'var(--ec-surface-2)', border: '1px solid var(--ec-card-border)' }}>
+            <Target size={20} style={{ color: 'var(--ec-text-subtle)' }} />
+          </div>
+          <div>
+            <p className="text-sm font-medium" style={{ color: 'var(--ec-text)' }}>No goals yet</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--ec-text-subtle)' }}>
+              Goals let you define what matters.<br />Ethic Companion uses them to guide its responses.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Active goals section */}
       {(!statusFilter || statusFilter === 'active' || statusFilter === 'paused') && (
