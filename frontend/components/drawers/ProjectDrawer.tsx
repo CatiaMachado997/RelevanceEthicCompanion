@@ -40,17 +40,21 @@ export function ProjectDrawer({ project, open, onClose, onSaved }: ProjectDrawer
     setError(null)
   }, [project])
 
+  const projectId = project?.id
+
   const loadTasks = useCallback(async () => {
-    if (!project) return
+    if (!projectId) return
     try {
-      const data = await api.tasks.list({ project_id: project.id })
+      const data = await api.tasks.list({ project_id: projectId })
       setTasks(data)
-    } catch { /* non-critical */ }
-  }, [project])
+    } catch (e) {
+      setTaskError(e instanceof Error ? e.message : 'Failed to load tasks')
+    }
+  }, [projectId])
 
   useEffect(() => {
-    if (open && project) loadTasks()
-  }, [open, project, loadTasks])
+    if (open && projectId) loadTasks()
+  }, [open, projectId, loadTasks])
 
   const handleSave = async () => {
     if (!project) return
@@ -94,7 +98,7 @@ export function ProjectDrawer({ project, open, onClose, onSaved }: ProjectDrawer
     try {
       await api.tasks.create({ title: t, project_id: project.id })
       setNewTaskTitle('')
-      loadTasks()
+      await loadTasks()
     } catch (e) {
       setTaskError(e instanceof Error ? e.message : 'Failed to add task')
     } finally {
@@ -106,8 +110,10 @@ export function ProjectDrawer({ project, open, onClose, onSaved }: ProjectDrawer
     const next = task.status === 'done' ? 'todo' : 'done'
     try {
       await api.tasks.update(task.id, { status: next })
-      loadTasks()
-    } catch { /* non-critical */ }
+      await loadTasks()
+    } catch {
+      await loadTasks() // restore correct state
+    }
   }
 
   const field = 'w-full rounded-xl px-3 py-2 text-sm outline-none transition-all'
@@ -155,8 +161,9 @@ export function ProjectDrawer({ project, open, onClose, onSaved }: ProjectDrawer
     >
       {/* Title */}
       <div className="space-y-1.5">
-        <label className="text-xs font-medium uppercase tracking-widest" style={{ color: 'var(--ec-text-subtle)' }}>Name</label>
+        <label htmlFor="project-name" className="text-xs font-medium uppercase tracking-widest" style={{ color: 'var(--ec-text-subtle)' }}>Name</label>
         <input
+          id="project-name"
           className={field}
           style={fieldStyle}
           value={title}
@@ -167,8 +174,9 @@ export function ProjectDrawer({ project, open, onClose, onSaved }: ProjectDrawer
 
       {/* Description */}
       <div className="space-y-1.5">
-        <label className="text-xs font-medium uppercase tracking-widest" style={{ color: 'var(--ec-text-subtle)' }}>Description</label>
+        <label htmlFor="project-desc" className="text-xs font-medium uppercase tracking-widest" style={{ color: 'var(--ec-text-subtle)' }}>Description</label>
         <textarea
+          id="project-desc"
           className={`${field} resize-none`}
           style={{ ...fieldStyle, minHeight: 72 }}
           value={desc}
@@ -179,8 +187,9 @@ export function ProjectDrawer({ project, open, onClose, onSaved }: ProjectDrawer
 
       {/* Status */}
       <div className="space-y-1.5">
-        <label className="text-xs font-medium uppercase tracking-widest" style={{ color: 'var(--ec-text-subtle)' }}>Status</label>
+        <label htmlFor="project-status" className="text-xs font-medium uppercase tracking-widest" style={{ color: 'var(--ec-text-subtle)' }}>Status</label>
         <select
+          id="project-status"
           className={field}
           style={fieldStyle}
           value={status}
@@ -245,7 +254,7 @@ export function ProjectDrawer({ project, open, onClose, onSaved }: ProjectDrawer
             <Plus size={16} />
           </button>
         </form>
-        {taskError && <p className="text-xs" style={{ color: '#B04A3A' }}>{taskError}</p>}
+        {taskError && <p role="alert" className="text-xs" style={{ color: '#B04A3A' }}>{taskError}</p>}
       </div>
     </DrawerShell>
   )
