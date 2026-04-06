@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { api, Task, ExtractedTask } from '@/lib/api'
 import { CheckSquare, Trash2, AlertCircle, RefreshCw, Plus, Sparkles } from 'lucide-react'
+import { TaskDrawer } from '@/components/drawers/TaskDrawer'
 
 function PriorityBadge({ priority }: { priority: number }) {
   if (priority >= 8) {
@@ -61,6 +62,8 @@ export default function TasksPage() {
   const [error, setError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null)
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   // Create form
   const [createTitle, setCreateTitle] = useState('')
@@ -342,17 +345,15 @@ export default function TasksPage() {
             <span className="text-sm">Loading tasks…</span>
           </div>
         ) : tasks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 gap-3">
-            <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center"
-              style={{ background: 'var(--ec-surface-2, #f5f2ef)', border: '1px solid var(--ec-card-border)' }}
-            >
+          <div className="py-10 text-center space-y-3">
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto" style={{ background: 'var(--ec-surface-2)', border: '1px solid var(--ec-card-border)' }}>
               <CheckSquare size={20} style={{ color: 'var(--ec-text-subtle)' }} />
             </div>
-            <div className="text-center">
+            <div>
               <p className="text-sm font-medium" style={{ color: 'var(--ec-text)' }}>No tasks yet</p>
-              <p className="text-xs mt-0.5" style={{ color: 'var(--ec-text-subtle)' }}>
-                Add a task above or extract them from text using AI.
+              <p className="text-xs mt-1" style={{ color: 'var(--ec-text-subtle)' }}>
+                Tasks help you track what needs doing.<br />
+                Ethic Companion can also extract tasks from your conversations.
               </p>
             </div>
           </div>
@@ -370,17 +371,18 @@ export default function TasksPage() {
                     {group.map(task => (
                       <div
                         key={task.id}
-                        className="flex items-start gap-3 px-4 py-3 rounded-xl"
+                        className="flex items-start gap-3 px-4 py-3 rounded-xl cursor-pointer hover:ring-1 hover:ring-[var(--ec-card-border)] transition-all"
                         style={{
                           background: 'var(--ec-card-bg)',
                           border: '1px solid var(--ec-card-border)',
                           boxShadow: 'var(--ec-card-shadow)',
                           opacity: task.status === 'done' ? 0.7 : 1,
                         }}
+                        onClick={() => { setSelectedTask(task); setDrawerOpen(true) }}
                       >
                         {/* Status toggle */}
                         <button
-                          onClick={() => handleToggleStatus(task)}
+                          onClick={e => { e.stopPropagation(); handleToggleStatus(task) }}
                           disabled={togglingId === task.id}
                           className="mt-0.5 w-5 h-5 rounded flex items-center justify-center shrink-0 transition-opacity disabled:opacity-40 hover:opacity-70"
                           style={{
@@ -431,7 +433,7 @@ export default function TasksPage() {
 
                         {/* Delete */}
                         <button
-                          onClick={() => handleDelete(task.id)}
+                          onClick={e => { e.stopPropagation(); handleDelete(task.id) }}
                           disabled={deletingId === task.id}
                           className="w-8 h-8 rounded-lg flex items-center justify-center transition-opacity disabled:opacity-40 hover:opacity-70 shrink-0"
                           style={{ background: 'var(--ec-surface-2, #f5f2ef)', border: '1px solid var(--ec-card-border)' }}
@@ -452,6 +454,13 @@ export default function TasksPage() {
           </div>
         )}
       </div>
+
+      <TaskDrawer
+        task={selectedTask}
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        onSaved={loadTasks}
+      />
     </div>
   )
 }
