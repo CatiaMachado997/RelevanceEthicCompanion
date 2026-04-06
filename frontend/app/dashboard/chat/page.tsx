@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback, ChangeEvent } from 'react'
+import { useState, useEffect, useRef, useCallback, ChangeEvent, ReactElement } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { CodeBlock } from '@/components/chat/CodeBlock'
@@ -123,7 +123,7 @@ function ESLTag({ decision }: { decision: Message['esl_decision'] }) {
 }
 
 /* ─── Citation source pills ─── */
-const CITATION_ICONS: Record<string, JSX.Element | null> = {
+const CITATION_ICONS: Record<string, ReactElement | null> = {
   calendar: <Calendar size={11} />,
   globe:    <Globe size={11} />,
   target:   <Target size={11} />,
