@@ -5,16 +5,43 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 @pytest.mark.asyncio
 async def test_stream_langgraph_yields_tokens():
-    """stream_langgraph() should yield token events before the done event."""
+    """stream_langgraph() should yield token events before the done event.
+
+    Mocks get_graph() and _post_stream_store so no real DB or LLM calls are made.
+    Simulates the two astream_events() payloads that trigger a token then done.
+    """
     from orchestrator.graph import stream_langgraph
 
-    received = []
-    async for event in stream_langgraph(
-        user_id="test-user",
-        message="Hello",
-        model="llama-3.3-70b-versatile",
-    ):
-        received.append(event)
+    # A fake LLM chunk whose .content is a non-empty string
+    mock_chunk = MagicMock()
+    mock_chunk.content = "Hello world"
+
+    async def fake_astream_events(state, version="v2"):
+        # Simulate on_chat_model_stream from tool_planner (a RESPONSE_NODE)
+        yield {
+            "event": "on_chat_model_stream",
+            "metadata": {"langgraph_node": "tool_planner"},
+            "data": {"chunk": mock_chunk},
+        }
+        # Simulate LangGraph graph-level completion event
+        yield {
+            "event": "on_chain_end",
+            "name": "LangGraph",
+            "data": {"output": {"response_text": "Hello world", "esl_decision": None}},
+        }
+
+    mock_graph = MagicMock()
+    mock_graph.astream_events = fake_astream_events
+
+    with patch("orchestrator.graph.get_graph", return_value=mock_graph), \
+         patch("orchestrator.graph._post_stream_store", new_callable=AsyncMock):
+        received = []
+        async for event in stream_langgraph(
+            user_id="test-user",
+            message="Hello",
+            model="llama-3.3-70b-versatile",
+        ):
+            received.append(event)
 
     event_types = [e.get("event") for e in received]
     # Must contain at least one token and exactly one done
