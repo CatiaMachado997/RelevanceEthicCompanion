@@ -11,10 +11,12 @@ interface ConnectedSource {
   source_type: string
   last_sync?: string | null
   enabled: boolean
-  status?: string
+  status: 'synced' | 'sync_needed' | 'token_expired' | 'disconnected'
   item_count?: number
   sync_error?: string | null
   sync_error_count?: number
+  recent_items?: Array<{ title: string; item_at: string | null }>
+  token_expires_at?: string | null
 }
 
 // Brand-specific configs for each integration
@@ -85,6 +87,54 @@ function SlackIcon({ size = 20 }: { size?: number }) {
   )
 }
 
+function formatRelativeTime(isoStr: string | null | undefined): string {
+  if (!isoStr) return ''
+  const date = new Date(isoStr)
+  const diffMs = date.getTime() - Date.now()
+  const diffHours = Math.round(diffMs / (1000 * 60 * 60))
+  if (diffHours < 0) return 'past'
+  if (diffHours === 0) return 'now'
+  if (diffHours < 24) return `in ${diffHours}h`
+  return `in ${Math.round(diffHours / 24)}d`
+}
+
+function StatusBadge({ status }: { status: string }) {
+  if (status === 'synced') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium"
+        style={{ background: '#e6f4ee', color: '#2d6a4f', border: '1px solid #c8e6d3' }}>
+        <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#4A7C59' }} />
+        Synced
+      </span>
+    )
+  }
+  if (status === 'sync_needed') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium"
+        style={{ background: '#fff8e1', color: '#8a6600', border: '1px solid #ffe082' }}>
+        <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#f59e0b' }} />
+        Sync needed
+      </span>
+    )
+  }
+  if (status === 'token_expired') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium"
+        style={{ background: 'rgba(176,74,58,0.08)', color: '#B04A3A', border: '1px solid rgba(176,74,58,0.25)' }}>
+        <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#B04A3A' }} />
+        Token expired
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium"
+      style={{ background: '#f5f2ef', color: '#7a6e65', border: '1px solid #e4dcd7' }}>
+      <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#9e9e9e' }} />
+      Disconnected
+    </span>
+  )
+}
+
 function IntegrationsContent() {
   const [connected, setConnected] = useState<ConnectedSource[]>([])
   const [loading, setLoading] = useState(true)
@@ -142,8 +192,13 @@ function IntegrationsContent() {
     }
   }, [searchParams])
 
-  const isConnected = (type: SourceType) => connected.some(s => s.source_type === type)
-  const lastSync = (type: SourceType) => connected.find(s => s.source_type === type)?.last_sync
+  const sourceData = (type: SourceType) => connected.find(s => s.source_type === type)
+  const getStatus = (type: SourceType): string => sourceData(type)?.status ?? 'disconnected'
+  const isConnected = (type: SourceType) => {
+    const s = getStatus(type)
+    return s === 'synced' || s === 'sync_needed' || s === 'token_expired'
+  }
+  const lastSync = (type: SourceType) => sourceData(type)?.last_sync
 
   const handleConnect = async (type: SourceType) => {
     try {
@@ -170,11 +225,24 @@ function IntegrationsContent() {
     setSyncing(type)
     try {
       await dataSourcesApi.sync(type)
-      await loadConnected()
     } catch (e) {
-      console.error(e)
+      const label = INTEGRATIONS.find(i => i.type === type)?.label ?? type
+      setErrorFlash(`Sync failed for ${label}. If the problem persists, try reconnecting.`)
+      setTimeout(() => setErrorFlash(null), 6000)
     } finally {
       setSyncing(null)
+      await loadConnected()
+    }
+  }
+
+  const handleReconnect = async (type: SourceType) => {
+    try {
+      const { authorization_url } = await dataSourcesApi.getAuthUrl(type)
+      window.location.href = authorization_url
+    } catch (e) {
+      const label = INTEGRATIONS.find(i => i.type === type)?.label ?? type
+      setErrorFlash(`Could not start ${label} reconnection. Make sure you're signed in and try again.`)
+      setTimeout(() => setErrorFlash(null), 6000)
     }
   }
 
@@ -253,6 +321,8 @@ function IntegrationsContent() {
           const isConn = isConnected(type)
           const sync = lastSync(type)
           const isSyncing = syncing === type
+          const src = sourceData(type)
+          const status = getStatus(type)
 
           return (
             <div
@@ -284,15 +354,7 @@ function IntegrationsContent() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                         <span className="text-sm font-semibold" style={{ color: '#1c1520' }}>{label}</span>
-                        {isConn && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium" style={{
-                            background: '#e6f4ee',
-                            color: '#2d6a4f',
-                          }}>
-                            <span className="w-1.5 h-1.5 rounded-full bg-[#4A7C59]" />
-                            Connected
-                          </span>
-                        )}
+                        {isConn && <StatusBadge status={status} />}
                       </div>
                       <p className="text-xs leading-relaxed" style={{ color: '#695e6e' }}>
                         {isConn && sync
@@ -306,10 +368,25 @@ function IntegrationsContent() {
                         </span>
                       )}
                       {/* Sync error indicator */}
-                      {isConn && connected.find(src => src.source_type === type)?.sync_error && (
+                      {isConn && src?.sync_error && (
                         <p className="mt-1 text-[10px]" style={{ color: '#B04A3A' }}>
                           ⚠ Last sync failed — try syncing again
                         </p>
+                      )}
+                      {/* Recent items preview — shown when synced and items exist */}
+                      {isConn && (src?.recent_items ?? []).length > 0 && (
+                        <div className="mt-3 pt-3" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+                          <div className="space-y-1">
+                            {(src?.recent_items ?? []).slice(0, 3).map((item, i) => (
+                              <p key={i} className="text-[11px] truncate" style={{ color: '#695e6e' }}>
+                                {type === 'google_calendar'
+                                  ? `${item.title} · ${formatRelativeTime(item.item_at)}`
+                                  : item.title
+                                }
+                              </p>
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -318,16 +395,26 @@ function IntegrationsContent() {
                   <div className="flex items-center gap-2 shrink-0">
                     {isConn ? (
                       <>
-                        <button
-                          onClick={() => handleSync(type)}
-                          disabled={isSyncing}
-                          className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors disabled:opacity-40"
-                          style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(0,0,0,0.08)' }}
-                          title={`Sync ${label}`}
-                          aria-label={`Sync ${label}`}
-                        >
-                          <RefreshCw size={13} style={{ color: '#695e6e' }} className={isSyncing ? 'animate-spin' : ''} />
-                        </button>
+                        {status === 'token_expired' ? (
+                          <button
+                            onClick={() => handleReconnect(type)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors hover:opacity-90"
+                            style={{ background: 'rgba(176,74,58,0.1)', border: '1px solid rgba(176,74,58,0.3)', color: '#B04A3A' }}
+                          >
+                            Reconnect
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleSync(type)}
+                            disabled={isSyncing}
+                            className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors disabled:opacity-40"
+                            style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(0,0,0,0.08)' }}
+                            title={`Sync ${label}`}
+                            aria-label={`Sync ${label}`}
+                          >
+                            <RefreshCw size={13} style={{ color: '#695e6e' }} className={isSyncing ? 'animate-spin' : ''} />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDisconnect(type)}
                           className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"

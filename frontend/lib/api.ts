@@ -653,7 +653,11 @@ export interface DataSource {
   enabled: boolean
   last_sync: string | null
   token_expires_at: string | null
-  status: 'connected' | 'disconnected'
+  status: 'synced' | 'sync_needed' | 'token_expired' | 'disconnected'
+  item_count?: number
+  sync_error?: string | null
+  sync_error_count?: number
+  recent_items?: Array<{ title: string; item_at: string | null }>
 }
 
 export const dataSourcesApi = {
@@ -700,6 +704,7 @@ export const dataSourcesApi = {
       message: string
       items_synced: number
       source_type: string
+      recent: Array<{ title: string; item_at: string | null }>
     }>(`/api/data-sources/sync/${sourceType}`, {
       method: 'POST',
     })
