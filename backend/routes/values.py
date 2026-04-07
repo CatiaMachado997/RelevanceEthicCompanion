@@ -169,7 +169,7 @@ async def list_values(
                     query += " AND type = %s"
                     params.append(value_type)
 
-                query += " ORDER BY priority"
+                query += " ORDER BY priority ASC, created_at ASC"
                 
                 cur.execute(query, tuple(params))
                 values = cur.fetchall()
