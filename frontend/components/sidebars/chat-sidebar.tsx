@@ -22,6 +22,37 @@ interface ChatSidebarProps {
   onNewChat?: () => void
 }
 
+type DateBucket = 'Today' | 'Yesterday' | 'Last 7 days' | 'Older'
+
+function getBucket(dateString: string): DateBucket {
+  const date = new Date(dateString)
+  const now = new Date()
+  const diffDays = Math.floor((now.getTime() - date.getTime()) / 86400000)
+  const sameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  if (sameDay) return 'Today'
+  if (diffDays === 1) return 'Yesterday'
+  if (diffDays < 7) return 'Last 7 days'
+  return 'Older'
+}
+
+const BUCKET_ORDER: DateBucket[] = ['Today', 'Yesterday', 'Last 7 days', 'Older']
+
+function groupConversations(convs: Conversation[]): Map<DateBucket, Conversation[]> {
+  const sorted = [...convs].sort(
+    (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+  )
+  const map = new Map<DateBucket, Conversation[]>()
+  for (const c of sorted) {
+    const bucket = getBucket(c.updated_at)
+    if (!map.has(bucket)) map.set(bucket, [])
+    map.get(bucket)!.push(c)
+  }
+  return map
+}
+
 function formatRelativeTime(dateString: string): string {
   const date = new Date(dateString)
   const now = new Date()
@@ -110,31 +141,45 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
               <p className="text-xs mt-1">Start chatting to create one.</p>
             </div>
           )}
-          {filtered.map(conv => (
-            <button
-              key={conv.id}
-              onClick={() => router.push(`/dashboard/chat/${conv.id}`)}
-              className={`w-full flex items-start gap-3 p-3 rounded-lg transition-colors text-left ${
-                activeId === conv.id
-                  ? 'bg-[#F0F0F0]'
-                  : 'hover:bg-[#F5F5F5]'
-              }`}
-            >
-              <div className="w-8 h-8 rounded-lg bg-[#171717]/10 flex items-center justify-center shrink-0">
-                <MessageSquare className="h-4 w-4 text-[#171717]" />
-              </div>
-              <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-                <span className="truncate text-sm font-medium leading-tight text-[#171717]">
-                  {conv.title || 'New chat'}
-                </span>
-                {conv.updated_at && (
-                  <span className="text-xs text-[#A3A3A3]">
-                    {formatRelativeTime(conv.updated_at)}
+          {(() => {
+            const grouped = groupConversations(filtered)
+            return BUCKET_ORDER.flatMap(bucket => {
+              const convs = grouped.get(bucket)
+              if (!convs || convs.length === 0) return []
+              return [
+                <div key={`label-${bucket}`} className="px-3 pt-3 pb-1">
+                  <span className="text-[10px] font-medium uppercase tracking-widest" style={{ color: 'var(--ec-text-subtle)' }}>
+                    {bucket}
                   </span>
-                )}
-              </div>
-            </button>
-          ))}
+                </div>,
+                ...convs.map(conv => (
+                  <button
+                    key={conv.id}
+                    onClick={() => router.push(`/dashboard/chat/${conv.id}`)}
+                    className={`w-full flex items-start gap-3 p-3 rounded-lg transition-colors text-left ${
+                      activeId === conv.id
+                        ? 'bg-[#F0F0F0]'
+                        : 'hover:bg-[#F5F5F5]'
+                    }`}
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-[#171717]/10 flex items-center justify-center shrink-0">
+                      <MessageSquare className="h-4 w-4 text-[#171717]" />
+                    </div>
+                    <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                      <span className="truncate text-sm font-medium leading-tight text-[#171717]">
+                        {conv.title || 'New chat'}
+                      </span>
+                      {conv.updated_at && (
+                        <span className="text-xs text-[#A3A3A3]">
+                          {formatRelativeTime(conv.updated_at)}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                )),
+              ]
+            })
+          })()}
         </div>
       </SecondarySidebarSection>
 
