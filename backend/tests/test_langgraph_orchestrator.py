@@ -106,6 +106,7 @@ async def test_context_builder_populates_state():
         additional_context={}
     ))
     mock_cm.get_conversation_history = AsyncMock(return_value=[])
+    mock_cm.get_recent_source_items = AsyncMock(return_value=[])
 
     state = {
         "user_id": "test-user", "message": "hello", "conversation_id": None,
@@ -118,6 +119,7 @@ async def test_context_builder_populates_state():
         result = await context_builder_node(state)
     assert "user_context" in result
     assert "conversation_history" in result
+    assert "source_context" in result
 
 
 @pytest.mark.asyncio
