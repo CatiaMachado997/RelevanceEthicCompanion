@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from datetime import datetime, UTC
 import json
 
-from services.orchestrator_v2 import OrchestratorV2
+# OrchestratorV2 imported lazily inside get_orchestrator() — not needed when USE_LANGGRAPH=True
 from services.context_manager import ContextManager
 from esl.models import ActionType
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
@@ -20,6 +20,7 @@ from utils.rate_limit import limiter
 from tavily import TavilyClient
 from services.relevance_scoring import RelevanceScoringEngine as RelevanceScoring
 from config import settings
+from config import settings as app_settings
 from utils.weaviate_client import get_weaviate_client
 from utils.db import get_db_connection
 from services.embedding_service import EmbeddingService
@@ -97,8 +98,9 @@ GROQ_MODELS = [
 DEFAULT_MODEL = "llama-3.3-70b-versatile"
 
 
-def get_orchestrator(model: str = DEFAULT_MODEL) -> OrchestratorV2:
+def get_orchestrator(model: str = DEFAULT_MODEL):
     """Get OrchestratorV2 instance with Tavily web search when API key is available"""
+    from services.orchestrator_v2 import OrchestratorV2  # lazy import — not needed when USE_LANGGRAPH=True
     context_manager = get_context_manager()
     tavily_client = None
     relevance_engine = None
@@ -118,9 +120,20 @@ async def stream_chat(
     message: str,
     model: str = DEFAULT_MODEL,
     conversation_id: Optional[str] = None,
+    active_sources: str = "",  # comma-separated: "calendar,web,goals,memory" — empty = all
     user_id: str = Depends(get_current_read_user_id),
 ):
     """Server-Sent Events endpoint for streaming chat responses."""
+    if app_settings.USE_LANGGRAPH:
+        import json as _json
+        from orchestrator.graph import stream_langgraph
+        sources = [s.strip() for s in active_sources.split(",") if s.strip()] if active_sources else []
+        async def _lg_stream():
+            async for event in stream_langgraph(user_id, message, model, conversation_id, active_sources=sources):
+                yield f"data: {_json.dumps(event)}\n\n"
+        return StreamingResponse(_lg_stream(), media_type="text/event-stream")
+    # TODO(sprint2a): non-streaming /api/chat/ path still uses orchestrator_v2
+    # Remove when orchestrator_v2.py is deleted in Task 10
     orchestrator = get_orchestrator(model=model)
 
     async def event_generator():
@@ -229,7 +242,7 @@ async def send_message(
     request: Request,
     body: ChatRequest,
     user_id: str = Depends(get_current_user_id),
-    orchestrator: OrchestratorV2 = Depends(get_orchestrator)
+    orchestrator=Depends(get_orchestrator)
 ):
     """
     Send a chat message with ESL protection
@@ -344,7 +357,7 @@ async def suggest_proactive_action(
     suggestion_content: str,
     rationale: str,
     user_id: str = Depends(get_current_user_id),
-    orchestrator: OrchestratorV2 = Depends(get_orchestrator)
+    orchestrator=Depends(get_orchestrator)
 ):
     """
     Suggest a proactive AI action (goes through ESL)

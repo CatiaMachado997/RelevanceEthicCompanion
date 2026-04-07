@@ -1,0 +1,9 @@
+name: query_memory
+description: Search the user's semantic memory for relevant past context
+mcp_tool: /api/context
+esl_action_type: content_generation
+requires_confirmation: false
+parameters:
+  query:
+    type: string
+    description: What to search for in memory

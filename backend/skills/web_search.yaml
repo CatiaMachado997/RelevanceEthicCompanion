@@ -1,0 +1,9 @@
+name: web_search
+description: Search the web for current information using Tavily
+mcp_tool: /api/search
+esl_action_type: content_generation
+requires_confirmation: false
+parameters:
+  query:
+    type: string
+    description: The search query

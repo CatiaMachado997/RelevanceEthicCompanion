@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback, ChangeEvent } from 'react'
+import { useState, useEffect, useRef, useCallback, ChangeEvent, ReactElement } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { CodeBlock } from '@/components/chat/CodeBlock'
 import { ArtifactCard } from '@/components/chat/ArtifactCard'
-import api from '@/lib/api'
+import api, { CitationSource } from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
 import {
@@ -29,6 +29,7 @@ interface Message {
     status: 'APPROVED' | 'VETOED' | 'MODIFIED'
     reason: string
   }
+  citations?: CitationSource[]
 }
 
 const ESL_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -51,6 +52,15 @@ const GROQ_MODELS = [
   { id: 'qwen/qwen3-32b',                             label: 'Qwen3 32B',          badge: 'Preview',   group: 'Preview' },
 ]
 const DEFAULT_MODEL = GROQ_MODELS[0].id
+
+const SOURCE_OPTIONS = [
+  { id: 'calendar', label: 'Calendar', icon: Calendar },
+  { id: 'web',      label: 'Web',      icon: Globe },
+  { id: 'goals',    label: 'Goals',    icon: Target },
+  { id: 'memory',   label: 'Memory',   icon: StickyNote },
+] as const
+type SourceId = typeof SOURCE_OPTIONS[number]['id']
+const ALL_SOURCE_IDS = SOURCE_OPTIONS.map(s => s.id) as SourceId[]
 
 const EXAMPLE_PROMPTS = [
   { text: "What's on my agenda today?",       icon: Calendar,     desc: 'Review upcoming events' },
@@ -108,6 +118,36 @@ function ESLTag({ decision }: { decision: Message['esl_decision'] }) {
           {decision.reason}
         </p>
       )}
+    </div>
+  )
+}
+
+/* ─── Citation source pills ─── */
+const CITATION_ICONS: Record<string, ReactElement | null> = {
+  calendar: <Calendar size={11} />,
+  globe:    <Globe size={11} />,
+  target:   <Target size={11} />,
+  memory:   <StickyNote size={11} />,
+}
+
+function CitationPills({ citations }: { citations?: CitationSource[] }) {
+  if (!citations || citations.length === 0) return null
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-2">
+      {citations.map(c => (
+        <span
+          key={c.tool}
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium"
+          style={{
+            background: 'var(--ec-surface-2, #f5f2ef)',
+            border: '1px solid var(--ec-card-border)',
+            color: 'var(--ec-text-muted)',
+          }}
+        >
+          {CITATION_ICONS[c.icon] ?? null}
+          {c.label}
+        </span>
+      ))}
     </div>
   )
 }
@@ -241,10 +281,13 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
   const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL)
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
   const [rateLimitWarning, setRateLimitWarning] = useState<{ level: string; message: string } | null>(null)
+  const rateLimitDismissedRef = useRef(false)
   const [rateLimitExceeded, setRateLimitExceeded] = useState<{ retryAfter: string; message: string } | null>(null)
 
   const [attachedFile, setAttachedFile] = useState<{ name: string; content: string } | null>(null)
   const [plusMenuOpen, setPlusMenuOpen] = useState(false)
+
+  const [activeSources, setActiveSources] = useState<Set<SourceId>>(new Set(ALL_SOURCE_IDS))
 
   const [extractingFor, setExtractingFor] = useState<string | null>(null)
   const [extractedSuggestions, setExtractedSuggestions] = useState<Array<ExtractedTaskType & { _key: string }>>([])
@@ -371,12 +414,18 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
         const conv = await api.chat.conversations.create()
         activeConvId = conv.id
         router.replace(`/dashboard/chat/${activeConvId}`)
+        window.dispatchEvent(new Event('ec:conversation-created'))
       }
+
+      const selectedSources = activeSources.size < ALL_SOURCE_IDS.length
+        ? Array.from(activeSources)
+        : undefined  // undefined = all sources = no filter param sent
 
       const s = api.chat.stream(userMessage, {
         model: selectedModel,
         conversation_id: activeConvId,
-        onRateLimitWarning: (level, message) => setRateLimitWarning({ level, message }),
+        active_sources: selectedSources,
+        onRateLimitWarning: (level, message) => { if (!rateLimitDismissedRef.current) setRateLimitWarning({ level, message }) },
         onRateLimitExceeded: (retryAfter, message) => {
           setRateLimitExceeded({ retryAfter, message })
           setIsLoading(false)
@@ -402,6 +451,13 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
           setActiveTool(tool)
         },
         onToolResult: () => setActiveTool(null),
+        onDone: ({ citations }) => {
+          if (citations && citations.length > 0) {
+            setMessages(prev => prev.map(m =>
+              m.id === assistantId ? { ...m, citations } : m
+            ))
+          }
+        },
       })
       streamRef.current = s
       await s
@@ -670,7 +726,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                           {activeTool === 'create_note' && 'Saving note…'}
                         </div>
                       )}
-                      <div className="chat-prose max-w-none">
+                      <div className="chat-prose max-w-none" style={{ whiteSpace: 'pre-wrap' }}>
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           components={markdownComponents}
@@ -681,6 +737,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                       {msg.streaming && <Cursor />}
                     </>
                   ) : null}
+                  <CitationPills citations={msg.citations} />
                   {msg.esl_decision && <ESLTag decision={msg.esl_decision} />}
                 </div>
 
@@ -818,12 +875,12 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
             color: rateLimitWarning.level === 'high' ? '#9B6A2A' : '#7A7A2A',
           }}>
           <p className="text-xs">{rateLimitWarning.message}</p>
-          <button onClick={() => setRateLimitWarning(null)} className="shrink-0 text-lg leading-none opacity-50 hover:opacity-100">×</button>
+          <button onClick={() => { rateLimitDismissedRef.current = true; setRateLimitWarning(null) }} className="shrink-0 text-lg leading-none opacity-50 hover:opacity-100">×</button>
         </div>
       )}
 
       {/* ── Input card ── */}
-      <div className="shrink-0 px-4 pb-4">
+      <div className="shrink-0 px-4" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
         <div
           className="mx-auto max-w-[700px] rounded-2xl transition-shadow focus-within:shadow-[0_2px_20px_rgba(0,0,0,0.12)]"
           style={{
@@ -840,6 +897,10 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
               onChange={e => { setInput(e.target.value); resizeTextarea() }}
               onKeyDown={e => {
                 if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  handleSend()
+                }
+                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                   e.preventDefault()
                   handleSend()
                 }
@@ -964,6 +1025,35 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                   </button>
                 </div>
               )}
+            </div>
+
+            {/* Center: source toggles */}
+            <div className="flex items-center gap-1">
+              {SOURCE_OPTIONS.map(({ id, label, icon: Icon }) => {
+                const on = activeSources.has(id)
+                return (
+                  <button
+                    key={id}
+                    onClick={() => setActiveSources(prev => {
+                      const next = new Set(prev)
+                      if (next.has(id)) { next.delete(id) } else { next.add(id) }
+                      // Keep at least one source active
+                      if (next.size === 0) return prev
+                      return next
+                    })}
+                    title={on ? `Disable ${label}` : `Enable ${label}`}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium transition-all"
+                    style={{
+                      background: on ? 'rgba(0,0,0,0.07)' : 'transparent',
+                      color: on ? '#3d3d3d' : '#c0c0c0',
+                      border: `1px solid ${on ? 'rgba(0,0,0,0.12)' : 'transparent'}`,
+                    }}
+                  >
+                    <Icon size={10} />
+                    <span className="hidden sm:inline">{label}</span>
+                  </button>
+                )
+              })}
             </div>
 
             {/* Right: model selector + send/stop */}

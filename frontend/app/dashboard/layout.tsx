@@ -8,6 +8,18 @@ import { useAuth } from '@/hooks/useAuth'
 import { useRouter, usePathname } from 'next/navigation'
 import { Menu, X } from 'lucide-react'
 
+// Configure auth at module level so it's ready before any child component
+// calls an API in its own useEffect (children's effects run before parent's).
+configureApiAuth({
+  getAccessToken: async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    return session?.access_token ?? null
+  },
+  onUnauthorized: () => {
+    if (typeof window !== 'undefined') window.location.href = '/login'
+  },
+})
+
 const PAGE_META: Record<string, { title: string; subtitle?: string }> = {
   '/dashboard':              { title: 'Dashboard',    subtitle: 'Overview of your activity' },
   '/dashboard/chat':         { title: 'Chat',         subtitle: 'Message your companion' },
@@ -35,17 +47,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const isDev = process.env.NEXT_PUBLIC_ENVIRONMENT === 'development'
 
   useEffect(() => {
-    configureApiAuth({
-      getAccessToken: async () => {
-        const { data: { session } } = await supabase.auth.getSession()
-        return session?.access_token ?? null
-      },
-      onUnauthorized: () => { window.location.href = '/login' },
-    })
-  }, [])
-
-  useEffect(() => {
-    if (!isDev && !loading && !isAuthenticated) router.push('/login')
+    if (!isDev && !loading && !isAuthenticated) {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('ec_lastRoute', window.location.pathname)
+      }
+      router.push('/login')
+    }
   }, [loading, isAuthenticated, router, isDev])
 
   if (!isDev && loading) return null

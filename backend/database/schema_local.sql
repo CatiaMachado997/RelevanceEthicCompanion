@@ -205,7 +205,11 @@ CREATE TABLE IF NOT EXISTS user_settings (
   weight_time_sensitivity  FLOAT DEFAULT 1.0,
   weight_personal_values   FLOAT DEFAULT 1.0,
   weight_context_relevance FLOAT DEFAULT 1.0,
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  status TEXT NOT NULL DEFAULT 'available' CHECK (status IN ('available','focus','do_not_disturb','away')),
+  status_until TIMESTAMPTZ,
+  timezone TEXT,
+  language TEXT
 );
 
 -- ==================== V2 Tables ====================
@@ -221,6 +225,8 @@ CREATE TABLE IF NOT EXISTS data_sources (
     enabled BOOLEAN DEFAULT TRUE,
     last_sync TIMESTAMP WITH TIME ZONE,
     metadata JSONB DEFAULT '{}',
+    sync_error_message TEXT,
+    sync_error_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

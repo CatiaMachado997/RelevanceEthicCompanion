@@ -1,0 +1,5 @@
+name: get_user_goals
+description: Retrieve the user's active goals and priorities
+mcp_tool: /api/goals
+esl_action_type: content_generation
+requires_confirmation: false

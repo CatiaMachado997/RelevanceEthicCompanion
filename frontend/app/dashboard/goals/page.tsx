@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { goalsApi, api, type Goal, type Milestone } from '@/lib/api'
-import { Plus, MoreHorizontal, Check, X, ChevronDown, ChevronRight } from 'lucide-react'
+import { Plus, MoreHorizontal, Check, X, ChevronDown, ChevronRight, Target } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card } from '@/components/ui/card'
 import { FilterChips } from '@/components/ui/filter-chips'
@@ -50,6 +50,7 @@ export default function GoalsPage() {
 
   const [milestones, setMilestones] = useState<Record<string, Milestone[]>>({})
   const [milestoneInput, setMilestoneInput] = useState<Record<string, string>>({})
+  const [milestoneError, setMilestoneError] = useState<Record<string, string>>({})
 
   const loadMilestones = async (goalId: string) => {
     try {
@@ -224,31 +225,48 @@ export default function GoalsPage() {
             {/* Add milestone input */}
             <form
               className="flex items-center gap-1.5"
+              onClick={e => e.stopPropagation()}
               onSubmit={async e => {
                 e.preventDefault()
+                e.stopPropagation()
                 const title = (milestoneInput[goal.id] || '').trim()
                 if (!title) return
-                await api.goals.milestones.create(goal.id, title)
-                setMilestoneInput(prev => ({ ...prev, [goal.id]: '' }))
-                loadMilestones(goal.id)
+                try {
+                  await api.goals.milestones.create(goal.id, title)
+                  setMilestoneInput(prev => ({ ...prev, [goal.id]: '' }))
+                  loadMilestones(goal.id)
+                } catch (err) {
+                  setMilestoneError(prev => ({
+                    ...prev,
+                    [goal.id]: err instanceof Error ? err.message : 'Failed to add milestone',
+                  }))
+                }
               }}
             >
               <input
                 type="text"
                 value={milestoneInput[goal.id] ?? ''}
-                onChange={e => setMilestoneInput(prev => ({ ...prev, [goal.id]: e.target.value }))}
+                onClick={e => e.stopPropagation()}
+                onChange={e => {
+                  setMilestoneInput(prev => ({ ...prev, [goal.id]: e.target.value }))
+                  setMilestoneError(prev => ({ ...prev, [goal.id]: '' }))
+                }}
                 placeholder="Add milestone…"
                 className="flex-1 text-xs px-2 py-1 rounded-lg outline-none"
                 style={{ background: '#f5f2ef', color: '#1c1520', border: '1px solid transparent' }}
               />
               <button
                 type="submit"
+                onClick={e => e.stopPropagation()}
                 className="text-xs px-2 py-1 rounded-lg"
                 style={{ background: '#000', color: '#fff' }}
               >
                 Add
               </button>
             </form>
+            {milestoneError[goal.id] && (
+              <p className="text-xs mt-1" style={{ color: '#B04A3A' }}>{milestoneError[goal.id]}</p>
+            )}
           </div>
         </div>
         {goal.target_date && (
@@ -333,6 +351,21 @@ export default function GoalsPage() {
         onChange={setStatusFilter}
       />
 
+      {/* Empty state */}
+      {goals.length === 0 && !loading && (
+        <div className="py-10 text-center space-y-3">
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto" style={{ background: 'var(--ec-surface-2)', border: '1px solid var(--ec-card-border)' }}>
+            <Target size={20} style={{ color: 'var(--ec-text-subtle)' }} />
+          </div>
+          <div>
+            <p className="text-sm font-medium" style={{ color: 'var(--ec-text)' }}>No goals yet</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--ec-text-subtle)' }}>
+              Goals let you define what matters.<br />Ethic Companion uses them to guide its responses.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Active goals section */}
       {(!statusFilter || statusFilter === 'active' || statusFilter === 'paused') && (
       <Card className="rounded-2xl overflow-hidden border border-[rgba(0,0,0,0.08)] shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
@@ -399,7 +432,7 @@ export default function GoalsPage() {
                   type="text"
                   value={formTitle}
                   onChange={e => setFormTitle(e.target.value)}
-                  placeholder="e.g. Launch MVP"
+                  placeholder="e.g. Ship new feature by Q2"
                   className="w-full rounded-xl px-3 py-2 text-sm outline-none"
                   style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.10)', color: '#0a0a0a' }}
                 />

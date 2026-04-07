@@ -6,6 +6,7 @@ User preferences that inform ESL and app behaviour.
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
+from typing import Optional
 
 from utils.db import get_db
 from utils.serialization import serialize_row
@@ -47,11 +48,13 @@ class UpdateSettingsRequest(BaseModel):
     weight_time_sensitivity: float = 1.0
     weight_personal_values: float = 1.0
     weight_context_relevance: float = 1.0
+    timezone: Optional[str] = None
+    language: Optional[str] = None
 
 
 @router.get("/", response_model=dict)
 async def get_settings(
-    user_id: str = Depends(get_current_user_id),
+    user_id: str = Depends(get_current_read_user_id),
 ):
     """Fetch user settings. Returns defaults if no row exists yet."""
     try:
@@ -108,8 +111,9 @@ async def update_settings(
                         (user_id, email_notifications, push_notifications,
                          esl_alerts, share_analytics, pii_protection,
                          weight_goal_alignment, weight_time_sensitivity,
-                         weight_personal_values, weight_context_relevance)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         weight_personal_values, weight_context_relevance,
+                         timezone, language)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (user_id) DO UPDATE SET
                         email_notifications      = EXCLUDED.email_notifications,
                         push_notifications       = EXCLUDED.push_notifications,
@@ -120,6 +124,8 @@ async def update_settings(
                         weight_time_sensitivity  = EXCLUDED.weight_time_sensitivity,
                         weight_personal_values   = EXCLUDED.weight_personal_values,
                         weight_context_relevance = EXCLUDED.weight_context_relevance,
+                        timezone                 = COALESCE(EXCLUDED.timezone, user_settings.timezone),
+                        language                 = COALESCE(EXCLUDED.language, user_settings.language),
                         updated_at               = NOW()
                     RETURNING *
                     """,
@@ -134,6 +140,8 @@ async def update_settings(
                         request.weight_time_sensitivity,
                         request.weight_personal_values,
                         request.weight_context_relevance,
+                        request.timezone,
+                        request.language,
                     ),
                 )
                 saved = cur.fetchone()

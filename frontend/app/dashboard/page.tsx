@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { transparencyApi, insightApi, contextApi, type ContextSnapshot } from '@/lib/api'
 import Link from 'next/link'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import {
   MessageSquare, Shield, ArrowRight,
   Calendar, Clock, AlertTriangle, CheckSquare, FolderOpen,
@@ -89,6 +90,7 @@ export default function DashboardPage() {
     : []
 
   return (
+    <ErrorBoundary>
     <div className="p-6 max-w-4xl mx-auto space-y-8">
 
       {/* ── Today section ──────────────────────────────────────── */}
@@ -350,5 +352,6 @@ export default function DashboardPage() {
       </div>
 
     </div>
+    </ErrorBoundary>
   )
 }

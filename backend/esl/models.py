@@ -22,6 +22,7 @@ class ActionType(str, Enum):
     """Types of actions that require ESL evaluation"""
     PUSH_NOTIFICATION = "push_notification"
     EMAIL_SEND = "email_send"
+    SLACK_SEND = "slack_send"
     CONTENT_GENERATION = "content_generation"
     PROACTIVE_SUMMARY = "proactive_summary"
     REMINDER = "reminder"
