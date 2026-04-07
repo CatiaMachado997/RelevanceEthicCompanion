@@ -42,53 +42,47 @@ def base_state() -> dict:
 @pytest.mark.asyncio
 async def test_stream_returns_200_event_stream():
     """Chat stream endpoint returns 200 with text/event-stream content type."""
-    mock_orch = MagicMock()
-    mock_orch.stream_message = mock_stream
-    with patch("routes.chat.get_orchestrator", return_value=mock_orch), \
-         patch("routes.chat.app_settings") as mock_settings:
-        mock_settings.USE_LANGGRAPH = False
+    from config import settings
+    with patch("orchestrator.graph.stream_langgraph", side_effect=mock_stream), \
+         patch.object(settings, "AUTH_ENFORCEMENT_ENABLED", False), \
+         patch.object(settings, "ENVIRONMENT", "development"):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            r = await client.get("/api/chat/stream?message=hello&user_id=00000000-0000-0000-0000-000000000000")
-        assert r.status_code in (200, 401)
-        if r.status_code == 200:
-            assert "text/event-stream" in r.headers.get("content-type", "")
+            r = await client.get("/api/chat/stream?message=hello")
+    assert r.status_code == 200
+    assert "text/event-stream" in r.headers.get("content-type", "")
 
 
 @pytest.mark.asyncio
 async def test_stream_emits_token_events():
     """Stream yields token events followed by a done event."""
-    mock_orch = MagicMock()
-    mock_orch.stream_message = mock_stream
-    with patch("routes.chat.get_orchestrator", return_value=mock_orch), \
-         patch("routes.chat.app_settings") as mock_settings:
-        mock_settings.USE_LANGGRAPH = False
+    from config import settings
+    with patch("orchestrator.graph.stream_langgraph", side_effect=mock_stream), \
+         patch.object(settings, "AUTH_ENFORCEMENT_ENABLED", False), \
+         patch.object(settings, "ENVIRONMENT", "development"):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            r = await client.get("/api/chat/stream?message=hello&user_id=00000000-0000-0000-0000-000000000000")
-        if r.status_code == 200:
-            events = await _collect_stream_events(r.text)
-            token_events = [e for e in events if e.get("event") == "token"]
-            done_events = [e for e in events if e.get("event") == "done"]
-            assert len(token_events) >= 1
-            assert len(done_events) == 1
-            assert done_events[-1] == events[-1]  # done is last
+            r = await client.get("/api/chat/stream?message=hello")
+    events = await _collect_stream_events(r.text)
+    token_events = [e for e in events if e.get("event") == "token"]
+    done_events = [e for e in events if e.get("event") == "done"]
+    assert len(token_events) >= 1
+    assert len(done_events) == 1
+    assert done_events[-1] == events[-1]  # done is last
 
 
 @pytest.mark.asyncio
 async def test_stream_token_events_have_token_field():
     """Every token event has a non-empty 'token' string field."""
-    mock_orch = MagicMock()
-    mock_orch.stream_message = mock_stream
-    with patch("routes.chat.get_orchestrator", return_value=mock_orch), \
-         patch("routes.chat.app_settings") as mock_settings:
-        mock_settings.USE_LANGGRAPH = False
+    from config import settings
+    with patch("orchestrator.graph.stream_langgraph", side_effect=mock_stream), \
+         patch.object(settings, "AUTH_ENFORCEMENT_ENABLED", False), \
+         patch.object(settings, "ENVIRONMENT", "development"):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            r = await client.get("/api/chat/stream?message=hello&user_id=00000000-0000-0000-0000-000000000000")
-        if r.status_code == 200:
-            events = await _collect_stream_events(r.text)
-            for e in events:
-                if e.get("event") == "token":
-                    assert isinstance(e.get("token"), str)
-                    assert len(e["token"]) > 0
+            r = await client.get("/api/chat/stream?message=hello")
+    events = await _collect_stream_events(r.text)
+    for e in events:
+        if e.get("event") == "token":
+            assert isinstance(e.get("token"), str)
+            assert len(e["token"]) > 0
 
 
 @pytest.mark.asyncio
@@ -164,16 +158,18 @@ async def test_esl_gateway_approved():
 
 @pytest.mark.asyncio
 async def test_stream_via_langgraph_path():
-    """Regression: stream endpoint works with USE_LANGGRAPH=true."""
+    """Regression: stream endpoint always uses LangGraph (USE_LANGGRAPH=True is default)."""
+    from config import settings
+
     async def mock_langgraph(*args, **kwargs):
         yield {"event": "token", "token": "Hello"}
         yield {"event": "done"}
 
-    with patch("routes.chat.app_settings") as mock_settings, \
-         patch("orchestrator.graph.stream_langgraph", side_effect=mock_langgraph):
-        mock_settings.USE_LANGGRAPH = True
+    with patch("orchestrator.graph.stream_langgraph", side_effect=mock_langgraph), \
+         patch.object(settings, "AUTH_ENFORCEMENT_ENABLED", False), \
+         patch.object(settings, "ENVIRONMENT", "development"):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            r = await client.get("/api/chat/stream?message=hello&user_id=00000000-0000-0000-0000-000000000000")
-        if r.status_code == 200:
-            events = await _collect_stream_events(r.text)
-            assert any(e.get("event") == "done" for e in events)
+            r = await client.get("/api/chat/stream?message=hello")
+    assert r.status_code == 200
+    events = await _collect_stream_events(r.text)
+    assert any(e.get("event") == "done" for e in events)

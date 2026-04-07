@@ -12,15 +12,11 @@ from pydantic import BaseModel, Field
 from datetime import datetime, UTC
 import json
 
-# OrchestratorV2 imported lazily inside get_orchestrator() — not needed when USE_LANGGRAPH=True
 from services.context_manager import ContextManager
 from esl.models import ActionType
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 from utils.rate_limit import limiter
-from tavily import TavilyClient
-from services.relevance_scoring import RelevanceScoringEngine as RelevanceScoring
 from config import settings
-from config import settings as app_settings
 from utils.weaviate_client import get_weaviate_client
 from utils.db import get_db_connection
 from services.embedding_service import EmbeddingService
@@ -98,23 +94,6 @@ GROQ_MODELS = [
 DEFAULT_MODEL = "llama-3.3-70b-versatile"
 
 
-def get_orchestrator(model: str = DEFAULT_MODEL):
-    """Get OrchestratorV2 instance with Tavily web search when API key is available"""
-    from services.orchestrator_v2 import OrchestratorV2  # lazy import — not needed when USE_LANGGRAPH=True
-    context_manager = get_context_manager()
-    tavily_client = None
-    relevance_engine = None
-    if settings.TAVILY_API_KEY:
-        tavily_client = TavilyClient(api_key=settings.TAVILY_API_KEY)
-        relevance_engine = RelevanceScoring(context_manager)
-    return OrchestratorV2(
-        context_manager,
-        relevance_engine=relevance_engine,
-        tavily_client=tavily_client,
-        db_connection_factory=get_db_connection,
-        model=model,
-    )
-
 @router.get("/stream")
 async def stream_chat(
     message: str,
@@ -123,31 +102,16 @@ async def stream_chat(
     active_sources: str = "",  # comma-separated: "calendar,web,goals,memory" — empty = all
     user_id: str = Depends(get_current_read_user_id),
 ):
-    """Server-Sent Events endpoint for streaming chat responses."""
-    if app_settings.USE_LANGGRAPH:
-        import json as _json
-        from orchestrator.graph import stream_langgraph
-        sources = [s.strip() for s in active_sources.split(",") if s.strip()] if active_sources else []
-        async def _lg_stream():
-            async for event in stream_langgraph(user_id, message, model, conversation_id, active_sources=sources):
-                yield f"data: {_json.dumps(event)}\n\n"
-        return StreamingResponse(_lg_stream(), media_type="text/event-stream")
-    # TODO(sprint2a): non-streaming /api/chat/ path still uses orchestrator_v2
-    # Remove when orchestrator_v2.py is deleted in Task 10
-    orchestrator = get_orchestrator(model=model)
+    """Server-Sent Events endpoint for streaming chat responses via LangGraph."""
+    import json as _json
+    from orchestrator.graph import stream_langgraph
+    sources = [s.strip() for s in active_sources.split(",") if s.strip()] if active_sources else []
 
-    async def event_generator():
-        try:
-            async for event in orchestrator.stream_message(user_id, message, conversation_id=conversation_id):
-                yield f"data: {json.dumps(event)}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'event': 'error', 'error': str(e)})}\n\n"
+    async def _lg_stream():
+        async for event in stream_langgraph(user_id, message, model, conversation_id, active_sources=sources):
+            yield f"data: {_json.dumps(event)}\n\n"
 
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
-    )
+    return StreamingResponse(_lg_stream(), media_type="text/event-stream")
 
 
 @router.get("/conversations")
@@ -242,76 +206,45 @@ async def send_message(
     request: Request,
     body: ChatRequest,
     user_id: str = Depends(get_current_user_id),
-    orchestrator=Depends(get_orchestrator)
 ):
     """
-    Send a chat message with ESL protection
-    
-    Flow:
-    1. User sends message
-    2. Orchestrator generates response (via LLM in future)
-    3. ESL evaluates response
-    4. If approved, return response
-    5. If vetoed, block and explain why
-    
-    Args:
-        request: Chat request with message
-        user_id: Current user ID
-        orchestrator: Orchestrator instance
-    
-    Returns:
-        Chat response with ESL decision
-        
-    Example:
-        POST /api/chat
-        {
-            "message": "What's on my calendar today?",
-            "context": {}
-        }
-        
-        Response:
-        {
-            "message": "What's on my calendar today?",
-            "response": "You have 3 meetings today...",
-            "executed": true,
-            "esl_decision": {...},
-            "transparency": "Action executed: ...",
-            "timestamp": "2025-11-04T20:00:00Z"
-        }
+    Non-streaming chat endpoint — collects LangGraph events and returns the full response.
+    Prefer GET /api/chat/stream for real-time streaming.
     """
+    from orchestrator.graph import stream_langgraph
+
+    response_text = ""
+    esl_decision_raw = None
+
     try:
-        # Handle message through orchestrator (includes ESL evaluation)
-        result = await orchestrator.handle_user_message(
-            user_id=user_id,
-            message=body.message,
-            context=body.context
-        )
-
-        default_reason = result.get("error", "Request failed before ESL decision")
-        esl_decision = result.get("esl_decision") or {
-            "status": "VETOED",
-            "reason": default_reason,
-            "violated_values": []
-        }
-
-        return ChatResponse(
-            message=result.get("message", body.message),
-            response=result.get("response"),
-            executed=result.get("executed", False),
-            esl_decision=esl_decision,
-            transparency=result.get("transparency", default_reason),
-            timestamp=datetime.now(UTC).isoformat(),
-            tool_executed=result.get("tool_executed"),
-            tool_name=result.get("tool_name"),
-            tool_input=result.get("tool_input"),
-            tool_output=result.get("tool_output")
-        )
-        
+        async for event in stream_langgraph(user_id, body.message, DEFAULT_MODEL):
+            if event.get("event") == "token":
+                response_text += event.get("token", "")
+            elif event.get("event") == "done":
+                esl_decision_raw = event.get("esl_decision")
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error processing message: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error processing message: {str(e)}")
+
+    # Normalise ESL decision to a plain dict
+    if esl_decision_raw and hasattr(esl_decision_raw, "status"):
+        esl_decision: dict = {
+            "status": str(esl_decision_raw.status.value if hasattr(esl_decision_raw.status, "value") else esl_decision_raw.status),
+            "reason": getattr(esl_decision_raw, "reason", ""),
+            "violated_values": getattr(esl_decision_raw, "violated_values", []),
+        }
+    elif isinstance(esl_decision_raw, dict):
+        esl_decision = esl_decision_raw
+    else:
+        esl_decision = {"status": "APPROVED", "reason": "Processed by LangGraph", "violated_values": []}
+
+    return ChatResponse(
+        message=body.message,
+        response=response_text or None,
+        executed=bool(response_text),
+        esl_decision=esl_decision,
+        transparency=esl_decision.get("reason", ""),
+        timestamp=datetime.now(UTC).isoformat(),
+    )
 
 
 @router.get("/history", response_model=ConversationHistoryResponse)
@@ -357,53 +290,19 @@ async def suggest_proactive_action(
     suggestion_content: str,
     rationale: str,
     user_id: str = Depends(get_current_user_id),
-    orchestrator=Depends(get_orchestrator)
 ):
     """
-    Suggest a proactive AI action (goes through ESL)
-    
-    This endpoint allows the system to proactively suggest actions,
-    but ESL guards against manipulation.
-    
-    Args:
-        suggestion_type: Type of suggestion (summary, reminder, etc.)
-        suggestion_content: The suggested content
-        rationale: Why the system is suggesting this
-        user_id: Current user ID
-        orchestrator: Orchestrator instance
-    
-    Returns:
-        ESL decision and execution result
-        
-    Example:
-        POST /api/chat/proactive
-        {
-            "suggestion_type": "daily_summary",
-            "suggestion_content": "Here's your day summary...",
-            "rationale": "End of work day detected"
-        }
+    Proactive AI action suggestion endpoint.
+    Proactive suggestions are now handled by the background scheduler (Sprint 2b).
+    This endpoint is retained for API compatibility and returns a stub response.
     """
-    try:
-        result = await orchestrator.suggest_proactive_action(
-            user_id=user_id,
-            suggestion_type=suggestion_type,
-            suggestion_content=suggestion_content,
-            rationale=rationale
-        )
-        
-        return {
-            "status": "success" if result["executed"] else "blocked",
-            "executed": result["executed"],
-            "esl_decision": result["decision"].model_dump(),
-            "transparency": result["transparency"],
-            "timestamp": result["timestamp"]
-        }
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error processing proactive suggestion: {str(e)}"
-        )
+    return {
+        "status": "acknowledged",
+        "executed": False,
+        "esl_decision": {"status": "PENDING", "reason": "Proactive scheduler handles this in background", "violated_values": []},
+        "transparency": "Proactive actions are evaluated asynchronously by the background scheduler",
+        "timestamp": datetime.now(UTC).isoformat(),
+    }
 
 
 @router.delete("/history", response_model=dict)

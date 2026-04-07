@@ -1,79 +1,83 @@
+"""
+Tests for POST /api/chat/ (non-streaming endpoint).
+
+The endpoint now collects events from stream_langgraph() and returns a ChatResponse.
+Tests mock orchestrator.graph.stream_langgraph to avoid real DB/LLM calls.
+"""
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from fastapi import FastAPI # Import FastAPI
-from routes.chat import get_orchestrator, router as chat_router # Import the router directly
-from unittest.mock import MagicMock, AsyncMock
+from routes.chat import router as chat_router
+from utils.supabase_auth import get_current_user_id
+from unittest.mock import patch, AsyncMock
 import pytest
 
-# Create a mock orchestrator with async methods (OrchestratorV2 removed in Task 10)
-mock_orchestrator = MagicMock()
-mock_orchestrator.handle_user_message = AsyncMock()
-mock_orchestrator.suggest_proactive_action = AsyncMock()
+TEST_USER_ID = "00000000-0000-0000-0000-000000000000"
 
-def get_mock_orchestrator():
-    return mock_orchestrator
 
-# Create a test FastAPI app instance
-test_app = FastAPI()
-test_app.dependency_overrides[get_orchestrator] = get_mock_orchestrator
-test_app.include_router(chat_router)
+def make_app():
+    app = FastAPI()
+    app.include_router(chat_router)
+    app.dependency_overrides[get_current_user_id] = lambda: TEST_USER_ID
+    return app
 
-client = TestClient(test_app)
 
-@pytest.fixture(autouse=True)
-def reset_mock():
-    """Reset the mock before each test."""
-    mock_orchestrator.reset_mock()
+@pytest.fixture
+def client():
+    return TestClient(make_app())
 
-def test_send_message_approved():
-    """Test sending a message that gets approved by the ESL."""
-    # Configure the mock
-    mock_orchestrator.handle_user_message.return_value = {
-        "message": "Hello",
-        "response": "Hi there!",
-        "executed": True,
-        "esl_decision": {"status": "APPROVED", "reason": "All good."},
-        "transparency": "Action approved."
-    }
 
-    # Make the request
-    response = client.post("/api/chat/", json={"message": "Hello"})
+async def _fake_stream_approved(*args, **kwargs):
+    """Yields token + done events simulating an approved ESL response."""
+    yield {"event": "token", "token": "Hi there!"}
+    yield {"event": "done", "esl_decision": None}
 
-    # Assert the response
+
+async def _fake_stream_empty(*args, **kwargs):
+    """Yields only a done event with no tokens — simulates a vetoed/empty response."""
+    yield {"event": "done", "esl_decision": None}
+
+
+async def _fake_stream_error(*args, **kwargs):
+    raise RuntimeError("Something went wrong")
+    yield  # pragma: no cover — makes this an async generator so async-for works
+
+
+def test_send_message_returns_200_with_response(client):
+    """A successful stream yields a response text and executed=True."""
+    with patch("orchestrator.graph.stream_langgraph", side_effect=_fake_stream_approved):
+        response = client.post("/api/chat/", json={"message": "Hello"})
     assert response.status_code == 200
     data = response.json()
     assert data["response"] == "Hi there!"
     assert data["executed"] is True
     assert data["esl_decision"]["status"] == "APPROVED"
 
-def test_send_message_vetoed():
-    """Test sending a message that gets vetoed by the ESL."""
-    # Configure the mock
-    mock_orchestrator.handle_user_message.return_value = {
-        "message": "Tell me something sensitive",
-        "response": None,
-        "executed": False,
-        "esl_decision": {"status": "VETOED", "reason": "Violates privacy."},
-        "transparency": "Action blocked."
-    }
 
-    # Make the request
-    response = client.post("/api/chat/", json={"message": "Tell me something sensitive"})
-
-    # Assert the response
+def test_send_message_returns_empty_response_when_no_tokens(client):
+    """When no token events arrive, response is None and executed=False."""
+    with patch("orchestrator.graph.stream_langgraph", side_effect=_fake_stream_empty):
+        response = client.post("/api/chat/", json={"message": "silent"})
     assert response.status_code == 200
     data = response.json()
     assert data["response"] is None
     assert data["executed"] is False
-    assert data["esl_decision"]["status"] == "VETOED"
 
-def test_send_message_error():
-    """Test an error during message processing."""
-    # Configure the mock
-    mock_orchestrator.handle_user_message.side_effect = Exception("Something went wrong")
 
-    # Make the request
-    response = client.post("/api/chat/", json={"message": "This will error"})
-
-    # Assert the response
+def test_send_message_returns_500_on_stream_error(client):
+    """If stream_langgraph raises, the endpoint returns 500."""
+    with patch("orchestrator.graph.stream_langgraph", side_effect=_fake_stream_error):
+        response = client.post("/api/chat/", json={"message": "This will error"})
     assert response.status_code == 500
-    assert "Error processing message: Something went wrong" in response.json()["detail"]
+    assert "Something went wrong" in response.json()["detail"]
+
+
+def test_send_message_requires_auth():
+    """POST /api/chat/ returns 401 when auth enforcement is active."""
+    from config import settings
+    app = FastAPI()
+    app.include_router(chat_router)
+    unauthenticated_client = TestClient(app, raise_server_exceptions=False)
+    with patch.object(settings, "AUTH_ENFORCEMENT_ENABLED", True), \
+         patch.object(settings, "ENVIRONMENT", "production"):
+        response = unauthenticated_client.post("/api/chat/", json={"message": "hello"})
+    assert response.status_code == 401

@@ -75,7 +75,7 @@ class Settings(BaseSettings):
     LANGFUSE_HOST: str = "https://cloud.langfuse.com"
 
     # Feature flags
-    USE_LANGGRAPH: bool = False
+    USE_LANGGRAPH: bool = True  # orchestrator_v2 removed in sprint-2a; LangGraph is the only orchestrator
 
     # Dev mode: override mock user ID to match the real user who connected OAuth
     DEV_USER_ID: str = "00000000-0000-0000-0000-000000000000"
