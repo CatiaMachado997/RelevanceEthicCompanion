@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { dataSourcesApi } from '@/lib/api'
-import { RefreshCw, CheckCircle2, AlertCircle, Zap } from 'lucide-react'
+import { RefreshCw, CheckCircle2, AlertCircle, Zap, Plug } from 'lucide-react'
 
 type SourceType = 'google_calendar' | 'gmail' | 'slack'
 
@@ -231,6 +231,21 @@ function IntegrationsContent() {
           </div>
         )
       })()}
+
+      {/* Empty state — shown when nothing is connected yet */}
+      {connectedCount === 0 && !loading && (
+        <div className="py-10 text-center space-y-3">
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto" style={{ background: 'var(--ec-surface-2)', border: '1px solid var(--ec-card-border)' }}>
+            <Plug size={20} style={{ color: 'var(--ec-text-subtle)' }} />
+          </div>
+          <div>
+            <p className="text-sm font-medium" style={{ color: 'var(--ec-text)' }}>No integrations connected</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--ec-text-subtle)' }}>
+              Connect Calendar and Gmail so Ethic Companion knows your schedule and context.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Integration cards */}
       <div className="space-y-3">
