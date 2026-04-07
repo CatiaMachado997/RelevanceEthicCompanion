@@ -880,7 +880,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
       )}
 
       {/* ── Input card ── */}
-      <div className="shrink-0 px-4 pb-4 pb-[env(safe-area-inset-bottom)]">
+      <div className="shrink-0 px-4" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
         <div
           className="mx-auto max-w-[700px] rounded-2xl transition-shadow focus-within:shadow-[0_2px_20px_rgba(0,0,0,0.12)]"
           style={{

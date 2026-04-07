@@ -223,7 +223,8 @@ export default function ValuesPage() {
     try {
       await api.values.reorder(reordered.map(v => v.id))
       // Re-fetch to confirm server state
-      const { values: refreshed } = await api.values.list() as { values: UserValue[] }
+      const r = await api.values.list() as UserValue[] | { values?: UserValue[] }
+      const refreshed = Array.isArray(r) ? r : (r as { values?: UserValue[] }).values ?? []
       const withMount = refreshed.map((v: UserValue) => ({ ...v, mounted: true }))
       setValues(withMount)
     } catch (e) {
