@@ -726,7 +726,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                           {activeTool === 'create_note' && 'Saving note…'}
                         </div>
                       )}
-                      <div className="chat-prose max-w-none">
+                      <div className="chat-prose max-w-none" style={{ whiteSpace: 'pre-wrap' }}>
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           components={markdownComponents}
@@ -880,7 +880,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
       )}
 
       {/* ── Input card ── */}
-      <div className="shrink-0 px-4 pb-4">
+      <div className="shrink-0 px-4 pb-4 pb-[env(safe-area-inset-bottom)]">
         <div
           className="mx-auto max-w-[700px] rounded-2xl transition-shadow focus-within:shadow-[0_2px_20px_rgba(0,0,0,0.12)]"
           style={{
