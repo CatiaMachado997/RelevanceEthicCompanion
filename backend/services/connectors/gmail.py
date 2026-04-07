@@ -1,6 +1,7 @@
 # backend/services/connectors/gmail.py
 """Gmail connector — wraps GmailSync, implements BaseConnector."""
 from datetime import timezone
+from email.utils import parsedate_to_datetime
 from typing import Any, Dict, List, Optional
 
 from services.connectors.base import BaseConnector, SourceItem
@@ -13,10 +14,9 @@ def _parse_email_date(date_str: str) -> Optional[str]:
     Example input: 'Tue, 08 Apr 2026 10:00:00 +0000'
     Example output: '2026-04-08T10:00:00+00:00'
     """
-    if not date_str:
+    if not date_str or not date_str.strip():
         return None
     try:
-        from email.utils import parsedate_to_datetime
         dt = parsedate_to_datetime(date_str)
         return dt.astimezone(timezone.utc).isoformat()
     except Exception:
