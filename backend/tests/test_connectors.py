@@ -195,7 +195,8 @@ async def test_sync_writes_to_source_items():
                       return_value="tok"), \
          patch.object(service, "_store_normalized_item", side_effect=fake_store), \
          patch.object(service, "_update_last_sync", new_callable=AsyncMock), \
-         patch.object(service, "_clear_sync_error", new_callable=AsyncMock):
+         patch.object(service, "_clear_sync_error", new_callable=AsyncMock), \
+         patch.object(service, "_get_recent_synced_items", new_callable=AsyncMock, return_value=[]):
         result = await service.sync_data_source("user-1", "google_calendar")
 
     assert result["success"] is True
