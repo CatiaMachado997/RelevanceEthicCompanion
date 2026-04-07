@@ -8,8 +8,11 @@ M2 embedding, and error tracking.
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
+
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
 
 from services.connectors import get_connector
 from services.connectors.base import SourceItem
@@ -21,6 +24,13 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 SUPPORTED_SOURCES = ["google_calendar", "gmail", "slack"]
+
+
+class TokenExpiredError(Exception):
+    """Raised when an OAuth token has expired and cannot be refreshed."""
+    def __init__(self, source_type: str):
+        self.source_type = source_type
+        super().__init__(f"Token expired for {source_type} — reconnect required")
 
 
 class DataIngestionService:
@@ -76,15 +86,16 @@ class DataIngestionService:
     async def sync_data_source(self, user_id: str, source_type: str) -> Dict[str, Any]:
         logger.info(f"🔄 Starting sync: {source_type} for user {user_id}")
 
-        tokens = await self._get_data_source_tokens(user_id, source_type)
-        if not tokens:
-            return {"success": False, "message": f"{source_type} not connected", "items_synced": 0}
+        try:
+            access_token = await self._get_valid_token(user_id, source_type)
+        except TokenExpiredError:
+            raise  # route layer handles this
 
         try:
             connector = get_connector(source_type)
             raw_items = await connector.fetch_raw_items(
-                access_token=tokens["access_token"],
-                refresh_token=tokens.get("refresh_token"),
+                access_token=access_token,
+                refresh_token=None,  # token is already fresh
             )
 
             items_synced = 0
@@ -234,6 +245,95 @@ class DataIngestionService:
                     "refresh_token": row["oauth_refresh_token_encrypted"],
                     "expires_at": row["token_expires_at"],
                 }
+
+    async def _get_valid_token(self, user_id: str, source_type: str) -> str:
+        """
+        Return a valid access token, refreshing if it expires within 5 minutes.
+        Persists new token to DB on refresh. Raises TokenExpiredError if refresh fails.
+        """
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT oauth_token_encrypted, oauth_refresh_token_encrypted, token_expires_at
+                    FROM data_sources
+                    WHERE user_id = %s AND source_type = %s AND enabled = TRUE
+                    """,
+                    (user_id, source_type),
+                )
+                row = cur.fetchone()
+
+        if not row:
+            raise TokenExpiredError(source_type)
+
+        access_token = row["oauth_token_encrypted"]
+        refresh_token = row["oauth_refresh_token_encrypted"]
+        expires_at = row["token_expires_at"]
+
+        # Normalise expires_at to an aware datetime
+        if expires_at is not None:
+            if hasattr(expires_at, "tzinfo"):
+                expires_aware = expires_at if expires_at.tzinfo else expires_at.replace(tzinfo=timezone.utc)
+            else:
+                expires_aware = datetime.fromisoformat(str(expires_at)).replace(tzinfo=timezone.utc)
+        else:
+            expires_aware = None
+
+        now = datetime.now(timezone.utc)
+        if expires_aware and expires_aware > now + timedelta(minutes=5):
+            return access_token  # Still valid
+
+        # Token expired — try to refresh
+        if not refresh_token:
+            await self._mark_token_expired(user_id, source_type)
+            raise TokenExpiredError(source_type)
+
+        try:
+            creds = Credentials(
+                token=None,
+                refresh_token=refresh_token,
+                token_uri="https://oauth2.googleapis.com/token",
+                client_id=settings.GOOGLE_OAUTH_CLIENT_ID,
+                client_secret=settings.GOOGLE_OAUTH_CLIENT_SECRET,
+            )
+            creds.refresh(Request())
+            new_expires_at = now + timedelta(seconds=3600)  # Google default: 1h
+            if creds.expiry:
+                new_expires_at = datetime.fromtimestamp(
+                    creds.expiry.timestamp(), tz=timezone.utc
+                )
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE data_sources
+                        SET oauth_token_encrypted = %s, token_expires_at = %s
+                        WHERE user_id = %s AND source_type = %s
+                        """,
+                        (creds.token, new_expires_at, user_id, source_type),
+                    )
+                conn.commit()
+            logger.info(f"✅ Token refreshed for {source_type}, user {user_id}")
+            return creds.token
+        except Exception as e:
+            logger.warning(f"⚠️  Token refresh failed for {source_type}: {e}")
+            await self._mark_token_expired(user_id, source_type)
+            raise TokenExpiredError(source_type)
+
+    async def _mark_token_expired(self, user_id: str, source_type: str):
+        """Disable source and record reconnect-required error."""
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE data_sources
+                    SET enabled = FALSE,
+                        sync_error_message = 'Token expired — reconnect required'
+                    WHERE user_id = %s AND source_type = %s
+                    """,
+                    (user_id, source_type),
+                )
+            conn.commit()
 
     async def _update_last_sync(self, user_id: str, source_type: str):
         with get_db_connection() as conn:

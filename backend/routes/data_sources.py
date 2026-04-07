@@ -10,7 +10,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, UTC
 import logging
 
-from services.data_ingestion import DataIngestionService
+from services.data_ingestion import DataIngestionService, TokenExpiredError
 from services.context_manager import ContextManager
 from services.embedding_service import EmbeddingService
 from utils.weaviate_client import get_weaviate_client
@@ -136,35 +136,19 @@ async def trigger_manual_sync(
     user_id: str = Depends(get_current_user_id),
     ingestion: DataIngestionService = Depends(get_data_ingestion)
 ) -> Dict[str, Any]:
-    """
-    Manually trigger sync for a data source
-
-    Args:
-        source_type: Type of source ('google_calendar', etc.)
-        user_id: Current user ID (from auth)
-
-    Returns:
-        Dict with sync results
-
-    Example:
-        POST /api/data-sources/sync/google_calendar
-
-        Response:
-        {
-            "success": true,
-            "message": "Synced 15 items from google_calendar",
-            "items_synced": 15,
-            "source_type": "google_calendar"
-        }
-    """
     try:
         result = await ingestion.sync_data_source(user_id, source_type)
-
         if not result["success"]:
             raise HTTPException(status_code=400, detail=result["message"])
-
         return result
-
+    except TokenExpiredError as e:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "detail": "Token expired — reconnect required",
+                "reconnect_url": f"/api/data-sources/oauth/{source_type}/authorize",
+            },
+        )
     except HTTPException:
         raise
     except Exception as e:
