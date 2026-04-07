@@ -120,7 +120,7 @@ def test_gmail_normalize_message():
     assert item.source_item_type == "email"
     assert item.source_type == "gmail"
     assert "alice@example.com" in item.body
-    assert item.metadata["from"] == "alice@example.com"
+    assert item.metadata["from_email"] == "alice@example.com"
 
 
 def test_gmail_normalize_no_subject():

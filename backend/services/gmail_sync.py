@@ -65,7 +65,7 @@ class GmailSync:
         self,
         access_token: str,
         refresh_token: str,
-        max_results: int = 20
+        max_results: int = 50
     ) -> List[Dict[str, Any]]:
         """Fetch recent emails (subject + snippet only, no body)"""
         creds = Credentials(
@@ -98,10 +98,12 @@ class GmailSync:
             headers = {h['name']: h['value'] for h in detail.get('payload', {}).get('headers', [])}
             messages.append({
                 'id': msg['id'],
+                'thread_id': msg.get('threadId', ''),
                 'subject': headers.get('Subject', '(no subject)'),
                 'from': headers.get('From', ''),
                 'date': headers.get('Date', ''),
                 'snippet': detail.get('snippet', ''),
+                'label_ids': detail.get('labelIds', []),
             })
 
         return messages

@@ -1,9 +1,26 @@
 # backend/services/connectors/gmail.py
 """Gmail connector — wraps GmailSync, implements BaseConnector."""
+from datetime import timezone
 from typing import Any, Dict, List, Optional
 
 from services.connectors.base import BaseConnector, SourceItem
 from services.gmail_sync import GmailSync
+
+
+def _parse_email_date(date_str: str) -> Optional[str]:
+    """Parse RFC-2822 email date string to UTC ISO string.
+
+    Example input: 'Tue, 08 Apr 2026 10:00:00 +0000'
+    Example output: '2026-04-08T10:00:00+00:00'
+    """
+    if not date_str:
+        return None
+    try:
+        from email.utils import parsedate_to_datetime
+        dt = parsedate_to_datetime(date_str)
+        return dt.astimezone(timezone.utc).isoformat()
+    except Exception:
+        return date_str  # fallback: store as-is
 
 
 class GmailConnector(BaseConnector):
@@ -41,9 +58,10 @@ class GmailConnector(BaseConnector):
             external_id=raw["id"],
             title=subject,
             body=body,
-            item_at=raw.get("date"),
+            item_at=_parse_email_date(raw.get("date", "")),
             metadata={
-                "from": sender,
-                "date": raw.get("date"),
+                "thread_id": raw.get("thread_id", ""),
+                "from_email": sender,
+                "label_ids": raw.get("label_ids", []),
             },
         )
