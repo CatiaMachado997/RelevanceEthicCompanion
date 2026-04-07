@@ -111,12 +111,14 @@ class DataIngestionService:
             await self._update_last_sync(user_id, source_type)
             await self._clear_sync_error(user_id, source_type)
 
+            recent = await self._get_recent_synced_items(user_id, source_type, limit=3)
             logger.info(f"✅ Sync complete: {items_synced} items from {source_type}")
             return {
                 "success": True,
-                "message": f"Synced {items_synced} items from {source_type}",
+                "message": f"Synced {items_synced} items",
                 "items_synced": items_synced,
                 "source_type": source_type,
+                "recent": recent,
             }
 
         except Exception as e:
@@ -370,6 +372,50 @@ class DataIngestionService:
                 )
             conn.commit()
 
+    async def _get_recent_synced_items(
+        self, user_id: str, source_type: str, limit: int = 3
+    ) -> List[Dict[str, Any]]:
+        """Return the most-recent source items for display in sync responses and the connected list."""
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT title, item_at
+                    FROM source_items
+                    WHERE user_id = %s AND source_type = %s
+                    ORDER BY item_at DESC NULLS LAST
+                    LIMIT %s
+                    """,
+                    (user_id, source_type, limit),
+                )
+                rows = cur.fetchall()
+        return [
+            {
+                "title": row["title"],
+                "item_at": row["item_at"].isoformat() if row["item_at"] else None,
+            }
+            for row in rows
+        ]
+
+    def _derive_status(self, row: dict) -> str:
+        """Derive display status from a data_sources row dict."""
+        if row.get("sync_error_message") and "reconnect required" in (
+            row["sync_error_message"] or ""
+        ):
+            return "token_expired"
+        if not row["enabled"]:
+            return "disconnected"
+        last_sync = row.get("last_sync")
+        if last_sync is None:
+            return "sync_needed"
+        if not hasattr(last_sync, "tzinfo"):
+            last_sync = datetime.fromisoformat(str(last_sync))
+        if last_sync.tzinfo is None:
+            last_sync = last_sync.replace(tzinfo=timezone.utc)
+        if last_sync < datetime.now(timezone.utc) - timedelta(hours=24):
+            return "sync_needed"
+        return "synced"
+
     # ── Query ──────────────────────────────────────────────────────────────
 
     async def get_connected_sources(self, user_id: str) -> List[Dict[str, Any]]:
@@ -395,25 +441,27 @@ class DataIngestionService:
                     """,
                     (user_id,),
                 )
-                sources = []
-                for row in cur.fetchall():
-                    sources.append(
-                        {
-                            "source_type": row["source_type"],
-                            "enabled": row["enabled"],
-                            "last_sync": row["last_sync"].isoformat() if row["last_sync"] else None,
-                            "token_expires_at": (
-                                row["token_expires_at"].isoformat()
-                                if row["token_expires_at"]
-                                else None
-                            ),
-                            "status": "connected" if row["enabled"] else "disconnected",
-                            "item_count": row["item_count"],
-                            "sync_error": row["sync_error_message"],
-                            "sync_error_count": row["sync_error_count"],
-                        }
-                    )
-                return sources
+                rows = cur.fetchall()
+
+        sources = []
+        for row in rows:
+            recent_items = await self._get_recent_synced_items(user_id, row["source_type"])
+            sources.append(
+                {
+                    "source_type": row["source_type"],
+                    "enabled": row["enabled"],
+                    "last_sync": row["last_sync"].isoformat() if row["last_sync"] else None,
+                    "token_expires_at": (
+                        row["token_expires_at"].isoformat() if row["token_expires_at"] else None
+                    ),
+                    "status": self._derive_status(row),
+                    "item_count": row["item_count"],
+                    "sync_error": row["sync_error_message"],
+                    "sync_error_count": row["sync_error_count"],
+                    "recent_items": recent_items,
+                }
+            )
+        return sources
 
     async def get_source_stats(self, user_id: str) -> Dict[str, Any]:
         """Return item counts per source for the stats endpoint."""
