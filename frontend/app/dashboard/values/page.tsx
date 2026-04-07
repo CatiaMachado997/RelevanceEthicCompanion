@@ -216,17 +216,32 @@ export default function ValuesPage() {
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event
     if (!over || active.id === over.id) return
-    const oldIndex = values.findIndex(v => v.id === active.id)
-    const newIndex = values.findIndex(v => v.id === over.id)
-    const reordered = arrayMove(values, oldIndex, newIndex)
+
+    let reordered: AnimatedValue[]
+
+    if (typeFilter) {
+      // When a filter is active, reorder only within the visible subset.
+      // Items of other types keep their relative slot positions in the full list.
+      const displayed = values.filter(v => v.type === typeFilter)
+      const oldIdx = displayed.findIndex(v => v.id === active.id)
+      const newIdx = displayed.findIndex(v => v.id === over.id)
+      if (oldIdx === -1 || newIdx === -1) return
+      const newDisplayed = arrayMove(displayed, oldIdx, newIdx)
+      let i = 0
+      reordered = values.map(v => v.type === typeFilter ? newDisplayed[i++] : v)
+    } else {
+      const oldIndex = values.findIndex(v => v.id === active.id)
+      const newIndex = values.findIndex(v => v.id === over.id)
+      reordered = arrayMove(values, oldIndex, newIndex)
+    }
+
     setValues(reordered)
     try {
       await api.values.reorder(reordered.map(v => v.id))
-      // Re-fetch to confirm server state
+      // Re-fetch from server to confirm saved order
       const r = await api.values.list() as UserValue[] | { values?: UserValue[] }
       const refreshed = Array.isArray(r) ? r : (r as { values?: UserValue[] }).values ?? []
-      const withMount = refreshed.map((v: UserValue) => ({ ...v, mounted: true }))
-      setValues(withMount)
+      setValues(refreshed.map((v: UserValue) => ({ ...v, mounted: true })))
     } catch (e) {
       console.error(e)
     }

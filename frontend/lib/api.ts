@@ -821,6 +821,8 @@ export interface Document {
   chunk_count: number
   error_message: string | null
   created_at: string | null
+  /** True when raw bytes are stored server-side and reprocessing is available */
+  has_raw_content: boolean
 }
 
 export interface UploadDocumentResponse {
@@ -880,6 +882,16 @@ export const documentsApi = {
   delete: async (id: string): Promise<{ message: string }> => {
     return apiRequest<{ message: string }>(`/api/documents/${id}`, {
       method: 'DELETE',
+    })
+  },
+
+  /**
+   * Reprocess a failed document using its stored raw bytes.
+   * Only works if has_raw_content is true.
+   */
+  reprocess: async (id: string): Promise<UploadDocumentResponse> => {
+    return apiRequest<UploadDocumentResponse>(`/api/documents/${id}/reprocess`, {
+      method: 'POST',
     })
   },
 }

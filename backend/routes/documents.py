@@ -55,7 +55,8 @@ def get_user_documents(user_id: str) -> List[Dict[str, Any]]:
             cur.execute(
                 """
                 SELECT id, filename, content_type, size_bytes, status,
-                       chunk_count, error_message, created_at
+                       chunk_count, error_message, created_at,
+                       raw_content IS NOT NULL AS has_raw_content
                 FROM documents
                 WHERE user_id = %s
                 ORDER BY created_at DESC
@@ -73,6 +74,7 @@ def get_user_documents(user_id: str) -> List[Dict[str, Any]]:
             "chunk_count": row["chunk_count"],
             "error_message": row["error_message"],
             "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+            "has_raw_content": bool(row["has_raw_content"]),
         }
         for row in rows
     ]
@@ -189,6 +191,78 @@ async def delete_document(
     except Exception as e:
         logger.error(f"Failed to delete document {document_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete document")
+
+
+@router.post("/{document_id}/reprocess")
+async def reprocess_document(
+    document_id: str,
+    user_id: str = Depends(get_current_user_id),
+    processor: DocumentProcessor = Depends(get_document_processor),
+) -> Dict[str, Any]:
+    """
+    Re-run processing on a failed document using its stored raw bytes.
+    Only available for documents that have raw_content stored (uploaded after sprint-2a).
+    Documents uploaded before this feature was added must be re-uploaded.
+    """
+    # Fetch document with raw bytes
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, filename, content_type, raw_content, status
+                FROM documents
+                WHERE id = %s AND user_id = %s
+                """,
+                (document_id, user_id),
+            )
+            row = cur.fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    raw = row["raw_content"]
+    if raw is None:
+        raise HTTPException(
+            status_code=422,
+            detail="No raw content stored — please re-upload the file.",
+        )
+
+    filename = row["filename"]
+    content_type = row["content_type"] or "application/pdf"
+
+    # Mark as processing
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE documents SET status = 'processing', error_message = NULL, chunk_count = 0 WHERE id = %s",
+                (document_id,),
+            )
+
+    try:
+        file_bytes = raw if isinstance(raw, bytes) else raw.tobytes()
+        chunk_count = await processor.process_document(
+            user_id=user_id,
+            document_id=document_id,
+            filename=filename,
+            content_type=content_type,
+            file_bytes=file_bytes,
+        )
+        return {
+            "id": document_id,
+            "filename": filename,
+            "status": "ready",
+            "chunk_count": chunk_count,
+            "message": f"Reprocessed successfully: {chunk_count} chunks indexed",
+        }
+    except Exception as e:
+        logger.error(f"Reprocess failed for {document_id}: {e}")
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE documents SET status = 'failed', error_message = %s WHERE id = %s",
+                    (str(e), document_id),
+                )
+        raise HTTPException(status_code=422, detail=f"Reprocessing failed: {str(e)}")
 
 
 @router.get("/{document_id}/view")

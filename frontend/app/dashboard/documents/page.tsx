@@ -63,6 +63,7 @@ export default function DocumentsPage() {
   const [error, setError] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [reprocessingId, setReprocessingId] = useState<string | null>(null)
   const [viewingDoc, setViewingDoc] = useState<{ id: string; filename: string } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -136,6 +137,19 @@ export default function DocumentsPage() {
       setDeletingId(null)
     }
   }, [])
+
+  const handleReprocess = useCallback(async (id: string) => {
+    setReprocessingId(id)
+    setError(null)
+    try {
+      await api.documents.reprocess(id)
+      await loadDocuments()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Reprocessing failed. Please re-upload the file.')
+    } finally {
+      setReprocessingId(null)
+    }
+  }, [loadDocuments])
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -301,7 +315,29 @@ export default function DocumentsPage() {
                       · {formatDate(doc.created_at)}
                     </span>
                   </div>
+                  {doc.status === 'failed' && !doc.has_raw_content && (
+                    <p className="text-xs mt-1" style={{ color: '#B04A3A' }}>
+                      Delete and re-upload to index this file.
+                    </p>
+                  )}
                 </div>
+
+                {/* Reprocess (failed docs with stored raw bytes) */}
+                {doc.status === 'failed' && doc.has_raw_content && (
+                  <button
+                    onClick={() => handleReprocess(doc.id)}
+                    disabled={reprocessingId === doc.id}
+                    className="w-9 h-9 flex items-center justify-center rounded-lg transition-colors hover:bg-amber-50 disabled:opacity-40"
+                    aria-label="Retry processing"
+                    title="Retry processing"
+                  >
+                    <RefreshCw
+                      size={14}
+                      className={reprocessingId === doc.id ? 'animate-spin' : ''}
+                      style={{ color: '#8a6600' }}
+                    />
+                  </button>
+                )}
 
                 {/* View (ready documents only) */}
                 {doc.status === 'ready' && (
