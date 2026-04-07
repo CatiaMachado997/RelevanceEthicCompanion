@@ -22,7 +22,7 @@ from utils.db import get_db_connection
 from utils.supabase_auth import (
     get_current_user_id,
     get_current_read_user_id,
-    _decode_supabase_token,
+    get_user_id_from_token,
 )
 from utils.weaviate_client import get_weaviate_client
 from config import settings
@@ -213,18 +213,8 @@ async def view_document(
     if not jwt:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    # Verify JWT using the same decoder used by other auth helpers
-    try:
-        claims = _decode_supabase_token(jwt)
-        user_id = claims.get("sub")
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Token missing subject claim")
-        user_id = str(user_id)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.warning("Token validation failed in view_document: %s", exc)
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    # Verify JWT using the public helper (handles dev-mode bypass and error cases)
+    user_id = get_user_id_from_token(jwt)
 
     with get_db_connection() as conn:
         with conn.cursor() as cur:
@@ -245,13 +235,14 @@ async def view_document(
     if raw is None:
         raise HTTPException(status_code=404, detail="Document content not available")
 
-    content_type = row["content_type"] or "application/pdf"
+    content_type = row["content_type"] or "application/octet-stream"
 
+    safe_name = row["filename"].replace('"', "'").replace("\r", "").replace("\n", "")
     return StreamingResponse(
         io.BytesIO(raw if isinstance(raw, bytes) else raw.tobytes()),
         media_type=content_type,
         headers={
-            "Content-Disposition": f'inline; filename="{row["filename"]}"',
+            "Content-Disposition": f'inline; filename="{safe_name}"',
             "Cache-Control": "private, max-age=300",
         },
     )

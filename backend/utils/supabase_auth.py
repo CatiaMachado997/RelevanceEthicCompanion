@@ -97,6 +97,28 @@ def _decode_supabase_token(token: str) -> Dict[str, Any]:
     return claims
 
 
+def get_user_id_from_token(token: str) -> str:
+    """
+    Public helper: verify a JWT and return the user_id (sub claim).
+    Respects AUTH_ENFORCEMENT_ENABLED=False for dev-mode bypass.
+    Raises HTTPException(401) on failure.
+    """
+    # Dev-mode bypass — consistent with other routes
+    if settings.ENVIRONMENT == "development" and not settings.AUTH_ENFORCEMENT_ENABLED:
+        return MOCK_USER_ID
+
+    try:
+        claims = _decode_supabase_token(token)
+        user_id = claims.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token: missing sub claim")
+        return str(user_id)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
 def _extract_bearer_token(request: Request) -> str:
     auth_header = request.headers.get("Authorization", "")
     if not auth_header:
