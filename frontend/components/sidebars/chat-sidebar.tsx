@@ -27,14 +27,18 @@ type DateBucket = 'Today' | 'Yesterday' | 'Last 7 days' | 'Older'
 function getBucket(dateString: string): DateBucket {
   const date = new Date(dateString)
   const now = new Date()
-  const diffDays = Math.floor((now.getTime() - date.getTime()) / 86400000)
-  const sameDay =
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
-  if (sameDay) return 'Today'
-  if (diffDays === 1) return 'Yesterday'
-  if (diffDays < 7) return 'Last 7 days'
+
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const yesterday = new Date(today)
+  yesterday.setDate(today.getDate() - 1)
+  const sevenDaysAgo = new Date(today)
+  sevenDaysAgo.setDate(today.getDate() - 7)
+
+  const dateDay = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+
+  if (dateDay.getTime() === today.getTime()) return 'Today'
+  if (dateDay.getTime() === yesterday.getTime()) return 'Yesterday'
+  if (dateDay.getTime() > sevenDaysAgo.getTime()) return 'Last 7 days'
   return 'Older'
 }
 
