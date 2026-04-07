@@ -39,21 +39,29 @@ async def lifespan(app: FastAPI):
     print("⚖️  Ethical Safeguard Layer: ACTIVE")
     print("🎯 Mission: Trust over Engagement")
 
-    # Auto-migrate: ensure weight columns exist in user_settings (added in V2 sprint)
+    # Auto-migrate: ensure extra columns exist in user_settings
     try:
         from utils.db import get_db_connection
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                for col in ("weight_goal_alignment", "weight_time_sensitivity",
-                            "weight_personal_values", "weight_context_relevance"):
+                for col, defn in [
+                    ("weight_goal_alignment",    "FLOAT DEFAULT 1.0"),
+                    ("weight_time_sensitivity",  "FLOAT DEFAULT 1.0"),
+                    ("weight_personal_values",   "FLOAT DEFAULT 1.0"),
+                    ("weight_context_relevance", "FLOAT DEFAULT 1.0"),
+                    ("timezone",                 "TEXT"),
+                    ("language",                 "TEXT"),
+                    ("status",                   "TEXT DEFAULT 'available'"),
+                    ("status_until",             "TIMESTAMPTZ"),
+                ]:
                     cur.execute(
-                        f"ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS {col} FLOAT DEFAULT 1.0"
+                        f"ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS {col} {defn}"
                     )
-        logger.debug("user_settings weight columns verified")
+        logger.debug("user_settings columns verified")
     except Exception as e:
-        logger.warning(f"Could not verify weight columns (DB may be unavailable): {e}")
+        logger.warning(f"Could not verify user_settings columns (DB may be unavailable): {e}")
 
-    # Auto-migrate V4 tables
+    # Auto-migrate V4+ tables (idempotent — safe to run on every startup)
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -81,9 +89,65 @@ async def lifespan(app: FastAPI):
                 cur.execute(
                     "CREATE INDEX IF NOT EXISTS idx_goal_milestones_goal ON goal_milestones(goal_id)"
                 )
-        logger.debug("V4 tables verified")
+                # Sprint 3: Documents
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS documents (
+                      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                      user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                      filename      TEXT NOT NULL,
+                      content_type  TEXT NOT NULL,
+                      size_bytes    INTEGER NOT NULL DEFAULT 0,
+                      status        TEXT NOT NULL DEFAULT 'processing'
+                                    CHECK (status IN ('processing', 'ready', 'failed')),
+                      chunk_count   INTEGER NOT NULL DEFAULT 0,
+                      error_message TEXT,
+                      created_at    TIMESTAMPTZ DEFAULT NOW(),
+                      updated_at    TIMESTAMPTZ DEFAULT NOW()
+                    )
+                """)
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id)")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_documents_status  ON documents(status)")
+                # Sprint 4: Projects
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS projects (
+                      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                      user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                      title       TEXT NOT NULL,
+                      description TEXT,
+                      status      TEXT NOT NULL DEFAULT 'active'
+                                  CHECK (status IN ('active', 'completed', 'archived')),
+                      goal_id     UUID REFERENCES goals(id) ON DELETE SET NULL,
+                      created_at  TIMESTAMPTZ DEFAULT NOW(),
+                      updated_at  TIMESTAMPTZ DEFAULT NOW()
+                    )
+                """)
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id)")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_projects_status  ON projects(status)")
+                # Sprint 4: Tasks
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS tasks (
+                      id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                      user_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                      project_id     UUID REFERENCES projects(id) ON DELETE SET NULL,
+                      title          TEXT NOT NULL,
+                      description    TEXT,
+                      status         TEXT NOT NULL DEFAULT 'todo'
+                                     CHECK (status IN ('todo', 'in_progress', 'done', 'cancelled')),
+                      priority       INTEGER NOT NULL DEFAULT 5 CHECK (priority BETWEEN 1 AND 10),
+                      due_date       TIMESTAMPTZ,
+                      source_origin  TEXT NOT NULL DEFAULT 'manual',
+                      ai_confidence  FLOAT,
+                      user_confirmed BOOLEAN NOT NULL DEFAULT TRUE,
+                      created_at     TIMESTAMPTZ DEFAULT NOW(),
+                      updated_at     TIMESTAMPTZ DEFAULT NOW()
+                    )
+                """)
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_tasks_user_id    ON tasks(user_id)")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id)")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_tasks_status     ON tasks(status)")
+        logger.debug("V4+ tables verified")
     except Exception as e:
-        logger.warning(f"Could not verify V4 tables: {e}")
+        logger.warning(f"Could not verify V4+ tables: {e}")
 
     if settings.ENVIRONMENT != "development":
         if not settings.AUTH_ENFORCEMENT_ENABLED:
@@ -170,6 +234,7 @@ from routes import auth, values, chat, goals, transparency, relevance, data_sour
 from routes import settings as settings_router
 from routes.insight import router as insight_router
 from routes.health import router as health_router
+from routes.status import router as status_router
 
 # Register routers
 app.include_router(health_router)
@@ -190,6 +255,12 @@ app.include_router(documents.router)
 app.include_router(projects.router)
 app.include_router(tasks.router)
 app.include_router(context.router)
+app.include_router(status_router)
+
+# Sprint 2a: Expose all routes as MCP tools
+from fastapi_mcp import FastApiMCP
+mcp = FastApiMCP(app)
+mcp.mount_http()
 
 
 if __name__ == "__main__":

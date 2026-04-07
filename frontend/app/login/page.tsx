@@ -1,15 +1,49 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
+import { supabase } from '@/lib/supabase'
 import { Shield, ArrowRight, Mail, CheckCircle } from 'lucide-react'
+
+function friendlyAuthError(msg: string): string {
+  if (msg.includes('Invalid login credentials')) return 'Incorrect email or password.'
+  if (msg.includes('Email not confirmed')) return 'Please verify your email first.'
+  if (msg.includes('Too many requests')) return 'Too many attempts. Please wait a moment.'
+  if (msg.includes('rate limit')) return 'Too many attempts. Please wait a moment.'
+  if (msg.includes('Unable to validate email')) return 'Please enter a valid email address.'
+  return msg
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [signedOut, setSignedOut] = useState(false)
   const { signIn } = useAuth()
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('signed_out') === '1') {
+      setSignedOut(true)
+      window.history.replaceState({}, '', '/login')
+      setTimeout(() => setSignedOut(false), 4000)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!sent) return
+    const interval = setInterval(async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        clearInterval(interval)
+        const lastRoute = localStorage.getItem('ec_lastRoute') || '/dashboard'
+        localStorage.removeItem('ec_lastRoute')
+        window.location.href = lastRoute
+      }
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [sent])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -20,7 +54,7 @@ export default function LoginPage() {
       await signIn(email)
       setSent(true)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Sign in failed. Please try again.')
+      setError(friendlyAuthError(err instanceof Error ? err.message : 'Sign in failed. Please try again.'))
     } finally {
       setIsSubmitting(false)
     }
@@ -141,6 +175,16 @@ export default function LoginPage() {
             </div>
           ) : (
             <div className="space-y-8">
+              {signedOut && (
+                <div
+                  className="rounded-lg px-4 py-3 text-sm flex items-center gap-2"
+                  style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534' }}
+                >
+                  <CheckCircle size={14} />
+                  You&apos;ve been signed out.
+                </div>
+              )}
+
               <div>
                 <h1 className="text-3xl mb-2" style={{ fontFamily: 'var(--font-fraunces)', color: '#1c1520', fontWeight: 400 }}>
                   Welcome back
@@ -174,7 +218,9 @@ export default function LoginPage() {
                 </div>
 
                 {error && (
-                  <p className="text-xs px-1" style={{ color: '#b04a3a' }}>{error}</p>
+                  <div className="rounded-lg px-4 py-3 text-sm" style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c' }}>
+                    {error}
+                  </div>
                 )}
 
                 <button

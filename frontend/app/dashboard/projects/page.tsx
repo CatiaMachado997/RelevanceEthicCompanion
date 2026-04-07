@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { api, Project } from '@/lib/api'
 import { FolderOpen, Archive, AlertCircle, RefreshCw, Plus } from 'lucide-react'
+import { ProjectDrawer } from '@/components/drawers/ProjectDrawer'
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—'
@@ -49,6 +50,8 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [archivingId, setArchivingId] = useState<string | null>(null)
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null)
+  const [drawerOpen, setDrawerOpen]           = useState(false)
 
   // Create form state
   const [title, setTitle] = useState('')
@@ -83,6 +86,7 @@ export default function ProjectsPage() {
       setTitle('')
       setDescription('')
     } catch (e) {
+      console.error('Project create failed:', e)
       setCreateError(e instanceof Error ? e.message : 'Failed to create project')
     } finally {
       setCreating(false)
@@ -213,12 +217,13 @@ export default function ProjectsPage() {
             {projects.map(project => (
               <div
                 key={project.id}
-                className="flex items-start gap-4 px-4 py-3 rounded-xl"
+                className="flex items-start gap-4 px-4 py-3 rounded-xl cursor-pointer hover:ring-1 hover:ring-[var(--ec-card-border)]"
                 style={{
                   background: 'var(--ec-card-bg)',
                   border: '1px solid var(--ec-card-border)',
                   boxShadow: 'var(--ec-card-shadow)',
                 }}
+                onClick={() => { setSelectedProject(project); setDrawerOpen(true) }}
               >
                 {/* Icon */}
                 <div
@@ -248,7 +253,7 @@ export default function ProjectsPage() {
 
                 {/* Archive button */}
                 <button
-                  onClick={() => handleArchive(project.id)}
+                  onClick={e => { e.stopPropagation(); handleArchive(project.id) }}
                   disabled={archivingId === project.id || project.status === 'archived'}
                   className="w-8 h-8 rounded-lg flex items-center justify-center transition-opacity disabled:opacity-30 hover:opacity-70 shrink-0"
                   style={{ background: 'var(--ec-surface-2, #f5f2ef)', border: '1px solid var(--ec-card-border)' }}
@@ -265,6 +270,13 @@ export default function ProjectsPage() {
           </div>
         )}
       </div>
+
+      <ProjectDrawer
+        project={selectedProject}
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        onSaved={loadProjects}
+      />
     </div>
   )
 }

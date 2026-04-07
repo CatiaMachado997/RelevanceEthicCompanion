@@ -1,27 +1,54 @@
-/**
- * Landing Page
- * 
- * Redirects to login or dashboard based on auth state
- */
-
 'use client'
 
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { Shield, ArrowRight } from 'lucide-react'
+import Link from 'next/link'
 
-export default function Home() {
-  const router = useRouter()
-
-  useEffect(() => {
-    router.push('/dashboard')
-  }, [router])
-
+export default function LandingPage() {
   return (
-    <div className="flex items-center justify-center min-h-screen">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>
-        <p className="mt-4 text-gray-600">Loading Ethic Companion...</p>
+    <div
+      className="min-h-screen flex flex-col items-center justify-center p-6 text-center"
+      style={{ background: '#f9f6fa' }}
+    >
+      {/* Logo */}
+      <div
+        className="w-14 h-14 rounded-2xl flex items-center justify-center mb-8"
+        style={{ background: '#1c1520', border: '1px solid rgba(255,255,255,0.1)' }}
+      >
+        <Shield size={24} color="white" />
       </div>
+
+      {/* Wordmark */}
+      <p className="text-xs font-medium uppercase tracking-[0.2em] mb-4" style={{ color: '#b0a6b4' }}>
+        Ethic Companion
+      </p>
+
+      {/* Tagline */}
+      <h1
+        className="text-3xl sm:text-4xl mb-4 max-w-sm leading-tight"
+        style={{ color: '#1c1520', fontWeight: 400, fontFamily: 'var(--font-fraunces)' }}
+      >
+        Your AI work companion that respects your boundaries.
+      </h1>
+
+      {/* Description */}
+      <p className="text-sm leading-relaxed max-w-xs mb-10" style={{ color: '#695e6e' }}>
+        Ethic Companion helps you make decisions, manage work, and stay focused — without dark patterns or engagement traps. Powered by an Ethical Safeguard Layer that puts your values first.
+      </p>
+
+      {/* CTA */}
+      <Link
+        href="/login"
+        className="inline-flex items-center gap-2 w-full sm:w-auto justify-center h-12 px-8 rounded-2xl text-sm font-medium transition-all hover:opacity-90 active:scale-[0.98]"
+        style={{ background: '#1c1520', color: '#ffffff' }}
+      >
+        Sign in
+        <ArrowRight size={15} />
+      </Link>
+
+      {/* Trust note */}
+      <p className="mt-6 text-xs" style={{ color: '#c4bcc8' }}>
+        No password needed — we use magic links.
+      </p>
     </div>
   )
 }

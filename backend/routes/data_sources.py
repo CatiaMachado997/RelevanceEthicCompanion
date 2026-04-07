@@ -341,5 +341,5 @@ async def data_sources_health() -> Dict[str, str]:
     return {
         "status": "healthy",
         "service": "data_sources",
-        "supported_sources": ["google_calendar"]
+        "supported_sources": ["google_calendar", "gmail", "slack"]
     }

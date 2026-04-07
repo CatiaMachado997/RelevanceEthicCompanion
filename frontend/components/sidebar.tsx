@@ -10,8 +10,9 @@ import {
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/useAuth"
 import { useTheme } from "next-themes"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { api } from "@/lib/api"
+import { UserStatus } from "@/components/UserStatus"
 
 interface Conversation {
   id: string
@@ -73,11 +74,19 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
 
   useEffect(() => { setMounted(true) }, [])
 
-  useEffect(() => {
+  const refreshConversations = useCallback(() => {
     api.chat.conversations.list()
       .then(r => setConversations(r.conversations))
       .catch(() => {})
-  }, [pathname])
+  }, [])
+
+  useEffect(() => { refreshConversations() }, [pathname, refreshConversations])
+
+  // Refresh immediately when a new conversation is created (e.g., first message sent)
+  useEffect(() => {
+    window.addEventListener('ec:conversation-created', refreshConversations)
+    return () => window.removeEventListener('ec:conversation-created', refreshConversations)
+  }, [refreshConversations])
 
   useEffect(() => {
     const fetchCount = () => {
@@ -293,6 +302,11 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
           <LogOut size={16} strokeWidth={1.8} />
           Sign out
         </button>
+
+        {/* User status picker */}
+        <div className="px-1 mt-1">
+          <UserStatus />
+        </div>
 
         {/* User row — links to profile */}
         <Link

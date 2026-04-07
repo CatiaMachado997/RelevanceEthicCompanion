@@ -97,6 +97,28 @@ def _decode_supabase_token(token: str) -> Dict[str, Any]:
     return claims
 
 
+def get_user_id_from_token(token: str) -> str:
+    """
+    Public helper: verify a JWT and return the user_id (sub claim).
+    Respects AUTH_ENFORCEMENT_ENABLED=False for dev-mode bypass.
+    Raises HTTPException(401) on failure.
+    """
+    # Dev-mode bypass — consistent with other routes
+    if settings.ENVIRONMENT == "development" and not settings.AUTH_ENFORCEMENT_ENABLED:
+        return MOCK_USER_ID
+
+    try:
+        claims = _decode_supabase_token(token)
+        user_id = claims.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token: missing sub claim")
+        return str(user_id)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
 def _extract_bearer_token(request: Request) -> str:
     auth_header = request.headers.get("Authorization", "")
     if not auth_header:
@@ -112,13 +134,29 @@ def _extract_bearer_token(request: Request) -> str:
     return token
 
 
+def _extract_token(request: Request) -> str:
+    """Extract JWT from Authorization header; fall back to HttpOnly cookie."""
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header:
+        parts = auth_header.split(" ", 1)
+        if len(parts) == 2 and parts[0].lower() == "bearer" and parts[1].strip():
+            return parts[1].strip()
+
+    # Cookie fallback — used when the frontend sends HttpOnly session cookie
+    token = request.cookies.get("ec_session", "")
+    if token:
+        return token
+
+    raise _auth_error("Missing Authorization header or session cookie")
+
+
 async def get_current_user(request: Request) -> UserPrincipal:
     if _is_dev_fallback_enabled():
         logger.warning("Auth enforcement disabled in development, using mock user fallback")
         return UserPrincipal(user_id=MOCK_USER_ID, email=None, claims={"sub": MOCK_USER_ID})
 
     try:
-        token = _extract_bearer_token(request)
+        token = _extract_token(request)
         claims = _decode_supabase_token(token)
     except HTTPException:
         raise

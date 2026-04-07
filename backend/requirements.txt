@@ -60,3 +60,9 @@ slowapi==0.1.9
 black==24.3.0
 flake8==7.0.0
 mypy==1.8.0
+
+# Sprint 2a
+langgraph>=0.2.0
+fastapi-mcp>=0.4.0
+langfuse>=2.0.0
+anthropic>=0.25.0

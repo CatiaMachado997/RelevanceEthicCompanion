@@ -5,7 +5,7 @@ import { api, type UserValue } from '@/lib/api'
 import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Plus, GripVertical, Pencil, Trash2, X, Check } from 'lucide-react'
+import { Plus, GripVertical, Pencil, Trash2, X, Check, ShieldCheck } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { FilterChips } from '@/components/ui/filter-chips'
 
@@ -222,6 +222,11 @@ export default function ValuesPage() {
     setValues(reordered)
     try {
       await api.values.reorder(reordered.map(v => v.id))
+      // Re-fetch to confirm server state
+      const r = await api.values.list() as UserValue[] | { values?: UserValue[] }
+      const refreshed = Array.isArray(r) ? r : (r as { values?: UserValue[] }).values ?? []
+      const withMount = refreshed.map((v: UserValue) => ({ ...v, mounted: true }))
+      setValues(withMount)
     } catch (e) {
       console.error(e)
     }
@@ -269,14 +274,28 @@ export default function ValuesPage() {
       ) : (() => {
         const displayedValues = typeFilter ? values.filter(v => v.type === typeFilter) : values
         return displayedValues.length === 0 ? (
-          <div
-            className="rounded-2xl p-10 text-center"
-            style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}
-          >
-            <p className="text-sm" style={{ color: '#9e9e9e' }}>
-              No values yet. Add your first boundary or preference.
-            </p>
-          </div>
+          values.length === 0 ? (
+            <div className="py-10 text-center space-y-3">
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto" style={{ background: 'var(--ec-surface-2)', border: '1px solid var(--ec-card-border)' }}>
+                <ShieldCheck size={20} style={{ color: 'var(--ec-text-subtle)' }} />
+              </div>
+              <div>
+                <p className="text-sm font-medium" style={{ color: 'var(--ec-text)' }}>No values yet</p>
+                <p className="text-xs mt-1" style={{ color: 'var(--ec-text-subtle)' }}>
+                  Values tell Ethic Companion what you care about.<br />Your Ethical Safeguard Layer enforces them on every response.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div
+              className="rounded-2xl p-10 text-center"
+              style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}
+            >
+              <p className="text-sm" style={{ color: '#9e9e9e' }}>
+                No values match this filter.
+              </p>
+            </div>
+          )
         ) : (
           <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={displayedValues.map(v => v.id)} strategy={verticalListSortingStrategy}>

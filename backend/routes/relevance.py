@@ -11,7 +11,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 from services.context_manager import ContextManager
-from services.orchestrator_v2 import OrchestratorV2
+# OrchestratorV2 imported lazily inside get_orchestrator() below
 from services.relevance_engine import RelevanceEngine
 from utils.supabase_auth import get_current_read_user_id
 
@@ -31,7 +31,8 @@ def get_engine() -> RelevanceEngine:
     return RelevanceEngine(cm)
 
 
-def get_orchestrator() -> OrchestratorV2:
+def get_orchestrator():
+    from services.orchestrator_v2 import OrchestratorV2  # lazy import
     cm = ContextManager()
     return OrchestratorV2(cm)
 
@@ -41,7 +42,7 @@ async def scan(
     user_id: str = Depends(get_current_read_user_id),
     window_minutes: int = 15,
     engine: RelevanceEngine = Depends(get_engine),
-    orchestrator: OrchestratorV2 = Depends(get_orchestrator),
+    orchestrator=Depends(get_orchestrator),
 ):
     """
     Trigger a relevance scan for events starting within the next `window_minutes`.

@@ -1,0 +1,9 @@
+name: create_note
+description: Save a note or insight to the user's knowledge base
+mcp_tool: /api/documents
+esl_action_type: data_collection
+requires_confirmation: true
+parameters:
+  content:
+    type: string
+    description: The note content to save

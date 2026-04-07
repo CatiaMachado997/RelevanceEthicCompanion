@@ -10,6 +10,12 @@ const DEFAULT_TIMEOUT_MS = 30000 // 30 second timeout
 type AccessTokenProvider = () => string | null | Promise<string | null>
 type UnauthorizedHandler = () => void
 
+export interface CitationSource {
+  tool: string
+  label: string
+  icon: string
+}
+
 const authConfig: {
   getAccessToken: AccessTokenProvider | null
   onUnauthorized: UnauthorizedHandler | null
@@ -253,8 +259,10 @@ export const chatApi = {
           onToolResult?: (tool: string) => void
           onRateLimitWarning?: (level: string, message: string) => void
           onRateLimitExceeded?: (retryAfter: string, message: string) => void
+          onDone?: (data: { esl_decision?: Record<string, unknown>; citations?: CitationSource[] }) => void
           model?: string
           conversation_id?: string
+          active_sources?: string[]
         },
   ): Promise<void> & { cancel: () => void } => {
     const callbacks =
@@ -270,7 +278,9 @@ export const chatApi = {
       rejectRef = reject
       const modelParam = callbacks.model ? `&model=${encodeURIComponent(callbacks.model)}` : ''
       const convParam = callbacks.conversation_id ? `&conversation_id=${encodeURIComponent(callbacks.conversation_id)}` : ''
-      const url = `${API_URL}/api/chat/stream?message=${encodeURIComponent(message)}${modelParam}${convParam}`
+      const sourcesParam = callbacks.active_sources?.length
+        ? `&active_sources=${encodeURIComponent(callbacks.active_sources.join(','))}` : ''
+      const url = `${API_URL}/api/chat/stream?message=${encodeURIComponent(message)}${modelParam}${convParam}${sourcesParam}`
       es = new EventSource(url, { withCredentials: true })
 
       es.onmessage = (e) => {
@@ -301,6 +311,7 @@ export const chatApi = {
             return
           }
           if (data.event === 'done') {
+            callbacks.onDone?.({ esl_decision: data.esl_decision, citations: data.citations })
             es!.close()
             if (!settled) { settled = true; resolve() }
             return
@@ -318,6 +329,7 @@ export const chatApi = {
             return
           }
           if (data.done) {
+            callbacks.onDone?.({ esl_decision: data.esl_decision, citations: data.citations })
             es!.close()
             if (!settled) { settled = true; resolve() }
             return
@@ -719,6 +731,8 @@ export interface UserSettings {
   weight_time_sensitivity?: number
   weight_personal_values?: number
   weight_context_relevance?: number
+  timezone?: string
+  language?: string
   updated_at?: string
 }
 
@@ -886,7 +900,7 @@ export interface Project {
 export const projectsApi = {
   list: async (status?: string): Promise<Project[]> => {
     const query = status ? `?status=${status}` : ''
-    return apiRequest<Project[]>(`/api/projects${query}`)
+    return apiRequest<Project[]>(`/api/projects/${query}`)
   },
 
   get: async (id: string): Promise<Project> => {
@@ -894,7 +908,7 @@ export const projectsApi = {
   },
 
   create: async (data: { title: string; description?: string; goal_id?: string }): Promise<Project> => {
-    return apiRequest<Project>('/api/projects', {
+    return apiRequest<Project>('/api/projects/', {
       method: 'POST',
       body: JSON.stringify(data),
     })
@@ -982,7 +996,7 @@ export interface ContextSnapshot {
 export const tasksApi = {
   list: async (params?: { project_id?: string; status?: string }): Promise<Task[]> => {
     const query = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
-    return apiRequest<Task[]>(`/api/tasks${query}`)
+    return apiRequest<Task[]>(`/api/tasks/${query}`)
   },
 
   get: async (id: string): Promise<Task> => {
@@ -998,7 +1012,7 @@ export const tasksApi = {
     source_origin?: string;
     ai_confidence?: number;
   }): Promise<Task> => {
-    return apiRequest<Task>('/api/tasks', {
+    return apiRequest<Task>('/api/tasks/', {
       method: 'POST',
       body: JSON.stringify(data),
     })
