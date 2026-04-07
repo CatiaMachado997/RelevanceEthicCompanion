@@ -312,7 +312,6 @@ class DataIngestionService:
                         """,
                         (creds.token, new_expires_at, user_id, source_type),
                     )
-                conn.commit()
             logger.info(f"✅ Token refreshed for {source_type}, user {user_id}")
             return creds.token
         except Exception as e:
@@ -333,7 +332,6 @@ class DataIngestionService:
                     """,
                     (user_id, source_type),
                 )
-            conn.commit()
 
     async def _update_last_sync(self, user_id: str, source_type: str):
         with get_db_connection() as conn:

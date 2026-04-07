@@ -191,8 +191,8 @@ async def test_sync_writes_to_source_items():
         written_items.append(item)
 
     with patch("services.data_ingestion.get_connector", return_value=mock_connector), \
-         patch.object(service, "_get_data_source_tokens", new_callable=AsyncMock,
-                      return_value={"access_token": "tok", "refresh_token": "ref", "expires_at": None}), \
+         patch.object(service, "_get_valid_token", new_callable=AsyncMock,
+                      return_value="tok"), \
          patch.object(service, "_store_normalized_item", side_effect=fake_store), \
          patch.object(service, "_update_last_sync", new_callable=AsyncMock), \
          patch.object(service, "_clear_sync_error", new_callable=AsyncMock):
