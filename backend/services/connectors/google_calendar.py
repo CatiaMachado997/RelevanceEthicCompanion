@@ -1,5 +1,6 @@
 # backend/services/connectors/google_calendar.py
 """Google Calendar connector — wraps GoogleCalendarSync, implements BaseConnector."""
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from services.connectors.base import BaseConnector, SourceItem
@@ -29,8 +30,6 @@ class GoogleCalendarConnector(BaseConnector):
         )
 
     def normalize_to_source_item(self, raw: Dict[str, Any], user_id: str) -> SourceItem:
-        from datetime import datetime, timezone
-
         start = raw.get("start", {})
         end = raw.get("end", {})
         start_str = start.get("dateTime") or start.get("date") or ""
@@ -40,8 +39,12 @@ class GoogleCalendarConnector(BaseConnector):
         item_at: Optional[str] = None
         if start_str:
             try:
-                dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
-                item_at = dt.astimezone(timezone.utc).isoformat()
+                # All-day events have bare date strings (len==10, no T); treat as midnight UTC
+                if len(start_str) == 10 and "T" not in start_str:
+                    item_at = start_str + "T00:00:00+00:00"
+                else:
+                    dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+                    item_at = dt.astimezone(timezone.utc).isoformat()
             except ValueError:
                 item_at = start_str
 

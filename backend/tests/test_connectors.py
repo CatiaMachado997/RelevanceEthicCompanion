@@ -95,7 +95,7 @@ def test_google_calendar_normalize_all_day_event():
     }
     item = conn.normalize_to_source_item(raw, "user-1")
     assert item.external_id == "evt_allday"
-    assert item.item_at is not None and "2026-03-28" in item.item_at
+    assert item.item_at == "2026-03-28T00:00:00+00:00"
 
 
 # --- GmailConnector tests ---
