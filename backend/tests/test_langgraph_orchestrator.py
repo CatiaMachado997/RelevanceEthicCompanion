@@ -36,6 +36,7 @@ def base_state() -> dict:
         "tool_calls": [], "tool_results": [], "esl_decision": None,
         "proposed_content": "", "response_text": "", "response_events": [],
         "token_count": 0, "token_warning": None,
+        "source_context": [],
     }
 
 

@@ -38,3 +38,6 @@ class AgentState(TypedDict):
     # Token tracking
     token_count: int
     token_warning: Optional[dict]
+
+    # Source items context from synced integrations
+    source_context: list           # [{source_type, source_item_type, title, body, item_at}]

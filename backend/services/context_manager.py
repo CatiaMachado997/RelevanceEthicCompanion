@@ -667,3 +667,37 @@ class ContextManager:
 
                 logger.debug(f"✅ Set focus mode for {user_id}: {enabled}")
                 return True
+
+    async def get_recent_source_items(self, user_id: str, limit: int = 20) -> list:
+        """
+        Fetch recent calendar events and emails from source_items for context injection.
+        Returns [] gracefully on empty table or any query failure — never raises.
+        """
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT source_type, source_item_type, title, body, item_at
+                        FROM source_items
+                        WHERE user_id = %s
+                          AND item_at >= now() - interval '7 days'
+                        ORDER BY item_at DESC
+                        LIMIT %s
+                        """,
+                        (user_id, limit),
+                    )
+                    rows = cur.fetchall()
+            return [
+                {
+                    "source_type": row["source_type"],
+                    "source_item_type": row["source_item_type"],
+                    "title": row["title"],
+                    "body": row["body"],
+                    "item_at": row["item_at"].isoformat() if row["item_at"] else None,
+                }
+                for row in rows
+            ]
+        except Exception as e:
+            logger.warning(f"⚠️  get_recent_source_items failed: {e}")
+            return []

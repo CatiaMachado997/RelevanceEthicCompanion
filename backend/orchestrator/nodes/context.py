@@ -24,7 +24,7 @@ def get_context_manager() -> ContextManager:
 
 
 async def context_builder_node(state: AgentState) -> dict:
-    """Populate user_context and conversation_history from M1 + M2."""
+    """Populate user_context, conversation_history, and source_context from M1 + M2."""
     cm = get_context_manager()
     ctx = await cm.get_user_context(state["user_id"])
     history = await cm.get_conversation_history(
@@ -39,6 +39,13 @@ async def context_builder_node(state: AgentState) -> dict:
     except Exception:
         pass
 
+    # Fetch recent source items (calendar + email) — non-blocking on failure
+    source_context: list = []
+    try:
+        source_context = await cm.get_recent_source_items(state["user_id"], limit=20)
+    except Exception:
+        pass
+
     return {
         "user_context": {
             "active_goals": [g.__dict__ if hasattr(g, '__dict__') else g for g in (ctx.active_goals or [])],
@@ -46,6 +53,8 @@ async def context_builder_node(state: AgentState) -> dict:
             "focus_mode": getattr(ctx, "focus_mode", False),
             "additional_context": getattr(ctx, "additional_context", {}),
             "snapshot": snapshot,
+            "source_context": source_context,
         },
         "conversation_history": history or [],
+        "source_context": source_context,
     }

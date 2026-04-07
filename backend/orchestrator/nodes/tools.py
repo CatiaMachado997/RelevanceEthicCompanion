@@ -89,6 +89,33 @@ def _build_system_prompt(state: AgentState) -> str:
         )
         snapshot_sections.append(f"Active projects:\n{project_lines}")
 
+    # Source context from synced integrations
+    source_context = ctx.get("source_context", [])
+    if source_context:
+        cal_items = [
+            i for i in source_context if i.get("source_item_type") == "calendar_event"
+        ]
+        email_items = [
+            i for i in source_context if i.get("source_item_type") == "email"
+        ]
+        source_parts = []
+        if cal_items:
+            cal_lines = "\n".join(
+                f"  - {item['title']} · {(item.get('item_at') or '')[:16]}"
+                for item in cal_items[:10]
+            )
+            source_parts.append(f"[Calendar — next 7 days]\n{cal_lines}")
+        if email_items:
+            email_lines = "\n".join(
+                f"  - {item['title']} ({(item.get('item_at') or '')[:16]})"
+                for item in email_items[:10]
+            )
+            source_parts.append(f"[Recent emails]\n{email_lines}")
+        if source_parts:
+            snapshot_sections.append(
+                "## Your current context\n\n" + "\n\n".join(source_parts)
+            )
+
     pressure = snapshot.get("calendar_pressure", "")
     if pressure and pressure != "light":
         snapshot_sections.append(f"Calendar pressure: {pressure}")
