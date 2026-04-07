@@ -87,7 +87,7 @@ export function useAuth() {
     if (error) throw error
     localStorage.removeItem('ec_display')
     localStorage.removeItem('ec_lastRoute')
-    if (typeof window !== 'undefined') window.location.href = '/login'
+    if (typeof window !== 'undefined') window.location.href = '/login?signed_out=1'
   }, [])
 
   return {
