@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback, DragEvent, ChangeEvent } from 'react'
 import { api, Document } from '@/lib/api'
-import { FileText, Upload, Trash2, AlertCircle, CheckCircle2, Clock, RefreshCw } from 'lucide-react'
+import { FileText, Upload, Trash2, AlertCircle, CheckCircle2, Clock, RefreshCw, Eye } from 'lucide-react'
+import { DocumentViewer } from '@/components/DocumentViewer'
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -62,6 +63,7 @@ export default function DocumentsPage() {
   const [error, setError] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [viewingDoc, setViewingDoc] = useState<{ id: string; filename: string } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const loadDocuments = useCallback(async () => {
@@ -301,6 +303,17 @@ export default function DocumentsPage() {
                   </div>
                 </div>
 
+                {/* View (ready documents only) */}
+                {doc.status === 'ready' && (
+                  <button
+                    onClick={() => setViewingDoc({ id: doc.id, filename: doc.filename })}
+                    className="w-9 h-9 flex items-center justify-center rounded-lg transition-colors hover:bg-black/5"
+                    aria-label="View document"
+                  >
+                    <Eye size={15} style={{ color: 'var(--ec-text-subtle)' }} />
+                  </button>
+                )}
+
                 {/* Delete */}
                 <button
                   onClick={() => handleDelete(doc.id)}
@@ -332,6 +345,13 @@ export default function DocumentsPage() {
           They are never shared externally.
         </p>
       </div>
+
+      <DocumentViewer
+        documentId={viewingDoc?.id ?? null}
+        filename={viewingDoc?.filename ?? ''}
+        open={!!viewingDoc}
+        onClose={() => setViewingDoc(null)}
+      />
     </div>
   )
 }
