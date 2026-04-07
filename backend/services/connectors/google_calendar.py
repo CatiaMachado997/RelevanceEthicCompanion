@@ -29,21 +29,49 @@ class GoogleCalendarConnector(BaseConnector):
         )
 
     def normalize_to_source_item(self, raw: Dict[str, Any], user_id: str) -> SourceItem:
+        from datetime import datetime, timezone
+
         start = raw.get("start", {})
-        item_at = start.get("dateTime") or start.get("date")
+        end = raw.get("end", {})
+        start_str = start.get("dateTime") or start.get("date") or ""
+        end_str = end.get("dateTime") or end.get("date") or ""
+
+        # Parse start datetime to UTC ISO string
+        item_at: Optional[str] = None
+        if start_str:
+            try:
+                dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+                item_at = dt.astimezone(timezone.utc).isoformat()
+            except ValueError:
+                item_at = start_str
+
+        # Build attendee display names
+        attendees = raw.get("attendees", [])
+        attendee_names = [
+            a.get("displayName") or a.get("email", "") for a in attendees
+        ]
+        attendee_str = ", ".join(attendee_names) if attendee_names else "none"
+
+        # Rich body: description + attendees + time range
+        desc = (raw.get("description") or "").strip()
+        body_parts = []
+        if desc:
+            body_parts.append(desc)
+        body_parts.append(f"Attendees: {attendee_str}")
+        body_parts.append(f"{start_str} → {end_str}")
+        body = "\n".join(body_parts)
 
         return SourceItem(
             user_id=user_id,
             source_type=self.source_type,
-            source_item_type="event",
+            source_item_type="calendar_event",
             external_id=raw["id"],
             title=raw.get("summary", "(no title)"),
-            body=raw.get("description"),
+            body=body,
             item_at=item_at,
             metadata={
                 "location": raw.get("location"),
-                "end": raw.get("end", {}),
-                "attendee_count": len(raw.get("attendees", [])),
-                "organizer": raw.get("organizer", {}).get("email"),
+                "hangoutLink": raw.get("hangoutLink"),
+                "organizer_email": raw.get("organizer", {}).get("email"),
             },
         )

@@ -146,6 +146,7 @@ class DataIngestionService:
                     DO UPDATE SET
                         title = EXCLUDED.title,
                         body = EXCLUDED.body,
+                        item_at = EXCLUDED.item_at,
                         metadata = EXCLUDED.metadata,
                         synced_at = NOW()
                     """,
