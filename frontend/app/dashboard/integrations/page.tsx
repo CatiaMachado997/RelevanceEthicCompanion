@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { dataSourcesApi } from '@/lib/api'
 import { RefreshCw, CheckCircle2, AlertCircle, Zap, Plug } from 'lucide-react'
@@ -91,14 +91,15 @@ function formatRelativeTime(isoStr: string | null | undefined): string {
   if (!isoStr) return ''
   const date = new Date(isoStr)
   const diffMs = date.getTime() - Date.now()
-  const diffHours = Math.round(diffMs / (1000 * 60 * 60))
-  if (diffHours < 0) return 'past'
-  if (diffHours === 0) return 'now'
-  if (diffHours < 24) return `in ${diffHours}h`
-  return `in ${Math.round(diffHours / 24)}d`
+  const absHours = Math.round(Math.abs(diffMs) / (1000 * 60 * 60))
+  const isPast = diffMs < 0
+  if (absHours < 1) return 'now'
+  if (absHours < 24) return isPast ? `${absHours}h ago` : `in ${absHours}h`
+  const days = Math.round(absHours / 24)
+  return isPast ? `${days}d ago` : `in ${days}d`
 }
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status }: { status: ConnectedSource['status'] }) {
   if (status === 'synced') {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium"
@@ -143,21 +144,27 @@ function IntegrationsContent() {
   const [errorFlash, setErrorFlash] = useState<string | null>(null)
   const [stats, setStats] = useState<Record<string, number>>({})
   const searchParams = useSearchParams()
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
 
   const loadConnected = async () => {
     try {
       const r = await dataSourcesApi.list()
+      if (!mountedRef.current) return
       setConnected((r.sources ?? []) as ConnectedSource[])
       try {
         const s = await dataSourcesApi.stats()
-        setStats(s)
+        if (mountedRef.current) setStats(s)
       } catch {
         // stats are non-critical
       }
     } catch (e) {
       console.error(e)
     } finally {
-      setLoading(false)
+      if (mountedRef.current) setLoading(false)
     }
   }
 
@@ -193,7 +200,7 @@ function IntegrationsContent() {
   }, [searchParams])
 
   const sourceData = (type: SourceType) => connected.find(s => s.source_type === type)
-  const getStatus = (type: SourceType): string => sourceData(type)?.status ?? 'disconnected'
+  const getStatus = (type: SourceType): ConnectedSource['status'] => sourceData(type)?.status ?? 'disconnected'
   const isConnected = (type: SourceType) => {
     const s = getStatus(type)
     return s === 'synced' || s === 'sync_needed' || s === 'token_expired'
