@@ -281,9 +281,9 @@ export default function SettingsPage() {
                 {calendarSource && (
                   <span
                     className="inline-flex items-center gap-1 text-[10px] font-medium"
-                    style={{ color: calendarSource.status === 'connected' ? '#4A7C59' : '#B04A3A' }}
+                    style={{ color: (calendarSource.status === 'synced' || calendarSource.status === 'sync_needed') ? '#4A7C59' : '#B04A3A' }}
                   >
-                    {calendarSource.status === 'connected'
+                    {(calendarSource.status === 'synced' || calendarSource.status === 'sync_needed')
                       ? <><CheckCircle2 size={10} />Connected</>
                       : <><XCircle size={10} />Disconnected</>
                     }
@@ -298,7 +298,7 @@ export default function SettingsPage() {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {calendarSource?.status === 'connected' ? (
+            {(calendarSource?.status === 'synced' || calendarSource?.status === 'sync_needed') ? (
               <>
                 <button
                   onClick={() => handleSync(calendarSource.source_type)}
