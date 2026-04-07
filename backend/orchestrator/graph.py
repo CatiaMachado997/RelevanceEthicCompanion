@@ -134,7 +134,8 @@ async def stream_langgraph(
             # ── Tool use/result events + citations (emitted BEFORE tokens if tools ran) ──
             elif kind == "on_chain_end" and node == "tool_execution" and not tool_events_yielded:
                 tool_events_yielded = True
-                output = event.get("data", {}).get("output") or {}
+                raw_output = event.get("data", {}).get("output")
+                output = raw_output if isinstance(raw_output, dict) else {}
                 for ev in output.get("response_events", []):
                     if ev.get("event") in ("tool_use", "tool_result"):
                         yield ev
@@ -143,14 +144,16 @@ async def stream_langgraph(
 
             # ── Token warning ──
             elif kind == "on_chain_end" and node in ("tool_execution", "tool_planner"):
-                output = event.get("data", {}).get("output") or {}
+                raw_output = event.get("data", {}).get("output")
+                output = raw_output if isinstance(raw_output, dict) else {}
                 warning = output.get("token_warning")
-                if warning:
-                    yield warning
+                if warning and isinstance(warning, str):
+                    yield {"event": "warning", "message": warning}
 
             # ── ESL decision (capture for done event) ──
             elif kind == "on_chain_end" and node == "esl_gateway":
-                output = event.get("data", {}).get("output") or {}
+                raw_output = event.get("data", {}).get("output")
+                output = raw_output if isinstance(raw_output, dict) else {}
                 decision = output.get("esl_decision")
                 if decision:
                     try:
@@ -164,7 +167,8 @@ async def stream_langgraph(
 
             # ── Veto path — yield veto explanation tokens ──
             elif kind == "on_chain_end" and node == "explain_veto":
-                output = event.get("data", {}).get("output") or {}
+                raw_output = event.get("data", {}).get("output")
+                output = raw_output if isinstance(raw_output, dict) else {}
                 veto_text = output.get("response_text", "")
                 if veto_text and not response_text:
                     response_text = veto_text
@@ -172,7 +176,8 @@ async def stream_langgraph(
 
             # ── Graph completion — yield done event ──
             elif kind == "on_chain_end" and event.get("name") == "LangGraph":
-                final_output = event.get("data", {}).get("output") or {}
+                raw_final = event.get("data", {}).get("output")
+                final_output = raw_final if isinstance(raw_final, dict) else {}
                 # If streaming captured nothing (edge case), fall back to response_text in state
                 if not response_text:
                     response_text = final_output.get("response_text", "")
