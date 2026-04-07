@@ -25,6 +25,9 @@ logger = logging.getLogger(__name__)
 
 SUPPORTED_SOURCES = ["google_calendar", "gmail", "slack"]
 
+# Sentinel substring written by _mark_token_expired and read by _derive_status
+_RECONNECT_SENTINEL = "reconnect required"
+
 
 class TokenExpiredError(Exception):
     """Raised when an OAuth token has expired and cannot be refreshed."""
@@ -111,7 +114,11 @@ class DataIngestionService:
             await self._update_last_sync(user_id, source_type)
             await self._clear_sync_error(user_id, source_type)
 
-            recent = await self._get_recent_synced_items(user_id, source_type, limit=3)
+            try:
+                recent = await self._get_recent_synced_items(user_id, source_type, limit=3)
+            except Exception:
+                logger.warning(f"⚠️  Could not fetch recent items after sync for {source_type}")
+                recent = []
             logger.info(f"✅ Sync complete: {items_synced} items from {source_type}")
             return {
                 "success": True,
@@ -324,16 +331,17 @@ class DataIngestionService:
 
     async def _mark_token_expired(self, user_id: str, source_type: str):
         """Disable source and record reconnect-required error."""
+        error_msg = f"Token expired — {_RECONNECT_SENTINEL}"
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
                     UPDATE data_sources
                     SET enabled = FALSE,
-                        sync_error_message = 'Token expired — reconnect required'
+                        sync_error_message = %s
                     WHERE user_id = %s AND source_type = %s
                     """,
-                    (user_id, source_type),
+                    (error_msg, user_id, source_type),
                 )
 
     async def _update_last_sync(self, user_id: str, source_type: str):
@@ -399,11 +407,11 @@ class DataIngestionService:
 
     def _derive_status(self, row: dict) -> str:
         """Derive display status from a data_sources row dict."""
-        if row.get("sync_error_message") and "reconnect required" in (
-            row["sync_error_message"] or ""
-        ):
-            return "token_expired"
         if not row["enabled"]:
+            if row.get("sync_error_message") and _RECONNECT_SENTINEL in (
+                row["sync_error_message"] or ""
+            ):
+                return "token_expired"
             return "disconnected"
         last_sync = row.get("last_sync")
         if last_sync is None:
