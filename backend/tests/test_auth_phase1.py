@@ -4,22 +4,11 @@ import pytest
 
 from config import settings
 from routes.auth import router as auth_router
-from routes.chat import router as chat_router, get_orchestrator
+from routes.chat import router as chat_router
 from routes.data_sources import router as data_sources_router, get_data_ingestion
 from routes.values import router as values_router
 from routes.goals import router as goals_router
 from utils.oauth_state import create_signed_state, validate_signed_state
-
-
-class FakeOrchestrator:
-    async def handle_user_message(self, user_id: str, message: str, context=None):
-        return {
-            "message": message,
-            "response": f"echo:{message}",
-            "executed": True,
-            "esl_decision": {"status": "APPROVED", "reason": "ok"},
-            "transparency": "ok",
-        }
 
 
 class FakeIngestion:
@@ -44,7 +33,6 @@ def client(monkeypatch):
     app.include_router(data_sources_router)
     app.include_router(values_router)
     app.include_router(goals_router)
-    app.dependency_overrides[get_orchestrator] = lambda: FakeOrchestrator()
     app.dependency_overrides[get_data_ingestion] = lambda: FakeIngestion()
 
     monkeypatch.setattr(settings, "AUTH_ENFORCEMENT_ENABLED", True)
