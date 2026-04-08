@@ -17,6 +17,7 @@ Core Principles:
 from .engine import EthicalSafeguardLayer
 from .models import ProposedAction, UserValue, ESLDecision, ESLDecisionStatus
 from .audit import ESLAuditLogger
+from .tool_gate import ESLToolGate, GateResult, GateDecision
 
 __all__ = [
     "EthicalSafeguardLayer",
@@ -25,4 +26,7 @@ __all__ = [
     "ESLDecision",
     "ESLDecisionStatus",
     "ESLAuditLogger",
+    "ESLToolGate",
+    "GateResult",
+    "GateDecision",
 ]

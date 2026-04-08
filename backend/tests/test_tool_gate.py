@@ -32,6 +32,31 @@ async def test_ask_trust_returns_pending():
 
 
 @pytest.mark.asyncio
+async def test_explicit_ask_record_returns_pending():
+    """trust_level='ask' stored in DB → PENDING_CONFIRMATION."""
+    from esl.tool_gate import ESLToolGate, GateResult
+
+    gate = ESLToolGate()
+    with patch("esl.tool_gate.get_db_connection") as mock_db:
+        conn = MagicMock()
+        cur = MagicMock()
+        conn.__enter__ = MagicMock(return_value=conn)
+        conn.__exit__ = MagicMock(return_value=False)
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        cur.fetchone.return_value = {"trust_level": "ask"}  # explicit ask record
+        mock_db.return_value = conn
+
+        result = await gate.check(
+            user_id="u1", tool_id="github", action_name="create_issue",
+            risk_level="medium", preview="Create issue: Fix login bug"
+        )
+
+    assert result.status == GateResult.PENDING_CONFIRMATION
+    assert "Fix login bug" in result.preview
+
+
+@pytest.mark.asyncio
 async def test_allow_trust_returns_approved():
     """trust_level='allow' and risk!='high' → APPROVED."""
     from esl.tool_gate import ESLToolGate, GateResult

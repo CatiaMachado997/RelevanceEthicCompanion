@@ -81,7 +81,7 @@ class ESLToolGate:
             )
 
         except Exception as e:
-            logger.error(f"ESLToolGate.check error: {e}")
+            logger.error(f"ESLToolGate.check error: {e}", exc_info=True)
             return GateDecision(
                 status=GateResult.PENDING_CONFIRMATION,
                 preview=preview,
