@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import logging
 from typing import Any, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import RedirectResponse
 from pydantic import AnyHttpUrl, BaseModel
 from urllib.parse import quote
@@ -132,7 +132,7 @@ async def oauth_callback(
     code: Optional[str] = None,
     state: Optional[str] = None,
     error: Optional[str] = None,
-):
+) -> Response:
     """Handle OAuth callback — exchange code and store tokens."""
     if error or not code:
         _err = f"{tool_id}_{error or 'denied'}"
@@ -147,7 +147,7 @@ async def oauth_callback(
         credentials = _encrypt_credentials(tokens)
         _store_connection(user_id=user_id, tool_id=tool_id, credentials=credentials)
         return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/dashboard/integrations?connected={tool_id}",
+            url=f"{settings.FRONTEND_URL}/dashboard/integrations?connected={quote(tool_id, safe='')}",
             status_code=302,
         )
     except Exception as e:
