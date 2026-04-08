@@ -13,12 +13,12 @@ pgvector==0.2.4
 weaviate-client>=4.4.0
 
 # LLM & AI - V1 (being phased out)
-groq==0.4.1
+groq>=0.9.0
 
 # LLM & AI - V2 (new)
 google-genai>=1.0.0
 langchain>=0.1.0
-langchain-groq>=0.1.0
+langchain-groq>=0.3.3
 langchain-google-genai>=0.0.5
 openai==1.7.2  # For embeddings if needed
 
@@ -66,3 +66,4 @@ langgraph>=0.2.0
 fastapi-mcp>=0.4.0
 langfuse>=2.0.0
 anthropic>=0.25.0
+mcp
