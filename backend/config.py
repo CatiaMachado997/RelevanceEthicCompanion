@@ -66,6 +66,17 @@ class Settings(BaseSettings):
     SLACK_CLIENT_SECRET: str = ""
     SLACK_REDIRECT_URI: str = "http://localhost:8000/api/data-sources/oauth/slack/callback"
 
+    # GitHub OAuth (Tool Marketplace)
+    GITHUB_CLIENT_ID: str = ""
+    GITHUB_CLIENT_SECRET: str = ""
+
+    # Notion OAuth (Tool Marketplace)
+    NOTION_CLIENT_ID: str = ""
+    NOTION_CLIENT_SECRET: str = ""
+
+    # Backend URL for OAuth redirects
+    BACKEND_URL: str = "http://localhost:8000"
+
     # Frontend URL
     FRONTEND_URL: str = "http://localhost:3000"
 
