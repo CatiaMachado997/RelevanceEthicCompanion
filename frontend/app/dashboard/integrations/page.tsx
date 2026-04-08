@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { dataSourcesApi } from '@/lib/api'
+import { dataSourcesApi, toolMarketplaceApi, ToolDefinition, ConnectedTool } from '@/lib/api'
+import { CatalogueCard } from '@/components/CatalogueCard'
 import { RefreshCw, CheckCircle2, AlertCircle, Zap, Plug } from 'lucide-react'
 
 type SourceType = 'google_calendar' | 'gmail' | 'slack'
@@ -143,6 +144,11 @@ function IntegrationsContent() {
   const [flash, setFlash] = useState<SourceType | null>(null)
   const [errorFlash, setErrorFlash] = useState<string | null>(null)
   const [stats, setStats] = useState<Record<string, number>>({})
+  const [catalogue, setCatalogue] = useState<ToolDefinition[]>([])
+  const [connectedTools, setConnectedTools] = useState<ConnectedTool[]>([])
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [mcpUrl, setMcpUrl] = useState('')
+  const [mcpConnecting, setMcpConnecting] = useState(false)
   const searchParams = useSearchParams()
   const mountedRef = useRef(true)
   useEffect(() => {
@@ -168,7 +174,21 @@ function IntegrationsContent() {
     }
   }
 
-  useEffect(() => { loadConnected() }, [])
+  async function loadMarketplace() {
+    try {
+      const [cat, conn] = await Promise.all([
+        toolMarketplaceApi.getCatalogue(),
+        toolMarketplaceApi.getConnected(),
+      ])
+      if (!mountedRef.current) return
+      setCatalogue(cat)
+      setConnectedTools(conn)
+    } catch {
+      // catalogue load failure is non-fatal
+    }
+  }
+
+  useEffect(() => { loadConnected(); loadMarketplace() }, [])
 
   useEffect(() => {
     const connectedParam = searchParams.get('connected') as SourceType | null
@@ -250,6 +270,38 @@ function IntegrationsContent() {
       const label = INTEGRATIONS.find(i => i.type === type)?.label ?? type
       setErrorFlash(`Could not start ${label} reconnection. Make sure you're signed in and try again.`)
       setTimeout(() => setErrorFlash(null), 6000)
+    }
+  }
+
+  async function handleConnectTool(toolId: string) {
+    try {
+      const url = await toolMarketplaceApi.getAuthUrl(toolId)
+      if (url) window.location.href = url
+    } catch (e) {
+      console.error('Failed to get auth URL', e)
+    }
+  }
+
+  async function handleDisconnectTool(toolId: string) {
+    try {
+      await toolMarketplaceApi.disconnect(toolId)
+      await loadMarketplace()
+    } catch (e) {
+      console.error('Failed to disconnect tool', e)
+    }
+  }
+
+  async function handleConnectMcp() {
+    if (!mcpUrl.trim()) return
+    setMcpConnecting(true)
+    try {
+      await toolMarketplaceApi.connectMcp(mcpUrl.trim())
+      setMcpUrl('')
+      await loadMarketplace()
+    } catch (e) {
+      console.error('Failed to connect MCP', e)
+    } finally {
+      setMcpConnecting(false)
     }
   }
 
@@ -460,6 +512,57 @@ function IntegrationsContent() {
             </div>
           )
         })}
+      </div>
+
+      {/* Tool Marketplace Catalogue */}
+      {catalogue.length > 0 && (
+        <div className="mt-6">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">
+            Available Tools
+          </h3>
+          <div className="flex flex-col gap-2">
+            {catalogue.map((tool) => (
+              <CatalogueCard
+                key={tool.id}
+                tool={tool}
+                isConnected={connectedTools.some((c) => c.tool_id === tool.id && c.enabled)}
+                onConnect={handleConnectTool}
+                onDisconnect={handleDisconnectTool}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Advanced / MCP */}
+      <div className="mt-6 border-t border-gray-800 pt-4">
+        <button
+          onClick={() => setShowAdvanced((v) => !v)}
+          className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+        >
+          {showAdvanced ? 'Hide advanced options' : 'Show advanced options'}
+        </button>
+        {showAdvanced && (
+          <div className="mt-3 rounded-lg border border-dashed border-gray-700 p-4">
+            <p className="text-sm text-gray-400 mb-2">Connect any MCP server</p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={mcpUrl}
+                onChange={(e) => setMcpUrl(e.target.value)}
+                placeholder="https://my-mcp-server.com/sse"
+                className="flex-1 rounded bg-gray-800 px-3 py-2 text-sm text-white border border-gray-700 focus:outline-none focus:border-indigo-500"
+              />
+              <button
+                onClick={handleConnectMcp}
+                disabled={mcpConnecting || !mcpUrl.trim()}
+                className="rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-500 disabled:opacity-50"
+              >
+                {mcpConnecting ? '...' : 'Connect'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Info footer */}
