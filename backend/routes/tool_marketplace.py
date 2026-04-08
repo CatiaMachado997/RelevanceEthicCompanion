@@ -6,7 +6,8 @@ import logging
 from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel
+from pydantic import AnyHttpUrl, BaseModel
+from urllib.parse import quote
 
 from utils.db import get_db_connection
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
@@ -25,7 +26,7 @@ class PermissionRequest(BaseModel):
 
 
 class MCPConnectRequest(BaseModel):
-    mcp_url: str
+    mcp_url: AnyHttpUrl
     name: Optional[str] = "Custom MCP"
 
 
@@ -38,7 +39,7 @@ class ConnectRequest(BaseModel):
 @router.get("")
 async def get_catalogue(
     user_id: str = Depends(get_current_read_user_id),
-):
+) -> list:
     """Return all enabled tool definitions (the marketplace catalogue)."""
     with get_db_connection() as conn:
         with conn.cursor() as cur:
@@ -53,7 +54,7 @@ async def get_catalogue(
 @router.get("/connected")
 async def get_connected_tools(
     user_id: str = Depends(get_current_read_user_id),
-):
+) -> list:
     """Return tools the user has connected with their status."""
     with get_db_connection() as conn:
         with conn.cursor() as cur:
@@ -79,7 +80,7 @@ async def connect_tool(
     tool_id: str,
     body: ConnectRequest,
     user_id: str = Depends(get_current_user_id),
-):
+) -> dict:
     """Initiate connect for a catalogue tool.
 
     - OAuth tools: returns authorization URL (caller redirects user)
@@ -104,15 +105,11 @@ async def connect_tool(
         return {"success": True}
     elif auth_type in ("oauth", "mcp"):
         # For OAuth, return the authorization URL; frontend handles redirect
-        try:
-            connector = _get_connector(tool_id)
-            state = _build_oauth_state(user_id=user_id, tool_id=tool_id)
-            auth_url = connector.get_authorization_url(user_id=user_id, state=state)
-            return {"auth_url": auth_url}
-        except HTTPException:
-            # Connector not yet implemented — return placeholder
-            return {"auth_url": None, "message": f"OAuth for {tool_id} not yet configured"}
-    return {"success": True}
+        connector = _get_connector(tool_id)
+        state = _build_oauth_state(user_id=user_id, tool_id=tool_id)
+        auth_url = connector.get_authorization_url(user_id=user_id, state=state)
+        return {"auth_url": auth_url}
+    raise HTTPException(status_code=500, detail=f"Unsupported auth_type: {auth_type}")
 
 
 # ─── OAuth connect flow ───────────────────────────────────────────────────────
@@ -121,7 +118,7 @@ async def connect_tool(
 async def authorize_tool(
     tool_id: str,
     user_id: str = Depends(get_current_user_id),
-):
+) -> dict:
     """Generate OAuth authorization URL for a catalogue tool."""
     connector = _get_connector(tool_id)
     state = _build_oauth_state(user_id=user_id, tool_id=tool_id)
@@ -138,8 +135,9 @@ async def oauth_callback(
 ):
     """Handle OAuth callback — exchange code and store tokens."""
     if error or not code:
+        _err = f"{tool_id}_{error or 'denied'}"
         return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/dashboard/integrations?error={tool_id}_{error or 'denied'}",
+            url=f"{settings.FRONTEND_URL}/dashboard/integrations?error={quote(_err, safe='')}",
             status_code=302,
         )
     try:
@@ -154,8 +152,9 @@ async def oauth_callback(
         )
     except Exception as e:
         logger.error(f"OAuth callback failed for {tool_id}: {e}", exc_info=True)
+        _err = f"{tool_id}_failed"
         return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/dashboard/integrations?error={tool_id}_failed",
+            url=f"{settings.FRONTEND_URL}/dashboard/integrations?error={quote(_err, safe='')}",
             status_code=302,
         )
 
@@ -166,7 +165,7 @@ async def oauth_callback(
 async def disconnect_tool(
     tool_id: str,
     user_id: str = Depends(get_current_user_id),
-):
+) -> dict:
     """Remove a tool connection and its permissions."""
     with get_db_connection() as conn:
         with conn.cursor() as cur:
@@ -174,6 +173,8 @@ async def disconnect_tool(
                 "DELETE FROM user_tool_connections WHERE user_id = %s AND tool_id = %s",
                 (user_id, tool_id),
             )
+            if cur.rowcount == 0:
+                raise HTTPException(status_code=404, detail=f"Tool connection not found: {tool_id}")
             cur.execute(
                 "DELETE FROM tool_permissions WHERE user_id = %s AND tool_id = %s",
                 (user_id, tool_id),
@@ -188,7 +189,7 @@ async def set_permission(
     tool_id: str,
     body: PermissionRequest,
     user_id: str = Depends(get_current_user_id),
-):
+) -> dict:
     """Set trust level for a specific action on a tool."""
     if body.trust_level not in ("ask", "allow", "deny"):
         raise HTTPException(status_code=422, detail="trust_level must be ask|allow|deny")
@@ -207,7 +208,7 @@ async def revoke_permission(
     tool_id: str,
     action_name: str,
     user_id: str = Depends(get_current_user_id),
-):
+) -> dict:
     """Revoke stored trust for a specific action (resets to 'ask')."""
     with get_db_connection() as conn:
         with conn.cursor() as cur:
@@ -215,6 +216,8 @@ async def revoke_permission(
                 "DELETE FROM tool_permissions WHERE user_id=%s AND tool_id=%s AND action_name=%s",
                 (user_id, tool_id, action_name),
             )
+            if cur.rowcount == 0:
+                raise HTTPException(status_code=404, detail=f"Permission not found: {action_name}")
     return {"success": True}
 
 
@@ -224,22 +227,22 @@ async def revoke_permission(
 async def connect_mcp(
     body: MCPConnectRequest,
     user_id: str = Depends(get_current_user_id),
-):
+) -> dict:
     """Register an MCP server URL as a custom tool connection."""
     _store_connection(
         user_id=user_id,
         tool_id="mcp_custom",
         credentials={},
-        mcp_url=body.mcp_url,
+        mcp_url=str(body.mcp_url),
     )
-    return {"success": True, "mcp_url": body.mcp_url}
+    return {"success": True, "mcp_url": str(body.mcp_url)}
 
 
 @router.delete("/mcp/{connection_id}")
 async def disconnect_mcp(
     connection_id: str,
     user_id: str = Depends(get_current_user_id),
-):
+) -> dict:
     """Remove an MCP server connection by its UUID."""
     with get_db_connection() as conn:
         with conn.cursor() as cur:
@@ -247,6 +250,8 @@ async def disconnect_mcp(
                 "DELETE FROM user_tool_connections WHERE id = %s AND user_id = %s",
                 (connection_id, user_id),
             )
+            if cur.rowcount == 0:
+                raise HTTPException(status_code=404, detail=f"MCP connection not found: {connection_id}")
     return {"success": True}
 
 
@@ -288,22 +293,16 @@ def _store_connection(
 
 def _build_oauth_state(user_id: str, tool_id: str) -> str:
     """Generate a signed OAuth state parameter."""
-    try:
-        from utils.oauth_state import create_signed_state
-        return create_signed_state(user_id=user_id, source_type=f"tool_{tool_id}")
-    except ImportError:
-        return user_id  # fallback for dev
+    from utils.oauth_state import create_signed_state
+    return create_signed_state(user_id=user_id, source_type=f"tool_{tool_id}")
 
 
 def _extract_user_from_state(state: Optional[str], tool_id: str) -> str:
-    """Extract user_id from OAuth state parameter."""
+    """Extract and verify user_id from signed OAuth state parameter."""
     if not state:
         raise ValueError("Missing OAuth state")
-    try:
-        from utils.oauth_state import validate_signed_state
-        return validate_signed_state(state=state, expected_source_type=f"tool_{tool_id}")
-    except ImportError:
-        return state
+    from utils.oauth_state import validate_signed_state
+    return validate_signed_state(state=state, expected_source_type=f"tool_{tool_id}")
 
 
 def _get_connector(tool_id: str):
@@ -323,4 +322,5 @@ def _get_connector(tool_id: str):
     if tool_id == "gmail_write":
         from services.connectors.gmail import GmailConnector
         return GmailConnector()
+    logger.warning(f"_get_connector: unknown tool_id '{tool_id}'")
     raise HTTPException(status_code=404, detail=f"Unknown tool: {tool_id}")
