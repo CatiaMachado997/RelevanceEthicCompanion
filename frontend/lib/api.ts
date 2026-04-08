@@ -1090,49 +1090,31 @@ export interface ConnectedTool {
 }
 
 export const toolMarketplaceApi = {
-  getCatalogue: async (): Promise<ToolDefinition[]> => {
-    const res = await fetch('/api/tools', { credentials: 'include' })
-    if (!res.ok) throw new Error('Failed to fetch catalogue')
-    return res.json()
-  },
+  getCatalogue: (): Promise<ToolDefinition[]> =>
+    apiRequest<ToolDefinition[]>('/api/tools'),
 
-  getConnected: async (): Promise<ConnectedTool[]> => {
-    const res = await fetch('/api/tools/connected', { credentials: 'include' })
-    if (!res.ok) throw new Error('Failed to fetch connected tools')
-    return res.json()
-  },
+  getConnected: (): Promise<ConnectedTool[]> =>
+    apiRequest<ConnectedTool[]>('/api/tools/connected'),
 
   getAuthUrl: async (toolId: string): Promise<string> => {
-    const res = await fetch(`/api/tools/${toolId}/oauth/authorize`, { credentials: 'include' })
-    if (!res.ok) throw new Error('Failed to get auth URL')
-    const data = await res.json()
+    const data = await apiRequest<{ auth_url: string }>(`/api/tools/${toolId}/oauth/authorize`)
     return data.auth_url
   },
 
-  disconnect: async (toolId: string): Promise<void> => {
-    const res = await fetch(`/api/tools/${toolId}/disconnect`, { method: 'DELETE', credentials: 'include' })
-    if (!res.ok) throw new Error('Failed to disconnect tool')
-  },
+  disconnect: (toolId: string): Promise<void> =>
+    apiRequest<void>(`/api/tools/${toolId}/disconnect`, { method: 'DELETE' }),
 
-  setPermission: async (toolId: string, actionName: string, trustLevel: 'ask' | 'allow' | 'deny'): Promise<void> => {
-    const res = await fetch(`/api/tools/${toolId}/permissions`, {
+  setPermission: (toolId: string, actionName: string, trustLevel: 'ask' | 'allow' | 'deny'): Promise<void> =>
+    apiRequest<void>(`/api/tools/${toolId}/permissions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify({ action_name: actionName, trust_level: trustLevel }),
-    })
-    if (!res.ok) throw new Error('Failed to set permission')
-  },
+    }),
 
-  connectMcp: async (mcpUrl: string): Promise<void> => {
-    const res = await fetch('/api/tools/mcp', {
+  connectMcp: (mcpUrl: string): Promise<void> =>
+    apiRequest<void>('/api/tools/mcp', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify({ mcp_url: mcpUrl }),
-    })
-    if (!res.ok) throw new Error('Failed to connect MCP server')
-  },
+    }),
 }
 
 export const api = {
