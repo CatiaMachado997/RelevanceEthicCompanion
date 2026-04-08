@@ -257,6 +257,7 @@ export const chatApi = {
           onToken: (token: string) => void
           onToolUse?: (tool: string) => void
           onToolResult?: (tool: string) => void
+          onToolPendingConfirmation?: (data: { tool_id: string; tool_name: string; action_name: string; preview: string }) => void
           onRateLimitWarning?: (level: string, message: string) => void
           onRateLimitExceeded?: (retryAfter: string, message: string) => void
           onDone?: (data: { esl_decision?: Record<string, unknown>; citations?: CitationSource[] }) => void
@@ -294,6 +295,10 @@ export const chatApi = {
           }
           if (data.event === 'tool_result') {
             callbacks.onToolResult?.(data.tool)
+            return
+          }
+          if (data.event === 'tool_pending_confirmation') {
+            callbacks.onToolPendingConfirmation?.(data)
             return
           }
           if (data.event === 'rate_limit_warning') {

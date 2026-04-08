@@ -5,7 +5,8 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { CodeBlock } from '@/components/chat/CodeBlock'
 import { ArtifactCard } from '@/components/chat/ArtifactCard'
-import api, { CitationSource } from '@/lib/api'
+import api, { CitationSource, toolMarketplaceApi } from '@/lib/api'
+import { ToolConfirmation } from '@/components/ToolConfirmation'
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
 import {
@@ -17,6 +18,13 @@ import {
 } from 'lucide-react'
 import type { ExtractedTask as ExtractedTaskType } from '@/lib/api'
 import { Skeleton } from '@/components/ui/skeleton'
+
+interface PendingConfirmation {
+  tool_id: string
+  tool_name: string
+  action_name: string
+  preview: string
+}
 
 interface Message {
   id: string
@@ -30,6 +38,7 @@ interface Message {
     reason: string
   }
   citations?: CitationSource[]
+  pendingConfirmation?: PendingConfirmation
 }
 
 const ESL_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -451,6 +460,14 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
           setActiveTool(tool)
         },
         onToolResult: () => setActiveTool(null),
+        onToolPendingConfirmation: (data) => {
+          setActiveTool(null)
+          setMessages(prev => prev.map(m =>
+            m.id === assistantId
+              ? { ...m, pendingConfirmation: { tool_id: data.tool_id, tool_name: data.tool_name, action_name: data.action_name, preview: data.preview } }
+              : m
+          ))
+        },
         onDone: ({ citations }) => {
           if (citations && citations.length > 0) {
             setMessages(prev => prev.map(m =>
@@ -738,6 +755,40 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                     </>
                   ) : null}
                   <CitationPills citations={msg.citations} />
+                  {msg.pendingConfirmation && (
+                    <ToolConfirmation
+                      toolName={msg.pendingConfirmation.tool_name}
+                      actionName={msg.pendingConfirmation.action_name}
+                      preview={msg.pendingConfirmation.preview}
+                      onAllowOnce={async () => {
+                        setMessages(prev => prev.map(m =>
+                          m.id === msg.id ? { ...m, pendingConfirmation: undefined } : m
+                        ))
+                        await handleSend(messages.filter(m => m.role === 'user').pop()?.content)
+                      }}
+                      onAlwaysAllow={async () => {
+                        await toolMarketplaceApi.setPermission(
+                          msg.pendingConfirmation!.tool_id,
+                          msg.pendingConfirmation!.action_name,
+                          'allow'
+                        )
+                        setMessages(prev => prev.map(m =>
+                          m.id === msg.id ? { ...m, pendingConfirmation: undefined } : m
+                        ))
+                        await handleSend(messages.filter(m => m.role === 'user').pop()?.content)
+                      }}
+                      onDeny={async () => {
+                        await toolMarketplaceApi.setPermission(
+                          msg.pendingConfirmation!.tool_id,
+                          msg.pendingConfirmation!.action_name,
+                          'deny'
+                        )
+                        setMessages(prev => prev.map(m =>
+                          m.id === msg.id ? { ...m, pendingConfirmation: undefined, content: msg.content + '\n\n*Action denied.*' } : m
+                        ))
+                      }}
+                    />
+                  )}
                   {msg.esl_decision && <ESLTag decision={msg.esl_decision} />}
                 </div>
 

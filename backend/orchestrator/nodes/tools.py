@@ -281,7 +281,7 @@ async def tool_execution_node(state: AgentState) -> dict:
                     "params": tool_input,
                     "risk_level": risk_level,
                 }
-                events.append({"event": "tool_pending_confirmation", "tool": tool_name, "preview": decision.preview})
+                events.append({"event": "tool_pending_confirmation", "tool": tool_name, "tool_id": tool_id, "tool_name": tool_name, "action_name": action_name, "preview": decision.preview})
                 results.append({"tool": tool_name, "result": f"Awaiting your confirmation: {decision.preview}"})
                 continue
 
