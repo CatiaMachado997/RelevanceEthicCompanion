@@ -257,6 +257,9 @@ app.include_router(tasks.router)
 app.include_router(context.router)
 app.include_router(status_router)
 
+from routes import tool_marketplace
+app.include_router(tool_marketplace.router)
+
 # Sprint 2a: Expose all routes as MCP tools
 from fastapi_mcp import FastApiMCP
 mcp = FastApiMCP(app)
