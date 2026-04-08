@@ -27,13 +27,24 @@ CREATE TABLE IF NOT EXISTS user_tool_connections (
 CREATE TABLE IF NOT EXISTS tool_permissions (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    tool_id      TEXT NOT NULL,
+    tool_id      TEXT NOT NULL REFERENCES tool_definitions(id) ON DELETE CASCADE,
     action_name  TEXT NOT NULL,
     trust_level  TEXT NOT NULL CHECK (trust_level IN ('ask', 'allow', 'deny')),
     granted_at   TIMESTAMPTZ DEFAULT now(),
     expires_at   TIMESTAMPTZ,
     UNIQUE (user_id, tool_id, action_name)
 );
+
+-- Indexes for frequent query patterns
+CREATE INDEX IF NOT EXISTS idx_user_tool_connections_user_id
+    ON user_tool_connections(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_tool_connections_user_tool
+    ON user_tool_connections(user_id, tool_id);
+
+CREATE INDEX IF NOT EXISTS idx_tool_permissions_user_id
+    ON tool_permissions(user_id);
+CREATE INDEX IF NOT EXISTS idx_tool_permissions_user_tool_action
+    ON tool_permissions(user_id, tool_id, action_name);
 
 -- Seed catalogue
 INSERT INTO tool_definitions (id, name, description, auth_type, oauth_scopes, actions, icon_url) VALUES
@@ -66,7 +77,7 @@ INSERT INTO tool_definitions (id, name, description, auth_type, oauth_scopes, ac
     'Notion',
     'Read pages and databases, create notes',
     'oauth',
-    ARRAY[''],
+    ARRAY[]::TEXT[],
     '[
         {"name": "search_pages", "description": "Search Notion pages", "risk_level": "low"},
         {"name": "create_page", "description": "Create a Notion page", "risk_level": "medium"},
