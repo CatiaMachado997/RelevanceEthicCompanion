@@ -182,19 +182,58 @@ async def tool_execution_node(state: AgentState) -> dict:
 
     results = []
     events = []
+    pending_confirmation = None
+
     for tc in state.get("tool_calls", []):
         tool_name = tc.get("name", "")
         tool_input = tc.get("args", {})
         events.append({"event": "tool_use", "tool": tool_name})
-        if tool_name in tool_map:
-            try:
-                result = await tool_map[tool_name].ainvoke(tool_input)
-                results.append({"tool": tool_name, "result": str(result)})
-                events.append({"event": "tool_result", "tool": tool_name})
-            except Exception as e:
-                results.append({"tool": tool_name, "result": f"Error: {e}"})
-        else:
+
+        if tool_name not in tool_map:
             results.append({"tool": tool_name, "result": "Tool not found"})
+            continue
+
+        t = tool_map[tool_name]
+        meta = getattr(t, "metadata", {}) or {}
+        tool_id = meta.get("tool_id")
+        action_name = meta.get("action_name")
+        risk_level = meta.get("risk_level", "medium")
+
+        # Only gate marketplace tools (they have tool_id in metadata)
+        if tool_id and action_name:
+            from esl.tool_gate import ESLToolGate, GateResult
+            gate = ESLToolGate()
+            preview = f"{tool_name}: {json.dumps(tool_input)[:200]}"
+            decision = await gate.check(
+                user_id=user_id,
+                tool_id=tool_id,
+                action_name=action_name,
+                risk_level=risk_level,
+                preview=preview,
+            )
+            if decision.status == GateResult.VETOED:
+                results.append({"tool": tool_name, "result": "Action not permitted by user settings."})
+                events.append({"event": "tool_vetoed", "tool": tool_name})
+                continue
+            if decision.status == GateResult.PENDING_CONFIRMATION:
+                pending_confirmation = {
+                    "tool_id": tool_id,
+                    "action_name": action_name,
+                    "tool_name": tool_name,
+                    "preview": decision.preview,
+                    "params": tool_input,
+                    "risk_level": risk_level,
+                }
+                events.append({"event": "tool_pending_confirmation", "tool": tool_name, "preview": decision.preview})
+                results.append({"tool": tool_name, "result": f"Awaiting your confirmation: {decision.preview}"})
+                continue
+
+        try:
+            result = await t.ainvoke(tool_input)
+            results.append({"tool": tool_name, "result": str(result)})
+            events.append({"event": "tool_result", "tool": tool_name})
+        except Exception as e:
+            results.append({"tool": tool_name, "result": f"Error: {e}"})
 
     if results:
         synthesis_prompt = (
@@ -216,4 +255,5 @@ async def tool_execution_node(state: AgentState) -> dict:
         "citations": _build_citations(results),
         "token_count": state.get("token_count", 0) + tokens_used,
         "token_warning": warning,
+        "pending_tool_confirmation": pending_confirmation,
     }

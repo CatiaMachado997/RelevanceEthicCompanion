@@ -39,5 +39,8 @@ class AgentState(TypedDict):
     token_count: int
     token_warning: Optional[dict]
 
+    # Marketplace tool awaiting user confirmation
+    pending_tool_confirmation: Optional[dict]  # {tool_id, action_name, preview, params}
+
     # Source items context from synced integrations
     source_context: list           # [{source_type, source_item_type, title, body, item_at}]

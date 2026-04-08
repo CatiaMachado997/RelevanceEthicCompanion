@@ -400,20 +400,10 @@ def create_langchain_tools(
     relevance_engine=None,
     active_sources: list | None = None,
 ) -> list:
-    """
-    Factory function to create LangChain tools with dependencies injected.
+    """Return all LangChain tools for this user — built-ins + marketplace tools."""
+    import asyncio
+    from services.tool_registry import ToolRegistry
 
-    Args:
-        context_manager: ContextManager instance for M1/M2 access
-        user_id: Current user ID
-        tavily_client: Optional Tavily client for web search
-        relevance_engine: Optional RelevanceScoring engine
-        active_sources: Optional list of source IDs to include (e.g. ["calendar","goals"]).
-                        Empty list or None means all sources are active.
-
-    Returns:
-        List of initialized LangChain tools, filtered by active_sources.
-    """
     filter_sources = set(active_sources) if active_sources else set()
 
     candidates = [
@@ -430,11 +420,28 @@ def create_langchain_tools(
             user_id=user_id,
         ))
 
+    # Load marketplace tools (async → run in current event loop if available)
+    try:
+        registry = ToolRegistry()
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                future = pool.submit(asyncio.run, registry.get_tools_for_user(user_id))
+                marketplace_tools = future.result(timeout=5)
+        else:
+            marketplace_tools = loop.run_until_complete(registry.get_tools_for_user(user_id))
+        candidates.extend(marketplace_tools)
+        if marketplace_tools:
+            logger.debug(f"Loaded {len(marketplace_tools)} marketplace tools for user {user_id}")
+    except Exception as e:
+        logger.warning(f"Could not load marketplace tools: {e}")
+
     if not filter_sources:
-        return candidates  # all sources active
+        return candidates
 
     return [
         t for t in candidates
-        if _TOOL_SOURCE_MAP.get(t.name) is None          # always-on tools
-        or _TOOL_SOURCE_MAP.get(t.name) in filter_sources  # explicitly enabled
+        if _TOOL_SOURCE_MAP.get(t.name) is None
+        or _TOOL_SOURCE_MAP.get(t.name) in filter_sources
     ]
