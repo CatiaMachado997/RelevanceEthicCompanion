@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlencode
 
 import httpx
 
@@ -20,13 +21,14 @@ class GitHubConnector(BaseConnector):
     source_type = "github"
 
     def get_authorization_url(self, user_id: str, state: Optional[str] = None) -> str:
-        params = (
-            f"client_id={settings.GITHUB_CLIENT_ID}"
-            f"&scope=repo,read:user"
-            f"&state={state or ''}"
-        )
+        params = urlencode({
+            "client_id": settings.GITHUB_CLIENT_ID,
+            "scope": "repo,read:user",
+            "state": state or "",
+        })
         return f"{GITHUB_AUTH_URL}?{params}"
 
+    # NOTE: blocking call — callers should use asyncio.to_thread
     def exchange_code_for_tokens(self, code: str) -> Dict[str, Any]:
         resp = httpx.post(
             GITHUB_TOKEN_URL,
@@ -56,8 +58,12 @@ class GitHubConnector(BaseConnector):
                 params={"filter": "assigned", "state": "open", "per_page": 30},
                 timeout=10,
             )
-            resp.raise_for_status()
-            return resp.json()
+            try:
+                resp.raise_for_status()
+                return resp.json()
+            except httpx.HTTPStatusError as e:
+                logger.warning(f"fetch_raw_items failed: {e.response.status_code}")
+                return []
 
     def normalize_to_source_item(self, raw: Dict[str, Any], user_id: str) -> SourceItem:
         return SourceItem(
@@ -80,6 +86,8 @@ class GitHubConnector(BaseConnector):
         self, action_name: str, params: dict, credentials: dict
     ) -> str:
         token = credentials.get("access_token", "")
+        if not token:
+            return "Error: no access token — reconnect this tool in Settings → Integrations"
         if action_name == "list_issues":
             return await self._list_issues(token, params)
         if action_name == "create_issue":
@@ -98,11 +106,14 @@ class GitHubConnector(BaseConnector):
                 params={"state": "open", "per_page": 10},
                 timeout=10,
             )
-            resp.raise_for_status()
+            try:
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                return f"GitHub API error {e.response.status_code}: {e.response.text[:200]}"
             issues = resp.json()
         if not issues:
             return f"No open issues in {repo}."
-        lines = [f"#{i['number']}: {i['title']} ({i['html_url']})" for i in issues[:10]]
+        lines = [f"#{i['number']}: {i['title']} ({i['html_url']})" for i in issues]
         return f"Open issues in {repo}:\n" + "\n".join(lines)
 
     async def _create_issue(self, token: str, params: dict) -> str:
@@ -118,7 +129,10 @@ class GitHubConnector(BaseConnector):
                 json={"title": title, "body": body, "labels": labels},
                 timeout=10,
             )
-            resp.raise_for_status()
+            try:
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                return f"GitHub API error {e.response.status_code}: {e.response.text[:200]}"
             issue = resp.json()
         return f"✓ Issue #{issue['number']} created: {issue['html_url']}"
 
@@ -134,7 +148,10 @@ class GitHubConnector(BaseConnector):
                 json={"body": comment},
                 timeout=10,
             )
-            resp.raise_for_status()
+            try:
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                return f"GitHub API error {e.response.status_code}: {e.response.text[:200]}"
         return f"✓ Comment added to issue #{issue_number}"
 
 

@@ -1,8 +1,10 @@
 """Notion connector — OAuth + read/write actions."""
 from __future__ import annotations
 
+import base64
 import logging
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlencode
 
 import httpx
 
@@ -17,21 +19,30 @@ NOTION_API = "https://api.notion.com/v1"
 NOTION_VERSION = "2022-06-28"
 
 
+def _extract_notion_title(props: dict) -> str:
+    """Extract plain text title from Notion page properties."""
+    for key in ("title", "Name", "Title"):
+        if key in props:
+            rich = props[key].get("title", [])
+            return "".join(t.get("plain_text", "") for t in rich)
+    return ""
+
+
 class NotionConnector(BaseConnector):
     source_type = "notion"
 
     def get_authorization_url(self, user_id: str, state: Optional[str] = None) -> str:
-        params = (
-            f"client_id={settings.NOTION_CLIENT_ID}"
-            f"&response_type=code"
-            f"&owner=user"
-            f"&redirect_uri={settings.BACKEND_URL}/api/tools/notion/oauth/callback"
-            f"&state={state or ''}"
-        )
+        params = urlencode({
+            "client_id": settings.NOTION_CLIENT_ID,
+            "response_type": "code",
+            "owner": "user",
+            "redirect_uri": f"{settings.BACKEND_URL}/api/tools/notion/oauth/callback",
+            "state": state or "",
+        })
         return f"{NOTION_AUTH_URL}?{params}"
 
+    # NOTE: blocking call — callers should use asyncio.to_thread
     def exchange_code_for_tokens(self, code: str) -> Dict[str, Any]:
-        import base64
         creds = base64.b64encode(
             f"{settings.NOTION_CLIENT_ID}:{settings.NOTION_CLIENT_SECRET}".encode()
         ).decode()
@@ -67,17 +78,16 @@ class NotionConnector(BaseConnector):
                 json={"sort": {"direction": "descending", "timestamp": "last_edited_time"}, "page_size": 20},
                 timeout=10,
             )
-            resp.raise_for_status()
-            return resp.json().get("results", [])
+            try:
+                resp.raise_for_status()
+                return resp.json().get("results", [])
+            except httpx.HTTPStatusError as e:
+                logger.warning(f"fetch_raw_items failed: {e.response.status_code}")
+                return []
 
     def normalize_to_source_item(self, raw: Dict[str, Any], user_id: str) -> SourceItem:
-        title = ""
         props = raw.get("properties", {})
-        for key in ("title", "Name", "Title"):
-            if key in props:
-                rich = props[key].get("title", [])
-                title = "".join(t.get("plain_text", "") for t in rich)
-                break
+        title = _extract_notion_title(props)
         return SourceItem(
             user_id=user_id,
             source_type="notion",
@@ -93,6 +103,8 @@ class NotionConnector(BaseConnector):
         self, action_name: str, params: dict, credentials: dict
     ) -> str:
         token = credentials.get("access_token", "")
+        if not token:
+            return "Error: no access token — reconnect this tool in Settings → Integrations"
         if action_name == "search_pages":
             return await self._search_pages(token, params)
         if action_name == "create_page":
@@ -109,19 +121,17 @@ class NotionConnector(BaseConnector):
                 json={"query": query, "page_size": 5},
                 timeout=10,
             )
-            resp.raise_for_status()
+            try:
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                return f"Notion API error {e.response.status_code}: {e.response.text[:200]}"
             results = resp.json().get("results", [])
         if not results:
             return f"No Notion pages found for '{query}'."
         lines = []
         for r in results:
             props = r.get("properties", {})
-            title = ""
-            for key in ("title", "Name", "Title"):
-                if key in props:
-                    rich = props[key].get("title", [])
-                    title = "".join(t.get("plain_text", "") for t in rich)
-                    break
+            title = _extract_notion_title(props)
             lines.append(f"- {title or '(untitled)'}: {r.get('url', '')}")
         return "Notion pages:\n" + "\n".join(lines)
 
@@ -142,7 +152,10 @@ class NotionConnector(BaseConnector):
             ]
         async with httpx.AsyncClient(headers=_notion_headers(token)) as client:
             resp = await client.post(f"{NOTION_API}/pages", json=body, timeout=10)
-            resp.raise_for_status()
+            try:
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                return f"Notion API error {e.response.status_code}: {e.response.text[:200]}"
             page = resp.json()
         return f"✓ Notion page created: {page.get('url', '')}"
 
@@ -161,7 +174,10 @@ class NotionConnector(BaseConnector):
             resp = await client.patch(
                 f"{NOTION_API}/blocks/{page_id}/children", json=block, timeout=10
             )
-            resp.raise_for_status()
+            try:
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                return f"Notion API error {e.response.status_code}: {e.response.text[:200]}"
         return f"✓ Block appended to Notion page {page_id}"
 
 

@@ -78,3 +78,6 @@ class GoogleCalendarConnector(BaseConnector):
                 "organizer_email": raw.get("organizer", {}).get("email"),
             },
         )
+
+    async def execute_action(self, action_name: str, params: dict, credentials: dict) -> str:
+        return f"Action {action_name} not yet implemented for this connector"

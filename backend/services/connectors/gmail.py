@@ -65,3 +65,6 @@ class GmailConnector(BaseConnector):
                 "label_ids": raw.get("label_ids", []),
             },
         )
+
+    async def execute_action(self, action_name: str, params: dict, credentials: dict) -> str:
+        return f"Action {action_name} not yet implemented for this connector"

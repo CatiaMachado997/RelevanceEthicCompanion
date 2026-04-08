@@ -30,6 +30,9 @@ class ConcreteConnector(BaseConnector):
             body=raw.get("content"),
         )
 
+    async def execute_action(self, action_name: str, params: dict, credentials: dict) -> str:
+        return f"Action {action_name} not yet implemented for this connector"
+
 
 def test_base_connector_interface():
     conn = ConcreteConnector()

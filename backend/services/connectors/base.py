@@ -50,3 +50,8 @@ class BaseConnector(ABC):
     def normalize_to_source_item(self, raw: Dict[str, Any], user_id: str) -> SourceItem:
         """Convert a raw item dict into a normalized SourceItem."""
         ...
+
+    @abstractmethod
+    async def execute_action(self, action_name: str, params: dict, credentials: dict) -> str:
+        """Execute a write or read action by name. Return a human-readable result string."""
+        ...
