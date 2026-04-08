@@ -3,6 +3,8 @@
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+import httpx
+
 from services.connectors.base import BaseConnector, SourceItem
 from services.google_calendar_sync import GoogleCalendarSync
 
@@ -79,5 +81,58 @@ class GoogleCalendarConnector(BaseConnector):
             },
         )
 
-    async def execute_action(self, action_name: str, params: dict, credentials: dict) -> str:
-        return f"Action {action_name} not yet implemented for this connector"
+    async def execute_action(
+        self, action_name: str, params: dict, credentials: dict
+    ) -> str:
+        """Execute a write action on Google Calendar."""
+        token = credentials.get("access_token", "")
+        if not token:
+            return "Error: no access token — reconnect Google Calendar in Settings"
+        base = "https://www.googleapis.com/calendar/v3"
+
+        if action_name == "create_event":
+            summary = params.get("summary", "New event")
+            start = params.get("start")  # ISO datetime string
+            end = params.get("end")      # ISO datetime string
+            if not start or not end:
+                return "Error: 'start' and 'end' (ISO datetime) are required"
+            body = {
+                "summary": summary,
+                "start": {"dateTime": start, "timeZone": "UTC"},
+                "end": {"dateTime": end, "timeZone": "UTC"},
+            }
+            if params.get("description"):
+                body["description"] = params["description"]
+            try:
+                async with httpx.AsyncClient() as client:
+                    resp = await client.post(
+                        f"{base}/calendars/primary/events",
+                        json=body,
+                        headers={"Authorization": f"Bearer {token}"},
+                        timeout=10,
+                    )
+                    resp.raise_for_status()
+                    event = resp.json()
+                return f"Event created: {event.get('htmlLink', event.get('id', ''))}"
+            except httpx.HTTPStatusError as e:
+                return f"Google Calendar API error {e.response.status_code}: {e.response.text[:200]}"
+
+        if action_name == "update_event":
+            event_id = params.get("event_id", "")
+            if not event_id:
+                return "Error: 'event_id' is required"
+            patch_body = {k: v for k, v in params.items() if k != "event_id"}
+            try:
+                async with httpx.AsyncClient() as client:
+                    resp = await client.patch(
+                        f"{base}/calendars/primary/events/{event_id}",
+                        json=patch_body,
+                        headers={"Authorization": f"Bearer {token}"},
+                        timeout=10,
+                    )
+                    resp.raise_for_status()
+                return f"Event {event_id} updated"
+            except httpx.HTTPStatusError as e:
+                return f"Google Calendar API error {e.response.status_code}: {e.response.text[:200]}"
+
+        return f"Unknown action: {action_name}"

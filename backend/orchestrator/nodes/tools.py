@@ -1,11 +1,67 @@
 """ToolPlanner and ToolExecution — LLM-driven tool selection and execution."""
 import json
 import logging
+from datetime import datetime, UTC
 from orchestrator.state import AgentState
 from orchestrator.nodes.context import get_context_manager
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+
+async def _audit_tool_action(
+    user_id: str,
+    tool_id: str,
+    action_name: str,
+    status: str,
+    reason: str,
+) -> None:
+    """Best-effort ESL audit log for marketplace tool actions."""
+    try:
+        from esl.audit import ESLAuditLogger
+        from esl.models import (
+            ProposedAction,
+            ESLDecision,
+            ESLDecisionStatus,
+            ActionType,
+            UrgencyLevel,
+        )
+
+        # TODO: Add ActionType.TOOL_EXECUTION to the enum once ESL models are extended
+        # For now, map to the closest existing action type
+        action_type_map = {
+            "google_calendar": ActionType.CALENDAR_WRITE,
+            "gmail": ActionType.EMAIL_SEND,
+            "slack": ActionType.SLACK_SEND,
+        }
+        resolved_type = ActionType.CONTENT_GENERATION  # fallback
+        for key, at in action_type_map.items():
+            if key in tool_id.lower():
+                resolved_type = at
+                break
+
+        proposed = ProposedAction(
+            action_type=resolved_type,
+            content_type=f"tool:{tool_id}/{action_name}",
+            urgency=UrgencyLevel.MEDIUM,
+            content=f"Marketplace tool action: {action_name}",
+            metadata={"tool_id": tool_id, "action_name": action_name},
+        )
+        decision = ESLDecision(
+            status=ESLDecisionStatus(status),
+            reason=reason,
+            confidence=1.0,
+            timestamp=datetime.now(UTC),
+        )
+        audit_logger = ESLAuditLogger()
+        await audit_logger.log_decision(
+            user_id=user_id,
+            proposed_action=proposed,
+            decision=decision,
+            context_snapshot={"source": "tool_execution_node", "tool_id": tool_id},
+        )
+    except Exception:
+        pass  # audit failure must never break execution
 
 # Maps tool name → display metadata. None means the tool is a write tool (no citation shown).
 _TOOL_CITATION_META: dict = {
@@ -214,6 +270,7 @@ async def tool_execution_node(state: AgentState) -> dict:
             if decision.status == GateResult.VETOED:
                 results.append({"tool": tool_name, "result": "Action not permitted by user settings."})
                 events.append({"event": "tool_vetoed", "tool": tool_name})
+                await _audit_tool_action(user_id, tool_id, action_name, "VETOED", "User denied this action")
                 continue
             if decision.status == GateResult.PENDING_CONFIRMATION:
                 pending_confirmation = {
@@ -232,6 +289,8 @@ async def tool_execution_node(state: AgentState) -> dict:
             result = await t.ainvoke(tool_input)
             results.append({"tool": tool_name, "result": str(result)})
             events.append({"event": "tool_result", "tool": tool_name})
+            if tool_id and action_name:
+                await _audit_tool_action(user_id, tool_id, action_name, "APPROVED", "Marketplace tool executed")
         except Exception as e:
             results.append({"tool": tool_name, "result": f"Error: {e}"})
 
