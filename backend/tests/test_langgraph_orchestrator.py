@@ -38,6 +38,7 @@ def base_state() -> dict:
         "token_count": 0, "token_warning": None,
         "pending_tool_confirmation": None,
         "source_context": [],
+        "active_sources": [],
     }
 
 

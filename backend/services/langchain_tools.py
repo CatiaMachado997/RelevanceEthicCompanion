@@ -393,7 +393,7 @@ _TOOL_SOURCE_MAP: dict = {
 }
 
 
-def create_langchain_tools(
+async def create_langchain_tools(
     context_manager,
     user_id: str,
     tavily_client=None,
@@ -401,9 +401,6 @@ def create_langchain_tools(
     active_sources: list | None = None,
 ) -> list:
     """Return all LangChain tools for this user — built-ins + marketplace tools."""
-    import asyncio
-    from services.tool_registry import ToolRegistry
-
     filter_sources = set(active_sources) if active_sources else set()
 
     candidates = [
@@ -420,17 +417,11 @@ def create_langchain_tools(
             user_id=user_id,
         ))
 
-    # Load marketplace tools (async → run in current event loop if available)
+    # Load marketplace tools
     try:
+        from services.tool_registry import ToolRegistry
         registry = ToolRegistry()
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                future = pool.submit(asyncio.run, registry.get_tools_for_user(user_id))
-                marketplace_tools = future.result(timeout=5)
-        else:
-            marketplace_tools = loop.run_until_complete(registry.get_tools_for_user(user_id))
+        marketplace_tools = await registry.get_tools_for_user(user_id)
         candidates.extend(marketplace_tools)
         if marketplace_tools:
             logger.debug(f"Loaded {len(marketplace_tools)} marketplace tools for user {user_id}")

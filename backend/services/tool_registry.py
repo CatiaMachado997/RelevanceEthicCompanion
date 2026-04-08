@@ -179,7 +179,12 @@ async def _dispatch_action(
 
 
 async def _load_mcp_tools(tool_id: str, mcp_url: str) -> list[BaseTool]:
-    """Load tools from an MCP server URL. Returns [] on connection failure."""
+    """Load tools from an MCP server URL. Returns [] on connection failure.
+
+    Note: MCPClient._wrap_mcp_tool already stamps metadata["tool_id"] = "mcp_custom"
+    and metadata["action_name"] = mcp_tool.name on every returned tool, so
+    ESLToolGate can identify and gate them without any additional stamping here.
+    """
     try:
         from services.mcp_client import MCPClient
         client = MCPClient(mcp_url)

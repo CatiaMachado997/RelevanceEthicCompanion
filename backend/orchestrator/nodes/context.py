@@ -57,4 +57,6 @@ async def context_builder_node(state: AgentState) -> dict:
         },
         "conversation_history": history or [],
         "source_context": source_context,
+        # Reset any stale confirmation from the previous turn before routing begins.
+        "pending_tool_confirmation": None,
     }
