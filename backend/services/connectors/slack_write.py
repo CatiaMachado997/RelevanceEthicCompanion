@@ -76,12 +76,12 @@ class SlackWriteConnector(BaseConnector):
                         params={"channel": ch["id"], "limit": 5},
                         timeout=10,
                     )
-                    if resp.is_success:
-                        for m in resp.json().get("messages", []):
-                            m["_channel_name"] = ch.get("name", "")
-                            messages.append(m)
-            except httpx.HTTPStatusError:
-                pass  # skip failed channel reads
+                    resp.raise_for_status()
+                    for m in resp.json().get("messages", []):
+                        m["_channel_name"] = ch.get("name", "")
+                        messages.append(m)
+            except httpx.HTTPStatusError as e:
+                logger.warning("conversations.history failed for channel %s: %s", ch.get("id"), e.response.status_code)
         return messages
 
     def normalize_to_source_item(self, raw: Dict[str, Any], user_id: str) -> SourceItem:
