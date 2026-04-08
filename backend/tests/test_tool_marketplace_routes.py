@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, MagicMock, AsyncMock, ANY
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -81,4 +81,9 @@ def test_set_permission_upserts_trust(client):
         )
 
     assert resp.status_code == 200
-    mock_gate.set_trust.assert_called_once()
+    mock_gate.set_trust.assert_called_once_with(
+        user_id=ANY,
+        tool_id="github",
+        action_name="create_issue",
+        trust_level="allow",
+    )

@@ -1,6 +1,7 @@
 """Tool Marketplace API routes."""
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
@@ -26,6 +27,10 @@ class PermissionRequest(BaseModel):
 class MCPConnectRequest(BaseModel):
     mcp_url: str
     name: Optional[str] = "Custom MCP"
+
+
+class ConnectRequest(BaseModel):
+    api_key: Optional[str] = None  # for auth_type='apikey' tools
 
 
 # ─── Catalogue ────────────────────────────────────────────────────────────────
@@ -67,20 +72,64 @@ async def get_connected_tools(
     return rows
 
 
+# ─── Connect (initiate OAuth or save API key) ─────────────────────────────────
+
+@router.post("/{tool_id}/connect")
+async def connect_tool(
+    tool_id: str,
+    body: ConnectRequest,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Initiate connect for a catalogue tool.
+
+    - OAuth tools: returns authorization URL (caller redirects user)
+    - API-key tools: saves key and returns success
+    """
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT auth_type FROM tool_definitions WHERE id = %s AND enabled = TRUE",
+                (tool_id,),
+            )
+            row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Tool not found: {tool_id}")
+
+    auth_type = row["auth_type"]
+    if auth_type == "apikey":
+        if not body.api_key:
+            raise HTTPException(status_code=422, detail="api_key required for this tool")
+        credentials = _encrypt_credentials({"api_key": body.api_key})
+        _store_connection(user_id=user_id, tool_id=tool_id, credentials=credentials)
+        return {"success": True}
+    elif auth_type in ("oauth", "mcp"):
+        # For OAuth, return the authorization URL; frontend handles redirect
+        try:
+            connector = _get_connector(tool_id)
+            state = _build_oauth_state(user_id=user_id, tool_id=tool_id)
+            auth_url = connector.get_authorization_url(user_id=user_id, state=state)
+            return {"auth_url": auth_url}
+        except HTTPException:
+            # Connector not yet implemented — return placeholder
+            return {"auth_url": None, "message": f"OAuth for {tool_id} not yet configured"}
+    return {"success": True}
+
+
 # ─── OAuth connect flow ───────────────────────────────────────────────────────
 
-@router.get("/oauth/{tool_id}/authorize")
+@router.get("/{tool_id}/oauth/authorize")
 async def authorize_tool(
     tool_id: str,
     user_id: str = Depends(get_current_user_id),
 ):
     """Generate OAuth authorization URL for a catalogue tool."""
     connector = _get_connector(tool_id)
-    auth_url = connector.get_authorization_url(user_id=user_id)
+    state = _build_oauth_state(user_id=user_id, tool_id=tool_id)
+    auth_url = connector.get_authorization_url(user_id=user_id, state=state)
     return {"auth_url": auth_url}
 
 
-@router.get("/oauth/{tool_id}/callback")
+@router.get("/{tool_id}/oauth/callback")
 async def oauth_callback(
     tool_id: str,
     code: Optional[str] = None,
@@ -95,10 +144,10 @@ async def oauth_callback(
         )
     try:
         connector = _get_connector(tool_id)
-        # Extract user_id from state param (connector-specific or decode from state)
-        user_id = _extract_user_from_state(state)
+        user_id = _extract_user_from_state(state, tool_id)
         tokens = connector.exchange_code_for_tokens(code)
-        _store_connection(user_id=user_id, tool_id=tool_id, credentials=tokens)
+        credentials = _encrypt_credentials(tokens)
+        _store_connection(user_id=user_id, tool_id=tool_id, credentials=credentials)
         return RedirectResponse(
             url=f"{settings.FRONTEND_URL}/dashboard/integrations?connected={tool_id}",
             status_code=302,
@@ -113,7 +162,7 @@ async def oauth_callback(
 
 # ─── Disconnect ───────────────────────────────────────────────────────────────
 
-@router.delete("/{tool_id}")
+@router.delete("/{tool_id}/disconnect")
 async def disconnect_tool(
     tool_id: str,
     user_id: str = Depends(get_current_user_id),
@@ -186,12 +235,41 @@ async def connect_mcp(
     return {"success": True, "mcp_url": body.mcp_url}
 
 
+@router.delete("/mcp/{connection_id}")
+async def disconnect_mcp(
+    connection_id: str,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Remove an MCP server connection by its UUID."""
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM user_tool_connections WHERE id = %s AND user_id = %s",
+                (connection_id, user_id),
+            )
+    return {"success": True}
+
+
 # ─── Helpers ─────────────────────────────────────────────────────────────────
+
+def _encrypt_credentials(credentials: dict) -> str:
+    """Encrypt credentials before storage.
+
+    TODO: Replace with proper encryption (e.g. Fernet symmetric encryption)
+    once an encryption utility is available in utils/. Currently serialises
+    to JSON — credentials are NOT encrypted at rest. Do not ship to production
+    without a real encryption layer.
+    """
+    logger.warning(
+        "Credentials stored without encryption — implement encrypt_token() in utils/"
+    )
+    return json.dumps(credentials)
+
 
 def _store_connection(
     user_id: str,
     tool_id: str,
-    credentials: dict,
+    credentials: Any,
     mcp_url: str | None = None,
 ) -> None:
     with get_db_connection() as conn:
@@ -208,20 +286,23 @@ def _store_connection(
             )
 
 
-def _extract_user_from_state(state: Optional[str]) -> str:
-    """Extract user_id from OAuth state parameter.
+def _build_oauth_state(user_id: str, tool_id: str) -> str:
+    """Generate a signed OAuth state parameter."""
+    try:
+        from utils.oauth_state import create_signed_state
+        return create_signed_state(user_id=user_id, source_type=f"tool_{tool_id}")
+    except ImportError:
+        return user_id  # fallback for dev
 
-    Uses utils.oauth_state.validate_signed_state if available,
-    otherwise falls back to treating state directly as user_id
-    (for development/testing).
-    """
+
+def _extract_user_from_state(state: Optional[str], tool_id: str) -> str:
+    """Extract user_id from OAuth state parameter."""
     if not state:
         raise ValueError("Missing OAuth state")
     try:
         from utils.oauth_state import validate_signed_state
-        return validate_signed_state(state=state, expected_source_type="tool_oauth")
+        return validate_signed_state(state=state, expected_source_type=f"tool_{tool_id}")
     except ImportError:
-        # oauth_state utility not yet implemented — state is user_id directly
         return state
 
 
