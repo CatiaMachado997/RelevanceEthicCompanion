@@ -2,6 +2,7 @@
 """Google Calendar connector — wraps GoogleCalendarSync, implements BaseConnector."""
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote
 
 import httpx
 
@@ -125,7 +126,7 @@ class GoogleCalendarConnector(BaseConnector):
             try:
                 async with httpx.AsyncClient() as client:
                     resp = await client.patch(
-                        f"{base}/calendars/primary/events/{event_id}",
+                        f"{base}/calendars/primary/events/{quote(event_id, safe='')}",
                         json=patch_body,
                         headers={"Authorization": f"Bearer {token}"},
                         timeout=10,
