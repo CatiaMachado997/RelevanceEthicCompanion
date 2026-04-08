@@ -37,15 +37,17 @@ async def test_get_tools_for_user_returns_only_connected():
 
         # Only github is connected
         cur.fetchall.side_effect = [
-            [_make_connection_row("github")],  # user_tool_connections query
-            [_make_definition_row("github")],  # tool_definitions query
+            [_make_connection_row("github")],
+            [_make_definition_row("github", actions=[
+                {"name": "list_issues", "description": "List open issues", "risk_level": "low"}
+            ])],
         ]
         mock_db.return_value = conn
 
         tools = await registry.get_tools_for_user("user-1")
 
     assert len(tools) == 1
-    assert tools[0].name == "github__list_issues" or "github" in tools[0].name
+    assert tools[0].name == "github__list_issues"
 
 
 @pytest.mark.asyncio

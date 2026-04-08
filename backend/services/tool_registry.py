@@ -7,9 +7,8 @@ ready-to-invoke LangChain BaseTool instances for the orchestrator.
 from __future__ import annotations
 
 import logging
-from typing import Any
 
-from langchain_core.tools import BaseTool, tool as lc_tool
+from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
 from utils.db import get_db_connection
@@ -75,8 +74,7 @@ class ToolRegistry:
                             action=action,
                             credentials=credentials,
                         )
-                        if t:
-                            tools.append(t)
+                        tools.append(t)
 
             logger.debug(f"ToolRegistry: {len(tools)} tools for user {user_id}")
             return tools
@@ -91,18 +89,26 @@ def _make_action_tool(
     tool_name: str,
     action: dict,
     credentials: dict,
-) -> BaseTool | None:
+) -> "BaseTool":
     """
     Build a LangChain BaseTool for a single action on a catalogue tool.
-    Returns None for unknown tool_id / action combos (forward-compatible).
+    Each call produces a Pydantic-safe unique class name to avoid registry collisions.
     """
     action_name = action.get("name", "")
     action_description = action.get("description", action_name)
     risk_level = action.get("risk_level", "medium")
     unique_name = f"{tool_id}__{action_name}"
+    # Unique class name avoids Pydantic v2 model registry collision across calls
+    safe_cls_name = f"_DynamicInput_{unique_name}".replace("-", "_").replace("/", "_")
 
-    class _DynamicInput(BaseModel):
-        params: dict = Field(default_factory=dict, description="Action parameters as key-value pairs")
+    _DynamicInput = type(safe_cls_name + "_Input", (BaseModel,), {
+        "__annotations__": {"params": dict},
+        "params": Field(default_factory=dict, description="Action parameters as key-value pairs"),
+    })
+
+    _tool_id = tool_id
+    _action_name = action_name
+    _credentials = credentials
 
     class _DynamicTool(BaseTool):
         name: str = unique_name
@@ -112,12 +118,11 @@ def _make_action_tool(
             "Pass parameters as a dict in the 'params' field."
         )
         args_schema: type[BaseModel] = _DynamicInput
-        # Store metadata for ESL gate — accessed via tool.metadata
         metadata: dict = {
-            "tool_id": tool_id,
-            "action_name": action_name,
+            "tool_id": _tool_id,
+            "action_name": _action_name,
             "risk_level": risk_level,
-            "credentials": credentials,
+            "credentials": _credentials,
         }
 
         def _run(self, params: dict = None) -> str:  # type: ignore[override]
@@ -125,11 +130,15 @@ def _make_action_tool(
 
         async def _arun(self, params: dict = None) -> str:  # type: ignore[override]
             return await _dispatch_action(
-                tool_id=tool_id,
-                action_name=action_name,
+                tool_id=_tool_id,
+                action_name=_action_name,
                 params=params or {},
-                credentials=credentials,
+                credentials=_credentials,
             )
+
+    # Give Pydantic a unique qualname to avoid registry collisions
+    _DynamicTool.__name__ = f"_DynamicTool_{unique_name}".replace("-", "_").replace("/", "_")
+    _DynamicTool.__qualname__ = _DynamicTool.__name__
 
     return _DynamicTool()
 
