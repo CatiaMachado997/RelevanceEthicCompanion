@@ -33,3 +33,4 @@ frontend/.env.local.example
 
 # Git worktrees
 .worktrees/
+.superpowers/
