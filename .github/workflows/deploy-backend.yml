@@ -1,0 +1,110 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy-backend.yml'
+
+permissions:
+  contents: read
+  id-token: write   # Required for Workload Identity Federation
+
+jobs:
+  test:
+    name: Backend Tests (pre-deploy gate)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run full test suite
+        run: pytest tests/ -v --tb=short
+        env:
+          DATABASE_URL: "postgresql://test:test@localhost:5432/test"
+          POSTGRES_SERVER: "localhost"
+          POSTGRES_PORT: "5432"
+          POSTGRES_DB: "test"
+          POSTGRES_USER: "test"
+          POSTGRES_PASSWORD: "test"
+          GROQ_API_KEY: "test-key"
+          GEMINI_API_KEY: "test-key"
+          TAVILY_API_KEY: "test-key"
+          SECRET_KEY: "ci-test-secret-key-must-be-32-chars-minimum-x"
+          ALGORITHM: "HS256"
+          ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+          GOOGLE_CLOUD_PROJECT: "test-project"
+          ENVIRONMENT: "test"
+          SUPABASE_URL: "https://test.supabase.co"
+          WEAVIATE_URL: "http://localhost:8080"
+
+  deploy:
+    name: Build → Migrate → Deploy to Cloud Run
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SA_EMAIL }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ secrets.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push Docker image
+        env:
+          IMAGE: ${{ secrets.ARTIFACT_REGISTRY_REPO }}/backend:${{ github.sha }}
+        run: |
+          docker build -t $IMAGE ./backend
+          docker push $IMAGE
+          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+
+      - name: Run database migrations
+        working-directory: backend
+        run: python -m scripts.run_migrations
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          ENVIRONMENT: "production"
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GCP_PROJECT }}
+
+      - name: Deploy new revision (no traffic)
+        run: |
+          gcloud run deploy ${{ secrets.CLOUD_RUN_SERVICE }} \
+            --image=${{ env.IMAGE }} \
+            --region=${{ secrets.GCP_REGION }} \
+            --project=${{ secrets.GCP_PROJECT }} \
+            --no-traffic \
+            --quiet
+
+      - name: Shift traffic to new revision
+        run: |
+          gcloud run services update-traffic ${{ secrets.CLOUD_RUN_SERVICE }} \
+            --to-latest \
+            --region=${{ secrets.GCP_REGION }} \
+            --project=${{ secrets.GCP_PROJECT }} \
+            --quiet
+
+      - name: Print deployed URL
+        run: |
+          gcloud run services describe ${{ secrets.CLOUD_RUN_SERVICE }} \
+            --region=${{ secrets.GCP_REGION }} \
+            --project=${{ secrets.GCP_PROJECT }} \
+            --format="value(status.url)"
