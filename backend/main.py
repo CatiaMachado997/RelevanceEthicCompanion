@@ -208,6 +208,9 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+from utils.errors import register_error_handlers
+register_error_handlers(app)
+
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
