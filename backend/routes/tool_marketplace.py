@@ -334,17 +334,9 @@ async def disconnect_mcp(
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 def _encrypt_credentials(credentials: dict) -> str:
-    """Encrypt credentials before storage.
-
-    TODO: Replace with proper encryption (e.g. Fernet symmetric encryption)
-    once an encryption utility is available in utils/. Currently serialises
-    to JSON — credentials are NOT encrypted at rest. Do not ship to production
-    without a real encryption layer.
-    """
-    logger.warning(
-        "Credentials stored without encryption — implement encrypt_token() in utils/"
-    )
-    return json.dumps(credentials)
+    """Encrypt credentials with Fernet before storage."""
+    from utils.encryption import encrypt_credentials
+    return encrypt_credentials(credentials)
 
 
 def _store_connection(

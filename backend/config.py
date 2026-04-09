@@ -58,6 +58,9 @@ class Settings(BaseSettings):
 
     # JWT / Authentication
     SECRET_KEY: str
+    # Fernet key for credential encryption.
+    # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    ENCRYPTION_KEY: str = ""
     ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
 
