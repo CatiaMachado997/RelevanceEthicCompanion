@@ -6,13 +6,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // Check for our HttpOnly session cookie (set by POST /api/auth/session)
-  const cookieHeader = request.headers.get('cookie') ?? ''
-  const hasSessionCookie = cookieHeader
-    .split(';')
-    .some(c => c.trim().startsWith('ec_session='))
-
-  if (!hasSessionCookie) {
+  // Use Next.js cookies API for robust cookie parsing
+  const sessionCookie = request.cookies.get('ec_session')
+  if (!sessionCookie?.value) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
