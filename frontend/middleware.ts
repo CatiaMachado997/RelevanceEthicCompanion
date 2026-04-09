@@ -1,23 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function middleware(request: NextRequest) {
-  // Skip auth in development
-  if (process.env.NEXT_PUBLIC_ENVIRONMENT === 'development') {
-    return NextResponse.next()
-  }
-
   // Only protect /dashboard routes
   if (!request.nextUrl.pathname.startsWith('/dashboard')) {
     return NextResponse.next()
   }
 
-  // Check for Supabase session cookie (sb-*-auth-token)
+  // Check for our HttpOnly session cookie (set by POST /api/auth/session)
   const cookieHeader = request.headers.get('cookie') ?? ''
-  const hasAuthCookie = cookieHeader
+  const hasSessionCookie = cookieHeader
     .split(';')
-    .some(c => c.trim().startsWith('sb-') && c.includes('auth-token'))
+    .some(c => c.trim().startsWith('ec_session='))
 
-  if (!hasAuthCookie) {
+  if (!hasSessionCookie) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
