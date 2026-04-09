@@ -1,4 +1,4 @@
-# Build stage — install dependencies
+# Build stage — create virtualenv and install dependencies
 FROM python:3.11-slim AS builder
 
 WORKDIR /app
@@ -9,7 +9,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+RUN python -m venv /opt/venv && \
+    /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
 
 
 # Runtime stage — lean final image
@@ -17,14 +18,18 @@ FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
-# Copy installed packages from builder
-COPY --from=builder /root/.local /root/.local
+# Create non-root user before copying files
+RUN adduser --disabled-password --gecos '' appuser
 
-# Copy application source
-COPY . .
+# Copy virtualenv from builder
+COPY --from=builder /opt/venv /opt/venv
 
-# Ensure scripts in .local are in PATH
-ENV PATH=/root/.local/bin:$PATH
+# Copy application source with correct ownership
+COPY --chown=appuser:appuser . .
+
+# Add venv to PATH and switch to non-root user
+ENV PATH="/opt/venv/bin:$PATH"
+USER appuser
 
 EXPOSE 8000
 

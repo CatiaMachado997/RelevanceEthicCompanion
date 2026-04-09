@@ -94,6 +94,28 @@ jobs:
             --no-traffic \
             --quiet
 
+      - name: Verify new revision is healthy
+        run: |
+          NEW_REVISION=$(gcloud run services describe ${{ secrets.CLOUD_RUN_SERVICE }} \
+            --region=${{ secrets.GCP_REGION }} \
+            --project=${{ secrets.GCP_PROJECT }} \
+            --format="value(status.latestCreatedRevisionName)")
+          echo "Checking health of revision: $NEW_REVISION"
+          for i in $(seq 1 12); do
+            STATUS=$(gcloud run revisions describe "$NEW_REVISION" \
+              --region=${{ secrets.GCP_REGION }} \
+              --project=${{ secrets.GCP_PROJECT }} \
+              --format="value(status.conditions[?type=='Ready'].status)")
+            echo "Attempt $i/12: Ready=$STATUS"
+            if [ "$STATUS" = "True" ]; then
+              echo "Revision is healthy — proceeding with traffic shift"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "ERROR: Revision failed to become healthy within 2 minutes"
+          exit 1
+
       - name: Shift traffic to new revision
         run: |
           gcloud run services update-traffic ${{ secrets.CLOUD_RUN_SERVICE }} \

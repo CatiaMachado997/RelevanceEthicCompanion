@@ -55,5 +55,9 @@ def test_session_cookie_no_secure_in_dev(client_with_insecure_cookie):
         json={"access_token": "fake-token", "remember_me": False},
     )
     set_cookie = resp.headers.get("set-cookie", "")
-    # FastAPI omits "secure" attribute when secure=False
     assert "samesite=strict" in set_cookie.lower()
+    # Verify Secure flag is absent when COOKIE_SECURE=False
+    # FastAPI renders it as a standalone attribute (no "="), so check
+    # that no part of the cookie string is exactly "secure"
+    parts = [p.strip().lower() for p in set_cookie.split(";")]
+    assert "secure" not in parts

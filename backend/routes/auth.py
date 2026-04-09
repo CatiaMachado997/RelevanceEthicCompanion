@@ -5,14 +5,13 @@ Minimal auth routes for Supabase JWT identity introspection.
 import logging
 
 from fastapi import APIRouter, Depends, Request, Response
-from jose import jwt as jose_jwt
 from pydantic import BaseModel
 
 from config import settings
 from utils.auth_audit import log_auth_event
 from utils.db import get_db_connection
 from utils.rate_limit import limiter
-from utils.supabase_auth import UserPrincipal, get_current_user
+from utils.supabase_auth import UserPrincipal, _decode_supabase_token, get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -25,9 +24,14 @@ class SessionCreate(BaseModel):
 
 
 def _provision_user(access_token: str) -> None:
-    """Upsert the Supabase user into the local users table (idempotent)."""
+    """Upsert the Supabase user into the local users table (idempotent).
+
+    Uses verified JWT claims to prevent unauthenticated user-row injection.
+    If token verification fails for any reason, provisioning is skipped
+    but login continues unblocked.
+    """
     try:
-        claims = jose_jwt.get_unverified_claims(access_token)
+        claims = _decode_supabase_token(access_token)
         user_id = claims.get("sub")
         email = claims.get("email", "")
         if not user_id:
@@ -76,7 +80,7 @@ async def create_session(request: Request, body: SessionCreate, response: Respon
         max_age=max_age,
     )
     log_auth_event(
-        event="session_exchanged",
+        event="login_success",
         ip_address=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
     )

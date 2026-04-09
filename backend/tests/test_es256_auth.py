@@ -84,8 +84,11 @@ def test_rs256_token_rejected(ec_keypair, monkeypatch):
         algorithm="RS256",
     )
 
-    with pytest.raises(Exception):
+    from jose import JWTError
+    with pytest.raises((JWTError, Exception)) as exc_info:
         auth_mod._decode_supabase_token(rs256_token)
+    # Must be a JWT-related error, not a programming error
+    assert isinstance(exc_info.value, (JWTError, ValueError))
 
 
 def test_dev_fallback_disabled_when_enforcement_enabled(monkeypatch):
