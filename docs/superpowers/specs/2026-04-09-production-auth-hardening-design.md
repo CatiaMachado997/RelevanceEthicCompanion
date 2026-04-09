@@ -239,6 +239,176 @@ NOTION_CLIENT_ID / NOTION_CLIENT_SECRET
 
 ---
 
+## Section 7 — CI/CD Pipeline
+
+### Current State
+
+A CI workflow (`.github/workflows/ci.yml`) already exists covering backend tests, frontend build, and ESL coverage gates. Three problems:
+
+1. `continue-on-error: true` on black/flake8/mypy/lint/type-check — quality failures don't block merges
+2. No Dockerfile — backend cannot be deployed to Cloud Run
+3. No deployment workflow — merging to `main` deploys nothing
+
+### Branch Strategy
+
+**Trunk-based development.** `main` is always deployable. All work happens on short-lived feature branches (1–3 days max), merged to `main` via PR. No `develop` branch. Feature flags hide incomplete work. The existing `ci.yml` references `develop` — remove it.
+
+### What We Add
+
+#### 1. Fix Existing CI — Remove `continue-on-error`
+
+Remove `continue-on-error: true` from all quality check steps in `.github/workflows/ci.yml`. Black, Flake8, MyPy, ESLint, and TypeScript failures must block the PR. Tests already block correctly.
+
+Also add missing env vars that tests need:
+```yaml
+env:
+  DATABASE_URL: "postgresql://test:test@localhost:5432/test"
+  GROQ_API_KEY: "test-key"
+  GEMINI_API_KEY: "test-key"
+  TAVILY_API_KEY: "test-key"
+  SECRET_KEY: "test-secret-key-for-ci-only"
+  ALGORITHM: "HS256"
+  ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+  ENCRYPTION_KEY: "dGVzdC1lbmNyeXB0aW9uLWtleS1mb3ItY2ktb25seQ=="
+```
+
+#### 2. Dockerfile (backend)
+
+`backend/Dockerfile` — multi-stage build:
+
+```dockerfile
+FROM python:3.11-slim AS base
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+FROM base AS runtime
+COPY . .
+EXPOSE 8000
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+`.dockerignore` excludes `venv/`, `__pycache__/`, `.env`, `tests/`.
+
+#### 3. Migration Runner Script
+
+Since the project uses raw SQL files in `backend/migrations/`, a simple Python runner tracks which migrations have been applied via a `schema_migrations` table and runs any pending files in alphabetical order.
+
+`backend/scripts/run_migrations.py`:
+- Connects to `DATABASE_URL` from env
+- Creates `schema_migrations(filename TEXT PRIMARY KEY, applied_at TIMESTAMPTZ)` if not exists
+- Scans `backend/migrations/*.sql`, runs any not yet in `schema_migrations`, records each on success
+- Exits non-zero on any failure (stops the deploy pipeline)
+
+#### 4. Backend CD Workflow (`.github/workflows/deploy-backend.yml`)
+
+Triggers on push to `main` when `backend/**` files change.
+
+```
+[test job]  →  run full pytest suite
+[deploy job, needs: test]
+  1. Authenticate to GCP via Workload Identity Federation (OIDC — no JSON key)
+  2. Build Docker image tagged with $GITHUB_SHA
+  3. Push to Google Artifact Registry
+  4. Run migration script against prod DATABASE_URL (from GCP Secret Manager)
+  5. Deploy new revision to Cloud Run with --no-traffic
+  6. Shift traffic to new revision
+  7. Post success/failure to PR comment
+```
+
+**Key safety rule:** Migrations (step 4) run before traffic shifts (step 6). The old code stays live during the migration — all migrations must be backward-compatible with the current running version.
+
+#### 5. Frontend CD
+
+Vercel's native Git integration handles all frontend deploys automatically on merge to `main`. No additional workflow file needed.
+
+**Gate:** In Vercel project settings → Git → Required Checks, add the `Frontend Tests` GitHub Actions check. Vercel will not promote to production until that check is green.
+
+#### 6. GCP Workload Identity Federation (one-time manual setup)
+
+Run once to eliminate JSON service account keys from GitHub Secrets:
+
+```bash
+# Create WIF pool
+gcloud iam workload-identity-pools create github-pool \
+  --location=global
+
+# Create OIDC provider
+gcloud iam workload-identity-pools providers create-oidc github-provider \
+  --location=global \
+  --workload-identity-pool=github-pool \
+  --issuer-uri="https://token.actions.githubusercontent.com" \
+  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository"
+
+# Bind to deployer service account
+gcloud iam service-accounts add-iam-policy-binding \
+  deployer@PROJECT.iam.gserviceaccount.com \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/projects/NUMBER/locations/global/workloadIdentityPools/github-pool/attribute.repository/CatiaMachado997/RelevanceEthicCompanion"
+```
+
+Two GitHub repository secrets needed (not app secrets — just WIF plumbing):
+- `WIF_PROVIDER` — the full WIF provider resource name
+- `WIF_SA_EMAIL` — deployer service account email
+
+All app secrets (`GEMINI_API_KEY`, `COMPOSIO_API_KEY`, etc.) come from GCP Secret Manager, never from GitHub Secrets.
+
+### Files Created / Modified
+
+| File | Change |
+|------|--------|
+| `.github/workflows/ci.yml` | Remove `continue-on-error`, add missing env vars, remove `develop` branch trigger |
+| `.github/workflows/deploy-backend.yml` | New — full CD pipeline for Cloud Run |
+| `backend/Dockerfile` | New — multi-stage Python image |
+| `backend/.dockerignore` | New — exclude venv, tests, .env |
+| `backend/scripts/run_migrations.py` | New — SQL migration runner |
+
+---
+
+## Testing Plan
+
+| Test | How |
+|------|-----|
+| ES256 JWT validates correctly | Unit test: generate ES256 token with test key, assert `get_current_user_id` returns correct UUID |
+| RS256 token rejected | Unit test: generate RS256 token, assert `AuthError` raised |
+| Dev bypass completely removed | Integration test: with `AUTH_ENFORCEMENT_ENABLED=True`, unauthenticated request to write route returns 401 |
+| Rate limit triggers | Integration test: send 11 auth requests in a row, assert 12th returns 429 |
+| Auth audit events written | Integration test: login → assert row in `auth_audit_log` with `event='login_success'` |
+| Secure cookie set in prod mode | Unit test: with `COOKIE_SECURE=True`, assert `Set-Cookie` header has `Secure; SameSite=Strict` |
+| Cross-user isolation | Integration test: user A logs in, user B logs in, assert user A cannot read user B's data |
+| Docker image builds cleanly | CI: `docker build` step in deploy workflow must pass |
+| Migration runner idempotent | Unit test: run migrations twice, assert no duplicate rows in `schema_migrations`, no errors |
+| CI blocks on quality failure | Verify: introduce a black formatting error in a test branch, confirm PR check fails |
+
+---
+
+## Files Created / Modified (Full List)
+
+| File | Change |
+|------|--------|
+| `backend/utils/supabase_auth.py` | `algorithms=["ES256"]`, log auth events |
+| `backend/utils/auth_audit.py` | New — auth event logger |
+| `backend/utils/rate_limit.py` | New — slowapi limiter config |
+| `backend/routes/auth.py` | Add `COOKIE_SECURE`, `SameSite=Strict`, log login/logout |
+| `backend/config.py` | Add `COOKIE_SECURE: bool`, `load_secrets_from_gcp()` |
+| `backend/main.py` | Register rate limiter + exception handler |
+| `backend/requirements.txt` | Add `slowapi`, `google-cloud-secret-manager` |
+| `backend/migrations/006_auth_audit_log.sql` | New — auth_audit_log table |
+| `backend/Dockerfile` | New — multi-stage Python image |
+| `backend/.dockerignore` | New — exclude venv, tests, .env |
+| `backend/scripts/run_migrations.py` | New — SQL migration runner |
+| `frontend/middleware.ts` | Check `ec_session` cookie, remove dev bypass |
+| `frontend/app/dashboard/layout.tsx` | Remove `NEXT_PUBLIC_ENVIRONMENT` guard |
+| `frontend/.env.local` | Remove `NEXT_PUBLIC_ENVIRONMENT=development` |
+| `backend/.env` | `AUTH_ENFORCEMENT_ENABLED=True`, `COOKIE_SECURE=False` (dev) |
+| `.github/workflows/ci.yml` | Remove `continue-on-error`, add missing env vars, remove `develop` trigger |
+| `.github/workflows/deploy-backend.yml` | New — full CD pipeline for Cloud Run |
+| GCP Secret Manager | All secrets migrated (manual, one-time) |
+| GCP WIF | Pool + provider + IAM binding (manual, one-time) |
+| Composio Auth Config | OAuth apps registered per provider (manual, one-time) |
+
+---
+
 ## Non-Goals (explicitly out of scope)
 
 - MFA / two-factor auth (post-beta)
@@ -246,3 +416,4 @@ NOTION_CLIENT_ID / NOTION_CLIENT_SECRET
 - GDPR data deletion flows (post-beta)
 - Redis-backed rate limiting (not needed until multi-instance)
 - Penetration testing (post-beta)
+- Staging environment (post-beta — trunk-based + required checks provides enough safety for beta)
