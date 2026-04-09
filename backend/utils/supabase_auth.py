@@ -90,7 +90,7 @@ def _decode_supabase_token(token: str) -> Dict[str, Any]:
     claims = jwt.decode(
         token,
         key,
-        algorithms=["RS256"],
+        algorithms=["ES256"],
         audience=settings.SUPABASE_JWT_AUDIENCE,
         issuer=_build_issuer(),
     )
