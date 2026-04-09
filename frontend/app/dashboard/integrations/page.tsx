@@ -183,8 +183,8 @@ function IntegrationsContent() {
       if (!mountedRef.current) return
       setCatalogue(cat)
       setConnectedTools(conn)
-    } catch {
-      // catalogue load failure is non-fatal
+    } catch (err) {
+      console.error('[Marketplace] loadMarketplace failed:', err)
     }
   }
 
@@ -275,10 +275,13 @@ function IntegrationsContent() {
 
   async function handleConnectTool(toolId: string) {
     try {
-      const url = await toolMarketplaceApi.getAuthUrl(toolId)
+      const url = await toolMarketplaceApi.connectComposio(toolId)
       if (url) window.location.href = url
     } catch (e) {
-      console.error('Failed to get auth URL', e)
+      console.error('[Marketplace] Failed to start Composio connect', e)
+      const label = catalogue.find((t) => t.id === toolId)?.name ?? toolId
+      setErrorFlash(`Could not start ${label} connection. Check that the backend is running.`)
+      setTimeout(() => setErrorFlash(null), 6000)
     }
   }
 
@@ -535,30 +538,45 @@ function IntegrationsContent() {
       )}
 
       {/* Advanced / MCP */}
-      <div className="mt-6 border-t border-gray-800 pt-4">
+      <div className="mt-6 pt-4" style={{ borderTop: '1px solid #e4dee7' }}>
         <button
           onClick={() => setShowAdvanced((v) => !v)}
-          className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+          className="text-xs transition-colors"
+          style={{ color: '#9e9e9e' }}
         >
-          {showAdvanced ? 'Hide advanced options' : 'Show advanced options'}
+          {showAdvanced ? 'Hide advanced options' : 'Advanced — connect a custom MCP server'}
         </button>
         {showAdvanced && (
-          <div className="mt-3 rounded-lg border border-dashed border-gray-700 p-4">
-            <p className="text-sm text-gray-400 mb-2">Connect any MCP server</p>
+          <div
+            className="mt-3 rounded-xl p-4"
+            style={{ border: '1px dashed #d4cdd8', background: '#faf8fb' }}
+          >
+            <p className="text-sm font-medium mb-1" style={{ color: '#1c1520' }}>
+              Custom MCP Server
+            </p>
+            <p className="text-xs mb-3" style={{ color: '#695e6e' }}>
+              Connect any Model Context Protocol server via its SSE endpoint URL.
+            </p>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={mcpUrl}
                 onChange={(e) => setMcpUrl(e.target.value)}
                 placeholder="https://my-mcp-server.com/sse"
-                className="flex-1 rounded bg-gray-800 px-3 py-2 text-sm text-white border border-gray-700 focus:outline-none focus:border-indigo-500"
+                className="flex-1 rounded-lg px-3 py-2 text-sm focus:outline-none"
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #d4cdd8',
+                  color: '#1c1520',
+                }}
               />
               <button
                 onClick={handleConnectMcp}
                 disabled={mcpConnecting || !mcpUrl.trim()}
-                className="rounded bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-500 disabled:opacity-50"
+                className="rounded-xl px-4 py-2 text-sm font-semibold transition-all hover:opacity-90 disabled:opacity-40"
+                style={{ background: '#4A7C59', color: '#ffffff' }}
               >
-                {mcpConnecting ? '...' : 'Connect'}
+                {mcpConnecting ? '…' : 'Connect'}
               </button>
             </div>
           </div>

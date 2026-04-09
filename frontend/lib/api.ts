@@ -1096,9 +1096,12 @@ export const toolMarketplaceApi = {
   getConnected: (): Promise<ConnectedTool[]> =>
     apiRequest<ConnectedTool[]>('/api/tools/connected'),
 
-  getAuthUrl: async (toolId: string): Promise<string> => {
-    const data = await apiRequest<{ auth_url: string }>(`/api/tools/${toolId}/oauth/authorize`)
-    return data.auth_url
+  connectComposio: async (toolkit: string): Promise<string> => {
+    const data = await apiRequest<{ connect_url: string }>('/api/tools/composio/connect', {
+      method: 'POST',
+      body: JSON.stringify({ toolkit }),
+    })
+    return data.connect_url
   },
 
   disconnect: (toolId: string): Promise<void> =>
