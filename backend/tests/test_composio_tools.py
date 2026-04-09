@@ -74,10 +74,7 @@ class TestGetComposioToolsForUser:
                     get_composio_tools_for_user("user-xyz", {"notion"})
                 )
 
-        call_kwargs = mock_client.create.call_args
-        toolkits_passed = call_kwargs.kwargs.get("toolkits") or call_kwargs.args[0] if call_kwargs.args else []
-        if call_kwargs.kwargs.get("toolkits") is not None:
-            toolkits_passed = call_kwargs.kwargs["toolkits"]
+        toolkits_passed = mock_client.create.call_args.kwargs["toolkits"]
         assert "github" not in toolkits_passed
         assert "notion" in toolkits_passed
 

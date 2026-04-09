@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from typing import Any
 
 from langchain_core.tools import BaseTool
@@ -84,19 +85,21 @@ _TOOLKIT_ACTIONS: dict[str, list[str]] = {
 # ---------------------------------------------------------------------------
 
 _composio_client: Any = None
+_composio_lock = threading.Lock()
 
 
 def _get_composio_client() -> Any:
     """Lazy singleton — created once per process when COMPOSIO_API_KEY is set."""
     global _composio_client
     if _composio_client is None:
-        from composio import Composio
-        from composio_langchain import LangchainProvider
-
-        _composio_client = Composio(
-            provider=LangchainProvider(),
-            api_key=settings.COMPOSIO_API_KEY,
-        )
+        with _composio_lock:
+            if _composio_client is None:  # double-checked locking
+                from composio import Composio
+                from composio_langchain import LangchainProvider
+                _composio_client = Composio(
+                    provider=LangchainProvider(),
+                    api_key=settings.COMPOSIO_API_KEY,
+                )
     return _composio_client
 
 
@@ -163,7 +166,10 @@ async def get_composio_tools_for_user(
         )
 
         # 6. Retrieve the LangChain StructuredTool list (also synchronous).
-        raw_tools: list[Any] = await asyncio.to_thread(session.tools)
+        raw_tools: list[Any] = await asyncio.to_thread(session.tools)  # session.tools() called in thread
+        if not raw_tools:
+            logger.debug("Composio: session.tools() returned empty for user %s", user_id)
+            return []
 
         # 7 & 8. Tag each tool with ESL metadata.
         tagged: list[BaseTool] = []
@@ -179,7 +185,7 @@ async def get_composio_tools_for_user(
                 tool_id_val, action_name_val, risk_level_val = meta
             else:
                 # 9. Fallback for unknown action slugs.
-                logger.debug(
+                logger.warning(
                     "No _ACTION_METADATA entry for action %r — using fallback.", tool.name
                 )
                 tool_id_val = "composio"
