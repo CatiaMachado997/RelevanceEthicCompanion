@@ -1,7 +1,5 @@
 """Tests that supabase_auth correctly requires ES256 tokens."""
-import json
 import time
-from unittest.mock import patch
 
 import pytest
 from jose import jwk, jwt
@@ -90,8 +88,8 @@ def test_rs256_token_rejected(ec_keypair, monkeypatch):
         auth_mod._decode_supabase_token(rs256_token)
 
 
-def test_unauthenticated_request_returns_401_when_enforcement_enabled(monkeypatch):
-    """With AUTH_ENFORCEMENT_ENABLED=True, missing token → 401."""
+def test_dev_fallback_disabled_when_enforcement_enabled(monkeypatch):
+    """With AUTH_ENFORCEMENT_ENABLED=True, _is_dev_fallback_enabled() returns False."""
     import utils.supabase_auth as auth_mod
     monkeypatch.setattr(auth_mod.settings, "AUTH_ENFORCEMENT_ENABLED", True)
     monkeypatch.setattr(auth_mod.settings, "ENVIRONMENT", "production")
