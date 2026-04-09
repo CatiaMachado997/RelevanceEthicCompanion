@@ -3,9 +3,55 @@ Configuration Management
 Loads environment variables and application settings
 """
 
+import os
+import logging as _logging
+
 from pydantic import computed_field, ConfigDict
 from pydantic_settings import BaseSettings
 from typing import List, Optional
+
+_secrets_logger = _logging.getLogger(__name__)
+
+# Ordered list of (GCP secret name → env var name) pairs.
+_GCP_SECRETS: list[tuple[str, str]] = [
+    ("ethic-companion-secret-key",          "SECRET_KEY"),
+    ("ethic-companion-encryption-key",       "ENCRYPTION_KEY"),
+    ("ethic-companion-gemini-api-key",       "GEMINI_API_KEY"),
+    ("ethic-companion-groq-api-key",         "GROQ_API_KEY"),
+    ("ethic-companion-tavily-api-key",       "TAVILY_API_KEY"),
+    ("ethic-companion-composio-api-key",     "COMPOSIO_API_KEY"),
+    ("ethic-companion-google-oauth-secret",  "GOOGLE_OAUTH_CLIENT_SECRET"),
+    ("ethic-companion-slack-client-secret",  "SLACK_CLIENT_SECRET"),
+    ("ethic-companion-github-client-secret", "GITHUB_CLIENT_SECRET"),
+    ("ethic-companion-notion-client-secret", "NOTION_CLIENT_SECRET"),
+]
+
+
+def load_secrets_from_gcp(project_id: str, client=None) -> None:
+    """
+    Fetch secrets from GCP Secret Manager and set them as environment variables.
+    Called once at startup when ENVIRONMENT=production.
+    Missing secrets log a warning but do not crash.
+    Args:
+        project_id: GCP project ID.
+        client: optional pre-built SecretManagerServiceClient (for testing).
+    """
+    if not project_id:
+        return
+    if client is None:
+        from google.cloud import secretmanager
+        client = secretmanager.SecretManagerServiceClient()
+    for secret_name, env_var in _GCP_SECRETS:
+        resource = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
+        try:
+            response = client.access_secret_version(name=resource)
+            value = response.payload.data.decode("utf-8").strip()
+            os.environ[env_var] = value
+            _secrets_logger.debug("Loaded secret %s → %s", secret_name, env_var)
+        except Exception as exc:
+            _secrets_logger.warning(
+                "Could not load secret '%s' from GCP Secret Manager: %s", secret_name, exc
+            )
 
 
 class Settings(BaseSettings):
@@ -102,5 +148,13 @@ class Settings(BaseSettings):
 
     model_config = ConfigDict(env_file=".env", case_sensitive=True)
 
+
+# Load GCP secrets before instantiating Settings so pydantic picks them up from env.
+if os.environ.get("ENVIRONMENT") == "production":
+    _project = os.environ.get("GOOGLE_CLOUD_PROJECT", "")
+    if _project:
+        load_secrets_from_gcp(project_id=_project)
+    else:
+        _secrets_logger.warning("GOOGLE_CLOUD_PROJECT not set; skipping GCP secret loading")
 
 settings = Settings()
