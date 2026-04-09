@@ -13,6 +13,14 @@ from utils.db import get_db_connection
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 from esl.tool_gate import ESLToolGate
 from config import settings
+from services.composio_tools import TOOL_ID_TO_COMPOSIO_TOOLKIT
+
+try:
+    from composio import Composio
+    from composio_langchain import LangchainProvider
+except ImportError:  # composio not installed in this environment
+    Composio = None  # type: ignore[assignment,misc]
+    LangchainProvider = None  # type: ignore[assignment,misc]
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/tools", tags=["tool-marketplace"])
@@ -32,6 +40,10 @@ class MCPConnectRequest(BaseModel):
 
 class ConnectRequest(BaseModel):
     api_key: Optional[str] = None  # for auth_type='apikey' tools
+
+
+class ComposioConnectRequest(BaseModel):
+    toolkit: str  # our tool_id: "github" | "notion" | "slack" | "gmail_write" | "google_calendar_write"
 
 
 # ─── Catalogue ────────────────────────────────────────────────────────────────
@@ -71,6 +83,82 @@ async def get_connected_tools(
             )
             rows = cur.fetchall()
     return rows
+
+
+# ─── Composio connect flow ────────────────────────────────────────────────────
+# NOTE: These routes must be registered BEFORE /{tool_id}/connect and
+# /{tool_id}/oauth/callback so that FastAPI's path matching prefers the
+# exact literal paths over the parameterised ones.
+
+@router.post("/composio/connect")
+async def composio_connect(
+    body: ComposioConnectRequest,
+    user_id: str = Depends(get_current_user_id),
+) -> dict:
+    """Initiate Composio OAuth for a catalogue tool.
+
+    Returns a Composio-hosted OAuth URL. Frontend redirects the user there.
+    Composio handles token exchange and redirects to /api/tools/composio/callback.
+    """
+    if not settings.COMPOSIO_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="Composio integration not configured. Set COMPOSIO_API_KEY in .env.",
+        )
+
+    composio_toolkit_slug = TOOL_ID_TO_COMPOSIO_TOOLKIT.get(body.toolkit)
+    if not composio_toolkit_slug:
+        raise HTTPException(status_code=404, detail=f"Unknown toolkit: {body.toolkit}")
+
+    state = _build_oauth_state(user_id=user_id, tool_id=f"composio_{body.toolkit}")
+    callback_url = (
+        f"{settings.BACKEND_URL}/api/tools/composio/callback"
+        f"?toolkit={quote(body.toolkit, safe='')}&state={quote(state, safe='')}"
+    )
+
+    try:
+        client = Composio(provider=LangchainProvider(), api_key=settings.COMPOSIO_API_KEY)
+        session = client.create(user_id=user_id, manage_connections=False)
+        req = session.authorize(composio_toolkit_slug, callback_url=callback_url)
+        return {"connect_url": req.redirect_url}
+    except Exception as exc:
+        logger.error(f"Composio connect failed for {body.toolkit}: {exc}", exc_info=True)
+        raise HTTPException(status_code=502, detail=f"Composio error: {exc}")
+
+
+@router.get("/composio/callback")
+async def composio_callback(
+    toolkit: str,
+    state: str,
+    status: Optional[str] = None,
+    connected_account_id: Optional[str] = None,
+) -> Response:
+    """Receive redirect from Composio after user completes OAuth.
+
+    On success: record connection in user_tool_connections, redirect to frontend.
+    On failure: redirect to frontend with error param.
+    """
+    if status != "success":
+        _err = f"{toolkit}_composio_failed"
+        return RedirectResponse(
+            url=f"{settings.FRONTEND_URL}/dashboard/integrations?error={quote(_err, safe='')}",
+            status_code=302,
+        )
+    try:
+        user_id = _extract_user_from_state(state, f"composio_{toolkit}")
+        credentials = json.dumps({"composio_account_id": connected_account_id or ""})
+        _store_connection(user_id=user_id, tool_id=toolkit, credentials=credentials)
+        return RedirectResponse(
+            url=f"{settings.FRONTEND_URL}/dashboard/integrations?connected={quote(toolkit, safe='')}",
+            status_code=302,
+        )
+    except Exception as exc:
+        logger.error(f"Composio callback failed for {toolkit}: {exc}", exc_info=True)
+        _err = f"{toolkit}_composio_failed"
+        return RedirectResponse(
+            url=f"{settings.FRONTEND_URL}/dashboard/integrations?error={quote(_err, safe='')}",
+            status_code=302,
+        )
 
 
 # ─── Connect (initiate OAuth or save API key) ─────────────────────────────────
@@ -113,18 +201,6 @@ async def connect_tool(
 
 
 # ─── OAuth connect flow ───────────────────────────────────────────────────────
-
-@router.get("/{tool_id}/oauth/authorize")
-async def authorize_tool(
-    tool_id: str,
-    user_id: str = Depends(get_current_user_id),
-) -> dict:
-    """Generate OAuth authorization URL for a catalogue tool."""
-    connector = _get_connector(tool_id)
-    state = _build_oauth_state(user_id=user_id, tool_id=tool_id)
-    auth_url = connector.get_authorization_url(user_id=user_id, state=state)
-    return {"auth_url": auth_url}
-
 
 @router.get("/{tool_id}/oauth/callback")
 async def oauth_callback(
