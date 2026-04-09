@@ -162,6 +162,16 @@ async def get_current_user(request: Request) -> UserPrincipal:
         raise
     except Exception as exc:
         logger.warning("Token validation failed: %s", exc)
+        try:
+            from utils.auth_audit import log_auth_event
+            log_auth_event(
+                event="token_invalid",
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get("user-agent"),
+                detail={"error": str(exc)},
+            )
+        except Exception:
+            pass
         raise _auth_error("Invalid or expired token", code="invalid_token")
 
     user_id = claims.get("sub")
