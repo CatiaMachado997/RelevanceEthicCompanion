@@ -39,6 +39,9 @@ async def lifespan(app: FastAPI):
     print("⚖️  Ethical Safeguard Layer: ACTIVE")
     print("🎯 Mission: Trust over Engagement")
 
+    from utils.db import open_pool, close_pool
+    open_pool()
+
     # Auto-migrate: ensure extra columns exist in user_settings
     try:
         from utils.db import get_db_connection
@@ -194,6 +197,8 @@ async def lifespan(app: FastAPI):
     if _scheduler:
         _scheduler.stop()
         print("✅ Background scheduler stopped")
+
+    close_pool()
 
 
 app = FastAPI(
