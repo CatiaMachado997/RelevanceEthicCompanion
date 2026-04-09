@@ -44,18 +44,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (pathname.startsWith('/dashboard/chat/')) return { title: 'Chat', subtitle: 'Message your companion' }
     return { title: 'Ethic Companion' }
   })()
-  const isDev = process.env.NEXT_PUBLIC_ENVIRONMENT === 'development'
-
   useEffect(() => {
-    if (!isDev && !loading && !isAuthenticated) {
+    if (!loading && !isAuthenticated) {
       if (typeof window !== 'undefined') {
         localStorage.setItem('ec_lastRoute', window.location.pathname)
       }
       router.push('/login')
     }
-  }, [loading, isAuthenticated, router, isDev])
+  }, [loading, isAuthenticated, router])
 
-  if (!isDev && loading) return null
+  if (loading) return null
 
   // Close mobile sidebar on route change
   useEffect(() => { setSidebarOpen(false) }, [pathname])
