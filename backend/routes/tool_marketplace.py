@@ -383,15 +383,6 @@ def _extract_user_from_state(state: Optional[str], tool_id: str) -> str:
 
 def _get_connector(tool_id: str):
     """Return the connector instance for a catalogue tool."""
-    if tool_id == "notion":
-        from services.connectors.notion import NotionConnector
-        return NotionConnector()
-    if tool_id == "github":
-        from services.connectors.github import GitHubConnector
-        return GitHubConnector()
-    if tool_id == "slack":
-        from services.connectors.slack_write import SlackWriteConnector
-        return SlackWriteConnector()
     if tool_id == "google_calendar_write":
         from services.connectors.google_calendar import GoogleCalendarConnector
         return GoogleCalendarConnector()
