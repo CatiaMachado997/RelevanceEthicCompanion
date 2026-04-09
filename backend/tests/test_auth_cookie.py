@@ -1,6 +1,6 @@
 """Tests that the auth session cookie is set with correct security attributes."""
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 
