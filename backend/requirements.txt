@@ -6,7 +6,7 @@ pydantic-settings>=2.6.0
 
 # Database & Storage
 # psycopg3 for Python 3.13 compatibility
-psycopg[binary]>=3.2.0
+psycopg[binary,pool]>=3.2.0
 pgvector==0.2.4
 
 # Vector DB (V2)
@@ -67,3 +67,6 @@ fastapi-mcp>=0.4.0
 langfuse>=2.0.0
 anthropic>=0.25.0
 mcp
+
+# Tool Marketplace — Composio managed integrations
+composio-langchain==0.11.4

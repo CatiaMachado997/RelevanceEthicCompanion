@@ -74,6 +74,10 @@ class Settings(BaseSettings):
     NOTION_CLIENT_ID: str = ""
     NOTION_CLIENT_SECRET: str = ""
 
+    # Composio — managed tool integrations (replaces per-connector OAuth boilerplate)
+    # Get your key free at https://app.composio.dev/settings (API Keys tab)
+    COMPOSIO_API_KEY: str = ""
+
     # Backend URL for OAuth redirects
     BACKEND_URL: str = "http://localhost:8000"
 
