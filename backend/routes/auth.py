@@ -5,6 +5,7 @@ Minimal auth routes for Supabase JWT identity introspection.
 from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel
 
+from config import settings
 from utils.supabase_auth import UserPrincipal, get_current_user
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
@@ -31,8 +32,8 @@ async def create_session(body: SessionCreate, response: Response):
         key="ec_session",
         value=body.access_token,
         httponly=True,
-        secure=False,    # False for local dev; set True in production via env var
-        samesite="lax",  # lax allows navigation from external links
+        secure=settings.COOKIE_SECURE,
+        samesite="strict",
         max_age=max_age,
     )
     return {"ok": True}
