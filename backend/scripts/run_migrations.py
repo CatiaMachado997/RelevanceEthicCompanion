@@ -37,6 +37,7 @@ def run_migrations(migrations_dir: str | None = None) -> None:
         logger.info("No migration files found in %s", migrations_dir)
         return
 
+    # Ensure the tracking table exists and get already-applied set.
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""
@@ -48,22 +49,26 @@ def run_migrations(migrations_dir: str | None = None) -> None:
             cur.execute("SELECT filename FROM schema_migrations")
             applied = {row[0] for row in cur.fetchall()}
 
-        for filename in sql_files:
-            if filename in applied:
-                logger.info("  skip (already applied): %s", filename)
-                continue
+    # Each migration runs in its own connection so it commits atomically.
+    # If a migration fails, only that migration is rolled back; earlier ones
+    # already committed and will not be re-run.
+    for filename in sql_files:
+        if filename in applied:
+            logger.info("  skip (already applied): %s", filename)
+            continue
 
-            filepath = os.path.join(migrations_dir, filename)
-            sql = Path(filepath).read_text(encoding="utf-8")
+        filepath = os.path.join(migrations_dir, filename)
+        sql = Path(filepath).read_text(encoding="utf-8")
 
-            logger.info("  applying: %s", filename)
+        logger.info("  applying: %s", filename)
+        with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(sql)
                 cur.execute(
                     "INSERT INTO schema_migrations (filename) VALUES (%s)",
                     (filename,),
                 )
-            logger.info("  done: %s", filename)
+        logger.info("  done: %s", filename)
 
     logger.info("Migrations complete.")
 

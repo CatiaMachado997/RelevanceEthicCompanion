@@ -17,6 +17,7 @@ from urllib import request as urlrequest
 
 from fastapi import HTTPException, Request, status
 from jose import jwt
+from jose.exceptions import ExpiredSignatureError
 
 from config import settings
 
@@ -45,7 +46,6 @@ def _is_dev_fallback_enabled() -> bool:
     return (
         settings.ENVIRONMENT == "development"
         and not settings.AUTH_ENFORCEMENT_ENABLED
-        and settings.AUTH_ENFORCE_WRITE_ROUTES
     )
 
 
@@ -160,6 +160,19 @@ async def get_current_user(request: Request) -> UserPrincipal:
         claims = _decode_supabase_token(token)
     except HTTPException:
         raise
+    except ExpiredSignatureError as exc:
+        logger.warning("Token expired: %s", exc)
+        try:
+            from utils.auth_audit import log_auth_event
+            log_auth_event(
+                event="token_expired",
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get("user-agent"),
+                detail={"error": str(exc)},
+            )
+        except Exception:
+            pass
+        raise _auth_error("Token has expired", code="token_expired")
     except Exception as exc:
         logger.warning("Token validation failed: %s", exc)
         try:

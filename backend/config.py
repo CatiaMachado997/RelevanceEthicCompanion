@@ -24,6 +24,8 @@ _GCP_SECRETS: list[tuple[str, str]] = [
     ("ethic-companion-slack-client-secret",  "SLACK_CLIENT_SECRET"),
     ("ethic-companion-github-client-secret", "GITHUB_CLIENT_SECRET"),
     ("ethic-companion-notion-client-secret", "NOTION_CLIENT_SECRET"),
+    # Store as JSON array: ["https://app.example.com"] or comma-separated for pydantic parsing
+    ("ethic-companion-allowed-origins",      "CORS_ORIGINS"),
 ]
 
 
@@ -94,7 +96,7 @@ class Settings(BaseSettings):
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
     CORS_ORIGINS: List[str] = ["http://localhost:3000"]
-    AUTH_ENFORCEMENT_ENABLED: bool = False
+    AUTH_ENFORCEMENT_ENABLED: bool = True   # default secure; set False in local .env for dev
     AUTH_ENFORCE_WRITE_ROUTES: bool = True
     AUTH_ENFORCE_READ_ROUTES: bool = False
 
