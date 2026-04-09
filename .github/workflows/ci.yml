@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
-    branches: [main, develop]
+    branches: [main]
 
 jobs:
   # Backend Tests & Quality Checks
@@ -30,27 +30,36 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install black flake8 mypy pytest-cov
 
       - name: Format check (Black)
         run: black --check .
-        continue-on-error: true
 
       - name: Lint (Flake8)
         run: flake8 . --max-line-length=120 --exclude=venv,__pycache__,.git
-        continue-on-error: true
 
       - name: Type check (MyPy)
         run: mypy . --ignore-missing-imports --exclude venv
-        continue-on-error: true
 
       - name: Run tests with coverage
         run: |
           pytest tests/ -v --cov=. --cov-report=xml --cov-report=term-missing
         env:
-          # Mock environment variables for testing
           DATABASE_URL: "postgresql://test:test@localhost:5432/test"
+          POSTGRES_SERVER: "localhost"
+          POSTGRES_PORT: "5432"
+          POSTGRES_DB: "test"
+          POSTGRES_USER: "test"
+          POSTGRES_PASSWORD: "test"
           GROQ_API_KEY: "test-key"
+          GEMINI_API_KEY: "test-key"
+          TAVILY_API_KEY: "test-key"
+          WEAVIATE_URL: "http://localhost:8080"
+          SECRET_KEY: "ci-test-secret-key-must-be-32-chars-minimum-x"
+          ALGORITHM: "HS256"
+          ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+          GOOGLE_CLOUD_PROJECT: "test-project"
+          ENVIRONMENT: "test"
+          SUPABASE_URL: "https://test.supabase.co"
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -83,22 +92,19 @@ jobs:
 
       - name: Lint
         run: npm run lint
-        continue-on-error: true
 
       - name: Type check
         run: npx tsc --noEmit
-        continue-on-error: true
 
       - name: Run tests
         run: npm run test -- --passWithNoTests
-        continue-on-error: true
 
       - name: Build
         run: npm run build
         env:
           NEXT_PUBLIC_API_URL: "http://localhost:8000"
 
-  # ESL-specific tests (Critical)
+  # ESL-specific tests (Critical — must never drop below 75% coverage)
   esl-tests:
     name: ESL Critical Tests
     runs-on: ubuntu-latest
@@ -127,11 +133,37 @@ jobs:
           pytest tests/test_esl.py -v --tb=long
         env:
           DATABASE_URL: "postgresql://test:test@localhost:5432/test"
+          POSTGRES_SERVER: "localhost"
+          POSTGRES_PORT: "5432"
+          POSTGRES_DB: "test"
+          POSTGRES_USER: "test"
+          POSTGRES_PASSWORD: "test"
           GROQ_API_KEY: "test-key"
+          GEMINI_API_KEY: "test-key"
+          TAVILY_API_KEY: "test-key"
+          SECRET_KEY: "ci-test-secret-key-must-be-32-chars-minimum-x"
+          ALGORITHM: "HS256"
+          ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+          GOOGLE_CLOUD_PROJECT: "test-project"
+          ENVIRONMENT: "test"
+          SUPABASE_URL: "https://test.supabase.co"
 
       - name: Check ESL coverage
         run: |
           pytest tests/test_esl.py --cov=esl --cov-report=term-missing --cov-fail-under=75
         env:
           DATABASE_URL: "postgresql://test:test@localhost:5432/test"
+          POSTGRES_SERVER: "localhost"
+          POSTGRES_PORT: "5432"
+          POSTGRES_DB: "test"
+          POSTGRES_USER: "test"
+          POSTGRES_PASSWORD: "test"
           GROQ_API_KEY: "test-key"
+          GEMINI_API_KEY: "test-key"
+          TAVILY_API_KEY: "test-key"
+          SECRET_KEY: "ci-test-secret-key-must-be-32-chars-minimum-x"
+          ALGORITHM: "HS256"
+          ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+          GOOGLE_CLOUD_PROJECT: "test-project"
+          ENVIRONMENT: "test"
+          SUPABASE_URL: "https://test.supabase.co"
