@@ -1,5 +1,7 @@
 """Notifications API Routes"""
 
+from typing import Optional
+
 from fastapi import APIRouter, HTTPException, Depends
 from utils.db import get_db
 from utils.serialization import serialize_rows, serialize_row
@@ -22,7 +24,12 @@ def get_esl(
 
 
 def create_notification(
-    conn, user_id: str, type: str, title: str, message: str, metadata: dict = None
+    conn,
+    user_id: str,
+    type: str,
+    title: str,
+    message: str,
+    metadata: Optional[dict] = None,
 ):
     """Insert a notification row. Call inside an existing open DB connection."""
     with conn.cursor() as cur:

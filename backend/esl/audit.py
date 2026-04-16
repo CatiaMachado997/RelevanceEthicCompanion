@@ -86,6 +86,8 @@ class ESLAuditLogger:
 
     async def _log_to_database(self, audit_log: ESLAuditLog) -> None:
         """Persist audit log to PostgreSQL."""
+        # Only called from log_decision() when self._use_database is True.
+        assert self._db_connection_factory is not None
         try:
             with self._db_connection_factory() as conn:
                 with conn.cursor() as cur:
@@ -154,6 +156,8 @@ class ESLAuditLogger:
         self, user_id: str, days: int, status_filter: Optional[str]
     ) -> List[ESLAuditLog]:
         """Retrieve audit logs from PostgreSQL."""
+        # Only called from get_user_logs() when self._use_database is True.
+        assert self._db_connection_factory is not None
         try:
             with self._db_connection_factory() as conn:
                 with conn.cursor() as cur:

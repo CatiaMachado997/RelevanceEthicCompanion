@@ -182,9 +182,7 @@ class DocumentProcessor:
         if not (self.context_manager.weaviate and self.embedding_service):
             return
         try:
-            embedding = await self.embedding_service.generate_embedding(
-                chunk, task_type="retrieval_document"
-            )
+            embedding = await self.embedding_service.generate_embedding(chunk)
             self.context_manager.weaviate.store_memory(
                 DOCUMENT_COLLECTION,
                 {

@@ -7,7 +7,7 @@ All chat interactions go through ESL for ethical protection.
 
 from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
-from typing import List, Optional, Dict, Any
+from typing import Annotated, List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from datetime import datetime, UTC
 
@@ -36,30 +36,32 @@ class ChatRequest(BaseModel):
     """Request to send a chat message"""
 
     message: str = Field(..., min_length=1, description="User's message")
-    context: Optional[dict] = Field(
-        default_factory=dict, description="Additional context"
-    )
+    context: dict = Field(default_factory=lambda: {}, description="Additional context")
 
 
 class ChatResponse(BaseModel):
     """Response from chat endpoint"""
 
     message: str = Field(..., description="User's message")
-    response: Optional[str] = Field(None, description="AI response (if ESL approved)")
+    response: Annotated[
+        Optional[str], Field(description="AI response (if ESL approved)")
+    ] = None
     executed: bool = Field(..., description="Whether response was delivered")
     esl_decision: dict = Field(..., description="ESL decision details")
     transparency: str = Field(..., description="Explanation of ESL decision")
     timestamp: str
-    tool_executed: Optional[bool] = Field(
-        None, description="Whether a tool was executed."
-    )
-    tool_name: Optional[str] = Field(None, description="Name of the tool executed.")
-    tool_input: Optional[Dict[str, Any]] = Field(
-        None, description="Input provided to the tool."
-    )
-    tool_output: Optional[Dict[str, Any]] = Field(
-        None, description="Output received from the tool."
-    )
+    tool_executed: Annotated[
+        Optional[bool], Field(description="Whether a tool was executed.")
+    ] = None
+    tool_name: Annotated[
+        Optional[str], Field(description="Name of the tool executed.")
+    ] = None
+    tool_input: Annotated[
+        Optional[Dict[str, Any]], Field(description="Input provided to the tool.")
+    ] = None
+    tool_output: Annotated[
+        Optional[Dict[str, Any]], Field(description="Output received from the tool.")
+    ] = None
 
 
 class ConversationHistoryResponse(BaseModel):
@@ -235,6 +237,10 @@ async def create_conversation(
                 (user_id,),
             )
             row = cur.fetchone()
+    if row is None:
+        raise HTTPException(
+            status_code=500, detail="Conversation insert returned no row"
+        )
     return {
         "id": str(row["id"]),
         "title": row["title"],

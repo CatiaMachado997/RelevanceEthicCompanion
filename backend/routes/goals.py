@@ -5,7 +5,7 @@ User goals inform ESL about priorities and help AI provide relevant assistance.
 """
 
 from fastapi import APIRouter, HTTPException, Depends
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 from datetime import datetime, UTC
 
@@ -245,7 +245,7 @@ async def update_goal(
 
         with get_db() as conn:
             with conn.cursor() as cur:
-                update_data = {}
+                update_data: Dict[str, Any] = {}
                 if request.title is not None:
                     update_data["title"] = request.title
                 if request.description is not None:
@@ -502,8 +502,8 @@ async def toggle_milestone(
     try:
         with get_db() as conn:
             with conn.cursor() as cur:
-                updates = []
-                params = []
+                updates: List[str] = []
+                params: List[Any] = []
                 if "completed" in body:
                     updates.append("completed = %s")
                     params.append(bool(body["completed"]))

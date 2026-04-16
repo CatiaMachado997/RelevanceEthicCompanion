@@ -56,7 +56,9 @@ class ExampleTool(Tool):
     description: str = "A generic example tool that echoes its input."
     parameters: Type[BaseModel] = ExampleToolParameters
 
-    async def execute(
+    # Concrete tools declare their own param signature; the base class uses **kwargs
+    # as a generic dispatch contract.
+    async def execute(  # type: ignore[override]
         self, query: str, limit: int = 5, **kwargs: Any
     ) -> Dict[str, Any]:
         print(f"Executing ExampleTool with query: {query}, limit: {limit}")
@@ -92,7 +94,7 @@ class EmailSearchTool(Tool):
     description: str = "Searches for emails based on a query and returns a summary."
     parameters: Type[BaseModel] = EmailSearchToolParameters
 
-    async def execute(
+    async def execute(  # type: ignore[override]
         self,
         query: str,
         date_range: Optional[str] = "last 7 days",

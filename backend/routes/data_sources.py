@@ -95,9 +95,9 @@ async def oauth_callback(
         /dashboard/integrations?connected={source_type}  on success
         /dashboard/integrations?error={source_type}_{reason}  on failure/denial
     """
-    # User denied or provider returned an error
-    if error or not code:
-        reason = error or "denied"
+    # User denied or provider returned an error, or state is missing
+    if error or not code or not state:
+        reason = error or ("missing_state" if not state else "denied")
         logger.info(f"OAuth denied for {source_type}: {reason}")
         return RedirectResponse(
             url=f"{settings.FRONTEND_URL}/dashboard/integrations?error={source_type}_{reason}",
@@ -318,7 +318,7 @@ async def get_upcoming_events(
 
 
 @router.get("/health")
-async def data_sources_health() -> Dict[str, str]:
+async def data_sources_health() -> Dict[str, Any]:
     """
     Health check for data sources service
 

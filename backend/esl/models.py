@@ -6,7 +6,7 @@ These models define the core data structures for ethical decision-making
 """
 
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional, Dict, Any
+from typing import Annotated, Optional, Dict, Any
 from datetime import datetime
 from enum import Enum
 
@@ -71,10 +71,12 @@ class ProposedAction(BaseModel):
         ..., description="Type of content (work_summary, reminder, etc.)"
     )
     urgency: UrgencyLevel
-    content: Optional[str] = Field(None, description="The actual content/message")
-    target_time: Optional[datetime] = Field(
-        None, description="When to execute the action"
-    )
+    content: Annotated[
+        Optional[str], Field(description="The actual content/message")
+    ] = None
+    target_time: Annotated[
+        Optional[datetime], Field(description="When to execute the action")
+    ] = None
     metadata: Dict[str, Any] = Field(
         default_factory=dict, description="Additional context"
     )
@@ -118,6 +120,7 @@ class UserValue(BaseModel):
         default=True, description="Whether this value is currently active"
     )
     created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
     metadata: Dict[str, Any] = Field(
         default_factory=dict, description="Additional context"
     )
@@ -144,9 +147,10 @@ class ESLDecision(BaseModel):
 
     status: ESLDecisionStatus
     reason: str = Field(..., description="Human-readable explanation of the decision")
-    modified_action: Optional[ProposedAction] = Field(
-        None, description="If status=MODIFIED, this contains the modified action"
-    )
+    modified_action: Annotated[
+        Optional[ProposedAction],
+        Field(description="If status=MODIFIED, this contains the modified action"),
+    ] = None
     violated_values: list[str] = Field(
         default_factory=list, description="IDs of user values that would be violated"
     )

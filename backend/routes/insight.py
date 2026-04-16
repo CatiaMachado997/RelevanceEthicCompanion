@@ -10,6 +10,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from langchain_core.messages import HumanMessage
 from langchain_groq import ChatGroq
+from pydantic import SecretStr
 
 from config import settings
 from utils.db import get_db
@@ -82,26 +83,11 @@ async def get_daily_insight(
         except Exception as e:
             logger.warning(f"Could not fetch values for insight: {e}")
 
-        goal_text = (
-            "\n".join(
-                f"- {g.title if hasattr(g, 'title') else g['title']}" for g in goals[:5]
-            )
-            or "None set yet."
-        )
+        goal_text = "\n".join(f"- {g.title}" for g in goals[:5]) or "None set yet."
         event_text = (
-            "\n".join(
-                f"- {e.title if hasattr(e, 'title') else e['title']}"
-                for e in events[:3]
-            )
-            or "Nothing scheduled."
+            "\n".join(f"- {e.title}" for e in events[:3]) or "Nothing scheduled."
         )
-        value_text = (
-            "\n".join(
-                f"- {v.value if hasattr(v, 'value') else v['value']}"
-                for v in values[:5]
-            )
-            or "None set yet."
-        )
+        value_text = "\n".join(f"- {v.value}" for v in values[:5]) or "None set yet."
 
         prompt = f"""You are Ethic Companion, an AI assistant that helps users act on their goals with integrity.
 
@@ -118,11 +104,12 @@ Write one specific, actionable insight or suggestion for today. Reference concre
 
         llm = ChatGroq(
             model="llama-3.3-70b-versatile",
-            groq_api_key=settings.GROQ_API_KEY,
+            api_key=SecretStr(settings.GROQ_API_KEY),
             temperature=0.7,
         )
         response = await llm.ainvoke([HumanMessage(content=prompt)])
-        content = (response.content or "").strip()
+        raw = response.content or ""
+        content = (raw if isinstance(raw, str) else str(raw)).strip()
 
         if not content:
             content = "Review your active goals today and identify one small next step you can take right now."

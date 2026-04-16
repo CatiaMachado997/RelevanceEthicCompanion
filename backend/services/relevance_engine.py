@@ -61,17 +61,19 @@ class RelevanceEngine:
 
         results: List[Dict[str, Any]] = []
         for ev in events:
-            # Events are Pydantic models; access start_time/end_time
+            # Events are Pydantic models; start_time is a datetime.
             start = (
                 ev.start_time
                 if isinstance(ev.start_time, datetime)
-                else datetime.fromisoformat(ev.start_time)
+                else datetime.fromisoformat(str(ev.start_time))
             )
 
             # Only consider events starting within the window (and in the future)
             if now <= start <= window:
                 summary = await self.llm.summarize_event(
-                    ev.title, ev.description, context={"event": ev.model_dump()}
+                    ev.title,
+                    ev.description or "",
+                    context={"event": ev.model_dump()},
                 )
                 metadata = {
                     "event_id": ev.id,

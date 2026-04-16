@@ -12,6 +12,7 @@ Comprehensive tests for the core ESL components:
 
 import pytest
 from datetime import datetime, UTC
+from typing import Optional
 from unittest.mock import AsyncMock, MagicMock
 
 from esl.models import (
@@ -87,7 +88,7 @@ def create_action(
     content: str = "Test content",
     content_type: str = "text",
     urgency: UrgencyLevel = UrgencyLevel.MEDIUM,
-    metadata: dict = None,
+    metadata: Optional[dict] = None,
 ) -> ProposedAction:
     """Helper to create ProposedAction instances"""
     return ProposedAction(

@@ -16,8 +16,7 @@ import os
 # Allow oauthlib to accept when Google returns a superset of requested scopes
 os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
 
-from fastapi import Request
-from fastapi.responses import JSONResponse
+from fastapi import Request, Response
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -234,8 +233,9 @@ from utils.errors import register_error_handlers
 register_error_handlers(app)
 
 
-async def _rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+async def _rate_limit_handler(request: Request, exc: Exception) -> Response:
     """Rate limit handler that logs auth-endpoint violations to the audit log."""
+    assert isinstance(exc, RateLimitExceeded)
     try:
         path = request.url.path
         if "/auth/" in path or "/tools/" in path:
@@ -249,7 +249,8 @@ async def _rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONR
             )
     except Exception:
         pass
-    return await _rate_limit_exceeded_handler(request, exc)
+    # slowapi's default handler is synchronous and returns a Response directly.
+    return _rate_limit_exceeded_handler(request, exc)
 
 
 app.state.limiter = limiter

@@ -26,7 +26,8 @@ class WeaviateClient:
             url: Weaviate server URL (default: http://localhost:8080)
         """
         self.url = url
-        self.client = None
+        # Assigned by _connect() before any method call; raises on failure.
+        self.client: Any = None
         self._connect()
 
     def _connect(self):

@@ -35,7 +35,7 @@ class GoogleCalendarSync:
     # OAuth scopes - read-only calendar access
     SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 
-    def __init__(self, redirect_uri: str = None):
+    def __init__(self, redirect_uri: Optional[str] = None):
         """
         Initialize Google Calendar sync
 

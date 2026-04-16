@@ -21,7 +21,7 @@ class GmailSync:
 
     SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
-    def __init__(self, redirect_uri: str = None):
+    def __init__(self, redirect_uri: Optional[str] = None):
         self.redirect_uri = redirect_uri or settings.GMAIL_OAUTH_REDIRECT_URI
         self.client_config = {
             "web": {

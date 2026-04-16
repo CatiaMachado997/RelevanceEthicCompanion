@@ -43,6 +43,10 @@ async def search(
         query_vector = await embedding_service.generate_embedding(q)
 
         weaviate_client = get_weaviate_client()
+        if weaviate_client is None:
+            raise HTTPException(
+                status_code=503, detail="Search is unavailable (Weaviate offline)"
+            )
         all_results: List[Dict[str, Any]] = []
 
         for collection_name, result_type in SEARCH_COLLECTIONS:
