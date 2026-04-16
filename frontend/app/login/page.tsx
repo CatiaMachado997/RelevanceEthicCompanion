@@ -42,7 +42,7 @@ export default function LoginPage() {
       if (isMounted.current) setOauthLoading(null)
     } else {
       // Reset after 10 s in case the redirect is blocked (pop-up blocker, etc.)
-      setTimeout(() => setOauthLoading(null), 10_000)
+      setTimeout(() => { if (isMounted.current) setOauthLoading(null) }, 10_000)
     }
   }
 
