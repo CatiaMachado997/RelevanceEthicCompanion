@@ -53,10 +53,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [loading, isAuthenticated, router])
 
-  if (loading) return null
-
   // Close mobile sidebar on route change
   useEffect(() => { setSidebarOpen(false) }, [pathname])
+
+  if (loading) return null
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: 'var(--ec-page-bg)' }}>
