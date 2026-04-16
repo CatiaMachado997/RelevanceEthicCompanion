@@ -30,7 +30,20 @@ export default function AuthCallbackPage() {
           }
         }
 
-        // Session is now in localStorage — onAuthStateChange will fire SIGNED_IN
+        // Exchange Supabase session for backend HttpOnly cookie BEFORE redirect
+        // so middleware sees `ec_session` on the first /dashboard request.
+        // (Relying on useAuth's onAuthStateChange listener races the push.)
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session) {
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? ''
+          await fetch(`${apiUrl}/api/auth/session`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ access_token: session.access_token }),
+          })
+        }
+
         router.push('/dashboard')
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Something went wrong.')
