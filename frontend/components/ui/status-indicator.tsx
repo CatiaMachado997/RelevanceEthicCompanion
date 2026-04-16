@@ -25,7 +25,7 @@ interface StatusIndicatorProps {
   className?: string
 }
 
-const config: Record<StatusType, { icon: React.ComponentType<any>; color: string; bg: string }> = {
+const config: Record<StatusType, { icon: React.ComponentType<{ className?: string }>; color: string; bg: string }> = {
   success: {
     icon: CheckCircle,
     color: 'text-[#6B9B7F]',

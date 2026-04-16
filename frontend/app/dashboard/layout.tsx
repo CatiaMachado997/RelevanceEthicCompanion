@@ -39,6 +39,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
+  // Close mobile sidebar on route change. Adjust state during render rather
+  // than in an effect to avoid cascading renders. See:
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  const [prevPathname, setPrevPathname] = useState(pathname)
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname)
+    if (sidebarOpen) setSidebarOpen(false)
+  }
+
   const meta = (() => {
     if (PAGE_META[pathname]) return PAGE_META[pathname]
     if (pathname.startsWith('/dashboard/chat/')) return { title: 'Chat', subtitle: 'Message your companion' }
@@ -52,9 +61,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       router.push('/login')
     }
   }, [loading, isAuthenticated, router])
-
-  // Close mobile sidebar on route change
-  useEffect(() => { setSidebarOpen(false) }, [pathname])
 
   if (loading) return null
 

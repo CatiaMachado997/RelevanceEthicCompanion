@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, ChangeEvent, ReactElement } from 'react'
+import type { ComponentPropsWithoutRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { CodeBlock } from '@/components/chat/CodeBlock'
@@ -237,24 +238,23 @@ function Cursor() {
 
 /* ─── Markdown component map ─── */
 const markdownComponents = {
-  code({ node, className, children, ...props }: any) {
+  code({ className, children, ...props }: ComponentPropsWithoutRef<'code'>) {
     const language = /language-(\w+)/.exec(className || '')?.[1]
     const content = String(children).replace(/\n$/, '')
-    // Treat as block if it contains newlines or has a language hint
     const isBlock = content.includes('\n') || !!language
     if (!isBlock) {
       return <code className={className} {...props}>{children}</code>
     }
     return <CodeBlock language={language}>{content}</CodeBlock>
   },
-  table({ children }: any) {
+  table({ children }: ComponentPropsWithoutRef<'table'>) {
     return (
       <div style={{ overflowX: 'auto', margin: '0.75em 0' }}>
         <table style={{ minWidth: '100%' }}>{children}</table>
       </div>
     )
   },
-  input({ checked, ...props }: any) {
+  input({ checked, ...props }: ComponentPropsWithoutRef<'input'>) {
     return (
       <input
         type="checkbox"
@@ -265,7 +265,7 @@ const markdownComponents = {
       />
     )
   },
-  h1({ children }: any) {
+  h1({ children }: ComponentPropsWithoutRef<'h1'>) {
     const text = String(children)
     if (/^(plan|schedule|agenda|summary|report):/i.test(text)) {
       return <ArtifactCard title={text}>{null}</ArtifactCard>

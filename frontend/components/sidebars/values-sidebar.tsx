@@ -73,7 +73,7 @@ export function ValuesSidebar({
             <strong className="text-[#171717]">Boundaries</strong> are strict limits that the AI will never cross.
           </p>
           <p>
-            <strong className="text-[#171717]">Preferences</strong> guide the AI's behavior but can be adjusted.
+            <strong className="text-[#171717]">Preferences</strong> guide the AI&rsquo;s behavior but can be adjusted.
           </p>
           <p>
             <strong className="text-[#171717]">Topic Filters</strong> block specific subjects from conversations.

@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import TransparencyPage from '../app/dashboard/transparency/page'
 import { api } from '../lib/api'
 
@@ -33,19 +34,19 @@ jest.mock('../components/mobile-sidebar', () => ({
 }))
 
 jest.mock('recharts', () => {
-  const React = require('react')
+  const React = jest.requireActual<typeof import('react')>('react')
   return {
-    PieChart: ({ children }: any) => React.createElement('div', { 'data-testid': 'pie-chart' }, children),
+    PieChart: ({ children }: { children?: ReactNode }) => React.createElement('div', { 'data-testid': 'pie-chart' }, children),
     Pie: () => null,
     Cell: () => null,
-    LineChart: ({ children }: any) => React.createElement('div', { 'data-testid': 'line-chart' }, children),
+    LineChart: ({ children }: { children?: ReactNode }) => React.createElement('div', { 'data-testid': 'line-chart' }, children),
     Line: () => null,
     XAxis: () => null,
     YAxis: () => null,
     CartesianGrid: () => null,
     Tooltip: () => null,
-    ResponsiveContainer: ({ children }: any) => React.createElement('div', null, children),
-    BarChart: ({ children }: any) => React.createElement('div', { 'data-testid': 'bar-chart' }, children),
+    ResponsiveContainer: ({ children }: { children?: ReactNode }) => React.createElement('div', null, children),
+    BarChart: ({ children }: { children?: ReactNode }) => React.createElement('div', { 'data-testid': 'bar-chart' }, children),
     Bar: () => null,
   }
 })

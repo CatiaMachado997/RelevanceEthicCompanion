@@ -10,7 +10,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/useAuth"
 import { useTheme } from "next-themes"
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useSyncExternalStore } from "react"
 import { api } from "@/lib/api"
 import { UserStatus } from "@/components/UserStatus"
 
@@ -61,18 +61,22 @@ interface SidebarNavProps {
   onClose?: () => void
 }
 
+// SSR-safe mount detection without setState-in-effect: server snapshot is
+// false; client snapshot is true, so the value flips on hydration.
+const subscribeNoop = () => () => {}
+const getMountedSnapshot = () => true
+const getMountedServerSnapshot = () => false
+
 export function SidebarNav({ onClose }: SidebarNavProps = {}) {
   const pathname = usePathname()
   const router = useRouter()
   const { signOut, user } = useAuth()
   const { resolvedTheme, setTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
+  const mounted = useSyncExternalStore(subscribeNoop, getMountedSnapshot, getMountedServerSnapshot)
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [unreadNotifications, setUnreadNotifications] = useState(0)
-
-  useEffect(() => { setMounted(true) }, [])
 
   const refreshConversations = useCallback(() => {
     api.chat.conversations.list()
@@ -99,9 +103,9 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
     return () => clearInterval(interval)
   }, [])
 
-  useEffect(() => {
-    if (pathname.includes('/notifications')) setUnreadNotifications(0)
-  }, [pathname])
+  // While viewing the notifications page, hide the unread badge by deriving
+  // the visible count instead of resetting state in an effect.
+  const visibleUnreadCount = pathname.includes('/notifications') ? 0 : unreadNotifications
 
   const handleNewChat = () => {
     router.push('/dashboard/chat')
@@ -169,12 +173,12 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
             >
               <span className="relative">
                 <Icon size={16} strokeWidth={active ? 2.2 : 1.8} />
-                {href === '/dashboard/notifications' && unreadNotifications > 0 && (
+                {href === '/dashboard/notifications' && visibleUnreadCount > 0 && (
                   <span
                     className="absolute -top-1.5 -right-1.5 min-w-[14px] h-[14px] rounded-full flex items-center justify-center text-[9px] font-bold leading-none px-0.5"
                     style={{ background: '#B04A3A', color: '#fff' }}
                   >
-                    {unreadNotifications > 9 ? '9+' : unreadNotifications}
+                    {visibleUnreadCount > 9 ? '9+' : visibleUnreadCount}
                   </span>
                 )}
               </span>

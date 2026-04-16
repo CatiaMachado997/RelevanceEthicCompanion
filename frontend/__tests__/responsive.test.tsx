@@ -13,15 +13,19 @@ jest.mock('../lib/supabase', () => ({
   supabase: { auth: { getSession: jest.fn().mockResolvedValue({ data: { session: null } }) } },
 }))
 
-jest.mock('../components/sidebar', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  SidebarNav: function MockSidebar() { return require('react').createElement('nav', { 'data-testid': 'sidebar' }) },
-}))
+jest.mock('../components/sidebar', () => {
+  const React = jest.requireActual<typeof import('react')>('react')
+  return {
+    SidebarNav: function MockSidebar() { return React.createElement('nav', { 'data-testid': 'sidebar' }) },
+  }
+})
 
-jest.mock('../components/top-bar', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  TopBar: function MockTopBar() { return require('react').createElement('div', { 'data-testid': 'top-bar' }) },
-}))
+jest.mock('../components/top-bar', () => {
+  const React = jest.requireActual<typeof import('react')>('react')
+  return {
+    TopBar: function MockTopBar() { return React.createElement('div', { 'data-testid': 'top-bar' }) },
+  }
+})
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn() }),

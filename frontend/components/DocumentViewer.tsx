@@ -15,16 +15,27 @@ interface DocumentViewerProps {
 }
 
 export function DocumentViewer({ documentId, filename, open, onClose }: DocumentViewerProps) {
-  const [viewUrl, setViewUrl] = useState<string | null>(null)
+  // Track the URL alongside the documentId it was built for so we can
+  // derive the visible URL — avoids a synchronous setState in the effect
+  // (which would trigger cascading renders) and also prevents flashing a
+  // stale URL when documentId changes.
+  const [loaded, setLoaded] = useState<{ id: string; url: string } | null>(null)
 
   useEffect(() => {
-    if (!open || !documentId) { setViewUrl(null); return }
-    // Build URL with token query param so iframe can auth
+    if (!open || !documentId) return
+    let cancelled = false
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (cancelled) return
       const token = session?.access_token ?? ''
-      setViewUrl(`${API_URL}/api/documents/${documentId}/view?token=${encodeURIComponent(token)}`)
+      setLoaded({
+        id: documentId,
+        url: `${API_URL}/api/documents/${documentId}/view?token=${encodeURIComponent(token)}`,
+      })
     })
+    return () => { cancelled = true }
   }, [open, documentId])
+
+  const viewUrl = open && documentId && loaded?.id === documentId ? loaded.url : null
 
   return (
     <Dialog.Root open={open} onOpenChange={v => { if (!v) onClose() }}>
