@@ -1,12 +1,13 @@
 # backend/tests/test_context_snapshot.py
 """Tests for ContextSnapshotService and GET /api/context/snapshot."""
+
 import pytest
 from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 
-
 # ── helpers ──────────────────────────────────────────────────────────────────
+
 
 def make_db_mock(fetchall_values=None, fetchone_value=None):
     """
@@ -39,15 +40,25 @@ def make_db_mock(fetchall_values=None, fetchone_value=None):
 
 # ── ContextSnapshotService ────────────────────────────────────────────────────
 
+
 def test_compute_returns_all_required_keys():
     """compute() returns a dict with every required snapshot key."""
     with patch("services.context_snapshot.get_db_connection", make_db_mock()):
         from services.context_snapshot import ContextSnapshotService
-        snapshot = ContextSnapshotService().compute("00000000-0000-0000-0000-000000000000")
 
-    for key in ("computed_at", "tasks_due_soon", "overdue_count",
-                "active_projects", "upcoming_events", "active_goals",
-                "calendar_pressure"):
+        snapshot = ContextSnapshotService().compute(
+            "00000000-0000-0000-0000-000000000000"
+        )
+
+    for key in (
+        "computed_at",
+        "tasks_due_soon",
+        "overdue_count",
+        "active_projects",
+        "upcoming_events",
+        "active_goals",
+        "calendar_pressure",
+    ):
         assert key in snapshot, f"Missing key: {key}"
 
 
@@ -55,7 +66,10 @@ def test_calendar_pressure_light_when_no_events():
     """calendar_pressure is 'light' when there are zero upcoming events."""
     with patch("services.context_snapshot.get_db_connection", make_db_mock()):
         from services.context_snapshot import ContextSnapshotService
-        snapshot = ContextSnapshotService().compute("00000000-0000-0000-0000-000000000000")
+
+        snapshot = ContextSnapshotService().compute(
+            "00000000-0000-0000-0000-000000000000"
+        )
 
     assert snapshot["calendar_pressure"] == "light"
 
@@ -64,22 +78,31 @@ def test_calendar_pressure_valid_values():
     """calendar_pressure is always one of the three valid strings."""
     with patch("services.context_snapshot.get_db_connection", make_db_mock()):
         from services.context_snapshot import ContextSnapshotService
-        snapshot = ContextSnapshotService().compute("00000000-0000-0000-0000-000000000000")
+
+        snapshot = ContextSnapshotService().compute(
+            "00000000-0000-0000-0000-000000000000"
+        )
 
     assert snapshot["calendar_pressure"] in ("light", "moderate", "heavy")
 
 
 def test_overdue_count_from_db():
     """overdue_count is taken from the fetchone result."""
-    with patch("services.context_snapshot.get_db_connection",
-               make_db_mock(fetchone_value={"cnt": 3})):
+    with patch(
+        "services.context_snapshot.get_db_connection",
+        make_db_mock(fetchone_value={"cnt": 3}),
+    ):
         from services.context_snapshot import ContextSnapshotService
-        snapshot = ContextSnapshotService().compute("00000000-0000-0000-0000-000000000000")
+
+        snapshot = ContextSnapshotService().compute(
+            "00000000-0000-0000-0000-000000000000"
+        )
 
     assert snapshot["overdue_count"] == 3
 
 
 # ── Route ─────────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def mock_read_auth(monkeypatch):
@@ -93,6 +116,7 @@ def test_snapshot_route_returns_200(mock_read_auth):
     """GET /api/context/snapshot returns 200 with snapshot keys."""
     with patch("services.context_snapshot.get_db_connection", make_db_mock()):
         from main import app
+
         client = TestClient(app)
         response = client.get("/api/context/snapshot")
 

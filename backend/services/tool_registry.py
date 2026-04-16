@@ -7,6 +7,7 @@ then returns ready-to-invoke LangChain BaseTool instances:
   • Composio tools  — for catalogue tools (github, notion, slack, gmail_write, google_calendar_write)
   • MCP tools       — for user-supplied MCP server URLs (auth_type='mcp')
 """
+
 from __future__ import annotations
 
 import logging
@@ -18,9 +19,9 @@ from utils.db import get_db_connection
 logger = logging.getLogger(__name__)
 
 # Tool IDs that are served via Composio
-_COMPOSIO_TOOL_IDS = frozenset({
-    "github", "notion", "slack", "gmail_write", "google_calendar_write"
-})
+_COMPOSIO_TOOL_IDS = frozenset(
+    {"github", "notion", "slack", "gmail_write", "google_calendar_write"}
+)
 
 
 class ToolRegistry:
@@ -63,10 +64,14 @@ class ToolRegistry:
             # Load Composio tools
             if composio_tool_ids:
                 try:
-                    composio_tools = await get_composio_tools_for_user(user_id, composio_tool_ids)
+                    composio_tools = await get_composio_tools_for_user(
+                        user_id, composio_tool_ids
+                    )
                     tools.extend(composio_tools)
                 except Exception as exc:
-                    logger.warning(f"Composio tools unavailable for user {user_id}: {exc}")
+                    logger.warning(
+                        f"Composio tools unavailable for user {user_id}: {exc}"
+                    )
 
             # Load MCP tools (keep existing _load_mcp_tools function)
             for row in mcp_connections:
@@ -81,13 +86,16 @@ class ToolRegistry:
             return []
 
 
-async def get_composio_tools_for_user(user_id: str, connected_tool_ids: set[str]) -> list[BaseTool]:
+async def get_composio_tools_for_user(
+    user_id: str, connected_tool_ids: set[str]
+) -> list[BaseTool]:
     """Thin wrapper that delegates to services.composio_tools.
 
     Kept as a module-level name so tests can patch it via
     ``services.tool_registry.get_composio_tools_for_user``.
     """
     from services.composio_tools import get_composio_tools_for_user as _impl
+
     return await _impl(user_id, connected_tool_ids)
 
 
@@ -100,6 +108,7 @@ async def _load_mcp_tools(tool_id: str, mcp_url: str) -> list[BaseTool]:
     """
     try:
         from services.mcp_client import MCPClient
+
         client = MCPClient(mcp_url)
         return await client.get_tools()
     except Exception as e:

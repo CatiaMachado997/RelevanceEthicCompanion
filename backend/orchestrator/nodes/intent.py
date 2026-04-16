@@ -1,4 +1,5 @@
 """IntentClassifier — routes message to the correct processing path."""
+
 import re
 from orchestrator.state import AgentState
 
@@ -11,7 +12,8 @@ _COMMAND_MAP = {
 }
 
 _RESEARCH_KEYWORDS = re.compile(
-    r"\b(research|investigate|find out|deep dive|comprehensive|analyze)\b", re.IGNORECASE
+    r"\b(research|investigate|find out|deep dive|comprehensive|analyze)\b",
+    re.IGNORECASE,
 )
 
 

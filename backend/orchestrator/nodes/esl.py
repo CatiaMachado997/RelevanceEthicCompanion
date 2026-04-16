@@ -1,4 +1,5 @@
 """ESLGateway — mandatory ESL evaluation node. Every graph path passes through this."""
+
 import logging
 from typing import Optional
 from orchestrator.state import AgentState
@@ -18,12 +19,17 @@ _esl: Optional[EthicalSafeguardLayer] = None
 
 def _get_langfuse():
     global _langfuse
-    if _langfuse is None and settings.LANGFUSE_PUBLIC_KEY and settings.LANGFUSE_SECRET_KEY:
+    if (
+        _langfuse is None
+        and settings.LANGFUSE_PUBLIC_KEY
+        and settings.LANGFUSE_SECRET_KEY
+    ):
         from langfuse import Langfuse
+
         _langfuse = Langfuse(
             public_key=settings.LANGFUSE_PUBLIC_KEY,
             secret_key=settings.LANGFUSE_SECRET_KEY,
-            host=getattr(settings, 'LANGFUSE_HOST', 'https://cloud.langfuse.com'),
+            host=getattr(settings, "LANGFUSE_HOST", "https://cloud.langfuse.com"),
         )
     return _langfuse
 
@@ -40,7 +46,9 @@ async def esl_gateway_node(state: AgentState) -> dict:
     """Evaluate proposed response through ESL. Returns updated esl_decision."""
     user_id = state.get("user_id")
     if not user_id:
-        raise ValueError("esl_gateway_node: user_id missing from AgentState — cannot evaluate ESL")
+        raise ValueError(
+            "esl_gateway_node: user_id missing from AgentState — cannot evaluate ESL"
+        )
     esl = get_esl()
     # content_type is required by ProposedAction — use intent as the content type
     proposed = ProposedAction(
@@ -64,7 +72,7 @@ async def esl_gateway_node(state: AgentState) -> dict:
                     "reason": decision.reason,
                     "confidence": getattr(decision, "confidence", None),
                     "violated_values": decision.violated_values,
-                }
+                },
             )
     except Exception as e:
         logger.warning(f"Langfuse trace failed (non-blocking): {e}")

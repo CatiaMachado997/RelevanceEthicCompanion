@@ -50,7 +50,9 @@ def _sign(payload_b64: str) -> str:
 
 
 def _cleanup_nonces(now: datetime) -> None:
-    expired = [nonce for nonce, expires_at in _PENDING_NONCES.items() if expires_at <= now]
+    expired = [
+        nonce for nonce, expires_at in _PENDING_NONCES.items() if expires_at <= now
+    ]
     for nonce in expired:
         _PENDING_NONCES.pop(nonce, None)
 
@@ -68,7 +70,9 @@ def create_signed_state(user_id: str, source_type: str) -> str:
         "nonce": nonce,
         "exp": exp,
     }
-    payload_b64 = _b64url_encode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+    payload_b64 = _b64url_encode(
+        json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    )
     signature = _sign(payload_b64)
     return f"{payload_b64}.{signature}"
 

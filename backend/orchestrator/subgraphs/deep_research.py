@@ -1,4 +1,5 @@
 """DeepResearch subgraph — parallel web search + memory retrieval + synthesis."""
+
 import asyncio
 import logging
 from orchestrator.state import AgentState
@@ -18,7 +19,8 @@ async def deep_research_node(state: AgentState) -> dict:
     async def _web_search():
         try:
             from langchain_community.tools.tavily_search import TavilySearchResults
-            if not getattr(settings, 'TAVILY_API_KEY', None):
+
+            if not getattr(settings, "TAVILY_API_KEY", None):
                 return []
             tool = TavilySearchResults(max_results=5, api_key=settings.TAVILY_API_KEY)
             return await tool.ainvoke({"query": query})
@@ -29,6 +31,7 @@ async def deep_research_node(state: AgentState) -> dict:
     async def _memory_search():
         try:
             from orchestrator.nodes.context import get_context_manager
+
             cm = get_context_manager()
             history = await cm.get_conversation_history(user_id, limit=10)
             return history or []

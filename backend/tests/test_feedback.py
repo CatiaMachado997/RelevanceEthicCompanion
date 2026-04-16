@@ -1,4 +1,5 @@
 """Tests for the feedback API endpoint."""
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient

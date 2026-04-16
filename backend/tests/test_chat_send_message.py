@@ -4,6 +4,7 @@ Tests for POST /api/chat/ (non-streaming endpoint).
 The endpoint now collects events from stream_langgraph() and returns a ChatResponse.
 Tests mock orchestrator.graph.stream_langgraph to avoid real DB/LLM calls.
 """
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from routes.chat import router as chat_router
@@ -44,7 +45,9 @@ async def _fake_stream_error(*args, **kwargs):
 
 def test_send_message_returns_200_with_response(client):
     """A successful stream yields a response text and executed=True."""
-    with patch("orchestrator.graph.stream_langgraph", side_effect=_fake_stream_approved):
+    with patch(
+        "orchestrator.graph.stream_langgraph", side_effect=_fake_stream_approved
+    ):
         response = client.post("/api/chat/", json={"message": "Hello"})
     assert response.status_code == 200
     data = response.json()
@@ -74,10 +77,12 @@ def test_send_message_returns_500_on_stream_error(client):
 def test_send_message_requires_auth():
     """POST /api/chat/ returns 401 when auth enforcement is active."""
     from config import settings
+
     app = FastAPI()
     app.include_router(chat_router)
     unauthenticated_client = TestClient(app, raise_server_exceptions=False)
-    with patch.object(settings, "AUTH_ENFORCEMENT_ENABLED", True), \
-         patch.object(settings, "ENVIRONMENT", "production"):
+    with patch.object(settings, "AUTH_ENFORCEMENT_ENABLED", True), patch.object(
+        settings, "ENVIRONMENT", "production"
+    ):
         response = unauthenticated_client.post("/api/chat/", json={"message": "hello"})
     assert response.status_code == 401

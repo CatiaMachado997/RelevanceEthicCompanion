@@ -63,16 +63,20 @@ async def search(
                         or props.get("summary")
                         or ""
                     )
-                    all_results.append({
-                        "id": item.get("uuid"),
-                        "type": result_type,
-                        "content": content,
-                        "score": item.get("score") or 0.0,
-                        "metadata": props,
-                    })
+                    all_results.append(
+                        {
+                            "id": item.get("uuid"),
+                            "type": result_type,
+                            "content": content,
+                            "score": item.get("score") or 0.0,
+                            "metadata": props,
+                        }
+                    )
             except Exception as e:
                 # If a collection doesn't exist yet, skip it gracefully
-                logger.warning(f"Search in {collection_name} failed (may not exist yet): {e}")
+                logger.warning(
+                    f"Search in {collection_name} failed (may not exist yet): {e}"
+                )
 
         # Sort all results by score descending
         all_results.sort(key=lambda x: x["score"], reverse=True)

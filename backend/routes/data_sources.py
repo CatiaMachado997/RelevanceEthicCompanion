@@ -29,8 +29,7 @@ def get_data_ingestion() -> DataIngestionService:
     weaviate_client = get_weaviate_client()
     embedding_service = EmbeddingService(settings.GEMINI_API_KEY)
     context_manager = ContextManager(
-        weaviate_client=weaviate_client,
-        embedding_service=embedding_service
+        weaviate_client=weaviate_client, embedding_service=embedding_service
     )
     return DataIngestionService(context_manager)
 
@@ -39,7 +38,7 @@ def get_data_ingestion() -> DataIngestionService:
 async def start_oauth(
     source_type: str,
     user_id: str = Depends(get_current_user_id),
-    ingestion: DataIngestionService = Depends(get_data_ingestion)
+    ingestion: DataIngestionService = Depends(get_data_ingestion),
 ) -> Dict[str, str]:
     """
     Start OAuth authorization flow for a data source
@@ -61,12 +60,14 @@ async def start_oauth(
     """
     try:
         oauth_state = create_signed_state(user_id=user_id, source_type=source_type)
-        auth_url = await ingestion.initiate_oauth(user_id, source_type, oauth_state=oauth_state)
+        auth_url = await ingestion.initiate_oauth(
+            user_id, source_type, oauth_state=oauth_state
+        )
 
         return {
             "authorization_url": auth_url,
             "source_type": source_type,
-            "state": oauth_state
+            "state": oauth_state,
         }
 
     except ValueError as e:
@@ -79,10 +80,12 @@ async def start_oauth(
 @router.get("/oauth/{source_type}/callback")
 async def oauth_callback(
     source_type: str,
-    code: Optional[str] = Query(None, description="Authorization code from OAuth provider"),
+    code: Optional[str] = Query(
+        None, description="Authorization code from OAuth provider"
+    ),
     state: Optional[str] = Query(None, description="User ID passed in state parameter"),
     error: Optional[str] = Query(None, description="Error code if user denied access"),
-    ingestion: DataIngestionService = Depends(get_data_ingestion)
+    ingestion: DataIngestionService = Depends(get_data_ingestion),
 ):
     """
     Handle OAuth callback from authorization provider.
@@ -98,35 +101,33 @@ async def oauth_callback(
         logger.info(f"OAuth denied for {source_type}: {reason}")
         return RedirectResponse(
             url=f"{settings.FRONTEND_URL}/dashboard/integrations?error={source_type}_{reason}",
-            status_code=302
+            status_code=302,
         )
 
     try:
         user_id = validate_signed_state(state=state, expected_source_type=source_type)
         result = await ingestion.handle_oauth_callback(
-            source_type=source_type,
-            authorization_code=code,
-            user_id=user_id
+            source_type=source_type, authorization_code=code, user_id=user_id
         )
         if not result["success"]:
             return RedirectResponse(
                 url=f"{settings.FRONTEND_URL}/dashboard/integrations?error={source_type}_failed",
-                status_code=302
+                status_code=302,
             )
         return RedirectResponse(
             url=f"{settings.FRONTEND_URL}/dashboard/integrations?connected={source_type}",
-            status_code=302
+            status_code=302,
         )
     except HTTPException:
         return RedirectResponse(
             url=f"{settings.FRONTEND_URL}/dashboard/integrations?error=auth_failed",
-            status_code=302
+            status_code=302,
         )
     except Exception as e:
         logger.error(f"OAuth callback failed: {e}", exc_info=True)
         return RedirectResponse(
             url=f"{settings.FRONTEND_URL}/dashboard/integrations?error=server_error",
-            status_code=302
+            status_code=302,
         )
 
 
@@ -134,7 +135,7 @@ async def oauth_callback(
 async def trigger_manual_sync(
     source_type: str,
     user_id: str = Depends(get_current_user_id),
-    ingestion: DataIngestionService = Depends(get_data_ingestion)
+    ingestion: DataIngestionService = Depends(get_data_ingestion),
 ) -> Dict[str, Any]:
     try:
         result = await ingestion.sync_data_source(user_id, source_type)
@@ -159,7 +160,7 @@ async def trigger_manual_sync(
 @router.get("/connected")
 async def get_connected_sources(
     user_id: str = Depends(get_current_read_user_id),
-    ingestion: DataIngestionService = Depends(get_data_ingestion)
+    ingestion: DataIngestionService = Depends(get_data_ingestion),
 ) -> List[Dict[str, Any]]:
     """
     Get list of connected data sources for current user
@@ -220,7 +221,7 @@ async def get_source_stats(
 async def disconnect_source(
     source_type: str,
     user_id: str = Depends(get_current_user_id),
-    ingestion: DataIngestionService = Depends(get_data_ingestion)
+    ingestion: DataIngestionService = Depends(get_data_ingestion),
 ) -> Dict[str, Any]:
     """
     Disconnect a data source (stop syncing)
@@ -251,7 +252,7 @@ async def disconnect_source(
         return {
             "success": True,
             "message": f"{source_type} disconnected",
-            "source_type": source_type
+            "source_type": source_type,
         }
 
     except HTTPException:
@@ -292,7 +293,9 @@ async def get_upcoming_events(
             weaviate_client=weaviate_client,
             embedding_service=embedding_service,
         )
-        events = await context_manager.get_upcoming_events(str(user_id), hours_ahead=hours_ahead)
+        events = await context_manager.get_upcoming_events(
+            str(user_id), hours_ahead=hours_ahead
+        )
         now = datetime.now(UTC)
         return {
             "status": "success",
@@ -325,5 +328,5 @@ async def data_sources_health() -> Dict[str, str]:
     return {
         "status": "healthy",
         "service": "data_sources",
-        "supported_sources": ["google_calendar", "gmail", "slack"]
+        "supported_sources": ["google_calendar", "gmail", "slack"],
     }

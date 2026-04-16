@@ -1,6 +1,7 @@
 """
 Serialization utilities for converting database objects to JSON
 """
+
 from typing import Any, Dict
 from datetime import datetime
 from uuid import UUID

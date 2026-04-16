@@ -1,11 +1,16 @@
 """Tests for the transparency/audit log endpoint."""
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock, AsyncMock
 from datetime import datetime, UTC
 
-from routes.transparency import router as transparency_router, get_audit_logger, get_orchestrator
+from routes.transparency import (
+    router as transparency_router,
+    get_audit_logger,
+    get_orchestrator,
+)
 from utils.supabase_auth import get_current_read_user_id
 from esl.audit import ESLAuditLogger
 from esl.models import (
@@ -50,6 +55,7 @@ def make_app():
 
 
 # ── /api/transparency/logs ─────────────────────────────────────────────────────
+
 
 def test_transparency_logs_returns_list():
     """GET /api/transparency/logs returns a list shape with 'logs' key."""
@@ -115,17 +121,20 @@ def test_transparency_logs_filters_by_status():
 
 # ── /api/transparency/stats ───────────────────────────────────────────────────
 
+
 def test_transparency_stats_returns_dict():
     """GET /api/transparency/stats returns a dict with statistics."""
     mock_logger = MagicMock(spec=ESLAuditLogger)
-    mock_logger.get_statistics = AsyncMock(return_value={
-        "total_decisions": 0,
-        "approval_rate": 0.0,
-        "veto_rate": 0.0,
-        "modification_rate": 0.0,
-        "most_common_violations": [],
-        "most_active_rules": [],
-    })
+    mock_logger.get_statistics = AsyncMock(
+        return_value={
+            "total_decisions": 0,
+            "approval_rate": 0.0,
+            "veto_rate": 0.0,
+            "modification_rate": 0.0,
+            "most_common_violations": [],
+            "most_active_rules": [],
+        }
+    )
 
     app = make_app()
     app.dependency_overrides[get_audit_logger] = lambda: mock_logger
@@ -139,6 +148,7 @@ def test_transparency_stats_returns_dict():
 
 
 # ── /api/transparency/insights ────────────────────────────────────────────────
+
 
 def test_transparency_insights_returns_insights_list():
     """GET /api/transparency/insights returns an insights list."""
@@ -175,6 +185,7 @@ def test_transparency_insights_with_logs():
 
 
 # ── audit logger writes on all decision paths ─────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_audit_logger_logs_approved_decision():

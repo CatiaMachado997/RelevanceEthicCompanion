@@ -3,11 +3,14 @@
 Test Refactored Context Manager V2
 Tests PostgreSQL + Weaviate integration
 """
+
 import sys
-sys.path.insert(0, '/Users/catiamachado/RelevanceEthicCompanion/backend')
+
+sys.path.insert(0, "/Users/catiamachado/RelevanceEthicCompanion/backend")
 
 import asyncio
 from datetime import datetime, timedelta, timezone
+
 
 async def test_context_manager_v2():
     """Test the refactored context manager"""
@@ -16,9 +19,9 @@ async def test_context_manager_v2():
     from esl.models import UserValue, ValueType
     from models.context import Goal, Event, GoalStatus
 
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("TEST: Context Manager V2 (PostgreSQL + Weaviate)")
-    print("="*70)
+    print("=" * 70)
 
     # Initialize
     weaviate_client = get_weaviate_client()
@@ -47,7 +50,7 @@ async def test_context_manager_v2():
         title="Test V2 Context Manager",
         description="Verify PostgreSQL integration works",
         status=GoalStatus.ACTIVE,
-        priority=9
+        priority=9,
     )
     created_goal = await context_mgr.create_goal(new_goal)
     print(f"   ✅ Created goal: {created_goal.title} (ID: {created_goal.id})")
@@ -68,7 +71,7 @@ async def test_context_manager_v2():
         start_time=datetime.now(timezone.utc) + timedelta(hours=2),
         end_time=datetime.now(timezone.utc) + timedelta(hours=3),
         source="manual",
-        source_id="test-v2-event"
+        source_id="test-v2-event",
     )
     stored_event = await context_mgr.store_event(new_event)
     print(f"   ✅ Stored event: {stored_event.title} (ID: {stored_event.id})")
@@ -105,9 +108,9 @@ async def test_context_manager_v2():
     # Reset focus mode
     await context_mgr.set_focus_mode(test_user_id, False)
 
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("🎉 ALL CONTEXT MANAGER V2 TESTS PASSED!")
-    print("="*70)
+    print("=" * 70)
     print("\n✅ PostgreSQL integration: WORKING")
     print("✅ Weaviate integration: INITIALIZED")
     print("✅ M1 (structured data): WORKING")
@@ -118,6 +121,7 @@ async def test_context_manager_v2():
     print("   1. Add GEMINI_API_KEY to test semantic memory")
     print("   2. Create data ingestion services")
     print("   3. Refactor orchestrator with LangChain")
+
 
 if __name__ == "__main__":
     asyncio.run(test_context_manager_v2())

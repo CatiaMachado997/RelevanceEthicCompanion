@@ -1,4 +1,5 @@
 """ResponseFormatter and ExplainVeto — produce SSE metadata for done event."""
+
 from orchestrator.state import AgentState
 from esl.models import ESLDecisionStatus
 

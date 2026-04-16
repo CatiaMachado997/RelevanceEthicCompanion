@@ -1,5 +1,6 @@
 # backend/services/connectors/google_calendar.py
 """Google Calendar connector — wraps GoogleCalendarSync, implements BaseConnector."""
+
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
@@ -53,9 +54,7 @@ class GoogleCalendarConnector(BaseConnector):
 
         # Build attendee display names
         attendees = raw.get("attendees", [])
-        attendee_names = [
-            a.get("displayName") or a.get("email", "") for a in attendees
-        ]
+        attendee_names = [a.get("displayName") or a.get("email", "") for a in attendees]
         attendee_str = ", ".join(attendee_names) if attendee_names else "none"
 
         # Rich body: description + attendees + time range
@@ -94,7 +93,7 @@ class GoogleCalendarConnector(BaseConnector):
         if action_name == "create_event":
             summary = params.get("summary", "New event")
             start = params.get("start")  # ISO datetime string
-            end = params.get("end")      # ISO datetime string
+            end = params.get("end")  # ISO datetime string
             if not start or not end:
                 return "Error: 'start' and 'end' (ISO datetime) are required"
             body = {

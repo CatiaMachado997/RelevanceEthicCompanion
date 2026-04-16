@@ -1,5 +1,6 @@
 # backend/routes/context.py
 """Context snapshot API route."""
+
 import logging
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Any, Dict
@@ -19,4 +20,6 @@ async def get_snapshot(user_id: str = Depends(get_current_read_user_id)):
         return service.compute(str(user_id))
     except Exception as e:
         logger.error(f"Context snapshot failed for user {user_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Error fetching context snapshot: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching context snapshot: {str(e)}"
+        )

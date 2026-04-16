@@ -7,6 +7,7 @@ Two key functions:
 - `get_remote_address` (from slowapi) — used for IP-based limits (auth endpoints)
 - `get_user_id_or_ip` — used for user-based limits (authenticated tool endpoints)
 """
+
 from fastapi import Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address

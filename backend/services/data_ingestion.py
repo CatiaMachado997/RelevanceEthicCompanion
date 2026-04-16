@@ -31,6 +31,7 @@ _RECONNECT_SENTINEL = "reconnect required"
 
 class TokenExpiredError(Exception):
     """Raised when an OAuth token has expired and cannot be refreshed."""
+
     def __init__(self, source_type: str):
         self.source_type = source_type
         super().__init__(f"Token expired for {source_type} — reconnect required")
@@ -79,7 +80,11 @@ class DataIngestionService:
                     f"⚠️ Initial sync failed for {source_type} (tokens stored): {sync_err}"
                 )
 
-            return {"success": True, "message": f"{source_type} connected", "source_type": source_type}
+            return {
+                "success": True,
+                "message": f"{source_type} connected",
+                "source_type": source_type,
+            }
         except Exception as e:
             logger.error(f"❌ OAuth callback failed: {e}")
             return {"success": False, "message": str(e), "source_type": source_type}
@@ -109,15 +114,21 @@ class DataIngestionService:
                     await self._maybe_embed(source_item, user_id)
                     items_synced += 1
                 except Exception as item_err:
-                    logger.warning(f"⚠️ Failed to process item from {source_type}: {item_err}")
+                    logger.warning(
+                        f"⚠️ Failed to process item from {source_type}: {item_err}"
+                    )
 
             await self._update_last_sync(user_id, source_type)
             await self._clear_sync_error(user_id, source_type)
 
             try:
-                recent = await self._get_recent_synced_items(user_id, source_type, limit=3)
+                recent = await self._get_recent_synced_items(
+                    user_id, source_type, limit=3
+                )
             except Exception:
-                logger.warning(f"⚠️  Could not fetch recent items after sync for {source_type}")
+                logger.warning(
+                    f"⚠️  Could not fetch recent items after sync for {source_type}"
+                )
                 recent = []
             logger.info(f"✅ Sync complete: {items_synced} items from {source_type}")
             return {
@@ -130,7 +141,9 @@ class DataIngestionService:
 
         except Exception as e:
             error_msg = str(e)
-            logger.error(f"❌ Sync failed for {source_type}: {error_msg}", exc_info=True)
+            logger.error(
+                f"❌ Sync failed for {source_type}: {error_msg}", exc_info=True
+            )
             await self._record_sync_error(user_id, source_type, error_msg)
             return {
                 "success": False,
@@ -176,7 +189,9 @@ class DataIngestionService:
 
     async def _maybe_embed(self, item: SourceItem, user_id: str):
         """Store in M2 (Weaviate) if available — best-effort."""
-        if not (self.context_manager.weaviate and self.context_manager.embedding_service):
+        if not (
+            self.context_manager.weaviate and self.context_manager.embedding_service
+        ):
             return
         try:
             content = f"{item.title}. {item.body or ''}"
@@ -283,9 +298,15 @@ class DataIngestionService:
         # Normalise expires_at to an aware datetime
         if expires_at is not None:
             if hasattr(expires_at, "tzinfo"):
-                expires_aware = expires_at if expires_at.tzinfo else expires_at.replace(tzinfo=timezone.utc)
+                expires_aware = (
+                    expires_at
+                    if expires_at.tzinfo
+                    else expires_at.replace(tzinfo=timezone.utc)
+                )
             else:
-                expires_aware = datetime.fromisoformat(str(expires_at)).replace(tzinfo=timezone.utc)
+                expires_aware = datetime.fromisoformat(str(expires_at)).replace(
+                    tzinfo=timezone.utc
+                )
         else:
             expires_aware = None
 
@@ -453,14 +474,20 @@ class DataIngestionService:
 
         sources = []
         for row in rows:
-            recent_items = await self._get_recent_synced_items(user_id, row["source_type"])
+            recent_items = await self._get_recent_synced_items(
+                user_id, row["source_type"]
+            )
             sources.append(
                 {
                     "source_type": row["source_type"],
                     "enabled": row["enabled"],
-                    "last_sync": row["last_sync"].isoformat() if row["last_sync"] else None,
+                    "last_sync": (
+                        row["last_sync"].isoformat() if row["last_sync"] else None
+                    ),
                     "token_expires_at": (
-                        row["token_expires_at"].isoformat() if row["token_expires_at"] else None
+                        row["token_expires_at"].isoformat()
+                        if row["token_expires_at"]
+                        else None
                     ),
                     "status": self._derive_status(row),
                     "item_count": row["item_count"],
@@ -484,7 +511,9 @@ class DataIngestionService:
                     """,
                     (user_id,),
                 )
-                counts = {row["source_type"]: row["item_count"] for row in cur.fetchall()}
+                counts = {
+                    row["source_type"]: row["item_count"] for row in cur.fetchall()
+                }
         return {
             "google_calendar": counts.get("google_calendar", 0),
             "gmail": counts.get("gmail", 0),

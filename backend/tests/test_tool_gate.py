@@ -23,8 +23,11 @@ async def test_ask_trust_returns_pending():
         mock_db.return_value = conn
 
         result = await gate.check(
-            user_id="u1", tool_id="github", action_name="create_issue",
-            risk_level="medium", preview="Create issue: Fix login bug"
+            user_id="u1",
+            tool_id="github",
+            action_name="create_issue",
+            risk_level="medium",
+            preview="Create issue: Fix login bug",
         )
 
     assert result.status == GateResult.PENDING_CONFIRMATION
@@ -48,8 +51,11 @@ async def test_explicit_ask_record_returns_pending():
         mock_db.return_value = conn
 
         result = await gate.check(
-            user_id="u1", tool_id="github", action_name="create_issue",
-            risk_level="medium", preview="Create issue: Fix login bug"
+            user_id="u1",
+            tool_id="github",
+            action_name="create_issue",
+            risk_level="medium",
+            preview="Create issue: Fix login bug",
         )
 
     assert result.status == GateResult.PENDING_CONFIRMATION
@@ -73,8 +79,11 @@ async def test_allow_trust_returns_approved():
         mock_db.return_value = conn
 
         result = await gate.check(
-            user_id="u1", tool_id="github", action_name="create_issue",
-            risk_level="medium", preview="Create issue"
+            user_id="u1",
+            tool_id="github",
+            action_name="create_issue",
+            risk_level="medium",
+            preview="Create issue",
         )
 
     assert result.status == GateResult.APPROVED
@@ -97,8 +106,11 @@ async def test_deny_trust_returns_vetoed():
         mock_db.return_value = conn
 
         result = await gate.check(
-            user_id="u1", tool_id="github", action_name="create_issue",
-            risk_level="medium", preview="Create issue"
+            user_id="u1",
+            tool_id="github",
+            action_name="create_issue",
+            risk_level="medium",
+            preview="Create issue",
         )
 
     assert result.status == GateResult.VETOED
@@ -121,8 +133,11 @@ async def test_high_risk_always_pending_even_when_allowed():
         mock_db.return_value = conn
 
         result = await gate.check(
-            user_id="u1", tool_id="gmail_write", action_name="send_reply",
-            risk_level="high", preview="Send email to alice@example.com"
+            user_id="u1",
+            tool_id="gmail_write",
+            action_name="send_reply",
+            risk_level="high",
+            preview="Send email to alice@example.com",
         )
 
     assert result.status == GateResult.PENDING_CONFIRMATION
@@ -145,8 +160,11 @@ async def test_low_risk_no_record_auto_approved():
         mock_db.return_value = conn
 
         result = await gate.check(
-            user_id="u1", tool_id="notion", action_name="create_page",
-            risk_level="low", preview="Create page: Meeting notes"
+            user_id="u1",
+            tool_id="notion",
+            action_name="create_page",
+            risk_level="low",
+            preview="Create page: Meeting notes",
         )
 
     assert result.status == GateResult.APPROVED

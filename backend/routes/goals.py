@@ -23,7 +23,9 @@ def get_context_manager() -> ContextManager:
     return ContextManager()
 
 
-def get_esl(context_manager: ContextManager = Depends(get_context_manager)) -> EthicalSafeguardLayer:
+def get_esl(
+    context_manager: ContextManager = Depends(get_context_manager),
+) -> EthicalSafeguardLayer:
     """Get ESL instance"""
     return EthicalSafeguardLayer(context_manager)
 
@@ -31,14 +33,18 @@ def get_esl(context_manager: ContextManager = Depends(get_context_manager)) -> E
 # Request/Response models
 class CreateGoalRequest(BaseModel):
     """Request to create a goal"""
+
     title: str = Field(..., min_length=1, description="Goal title")
     description: Optional[str] = Field(None, description="Goal description")
     priority: int = Field(default=5, ge=1, le=10, description="Priority (1=highest)")
-    target_date: Optional[str] = Field(None, description="Target completion date (ISO format)")
+    target_date: Optional[str] = Field(
+        None, description="Target completion date (ISO format)"
+    )
 
 
 class UpdateGoalRequest(BaseModel):
     """Request to update a goal"""
+
     title: Optional[str] = None
     description: Optional[str] = None
     status: Optional[str] = None
@@ -54,7 +60,7 @@ router = APIRouter(prefix="/api/goals", tags=["Goals"])
 async def create_goal(
     request: CreateGoalRequest,
     user_id: str = Depends(get_current_user_id),
-    esl: EthicalSafeguardLayer = Depends(get_esl)
+    esl: EthicalSafeguardLayer = Depends(get_esl),
 ):
     """
     Create a new goal
@@ -86,14 +92,14 @@ async def create_goal(
             content_type="goal_creation",
             content=f"Creating goal: {request.title}",
             urgency=UrgencyLevel.LOW,
-            metadata={"goal_title": request.title, "priority": request.priority}
+            metadata={"goal_title": request.title, "priority": request.priority},
         )
         decision = await esl.evaluate_action(proposed_action, user_id)
 
         if decision.status == ESLDecisionStatus.VETOED:
             raise HTTPException(
                 status_code=403,
-                detail=f"Goal creation blocked by ESL: {decision.reason}"
+                detail=f"Goal creation blocked by ESL: {decision.reason}",
             )
 
         with get_db() as conn:
@@ -110,7 +116,7 @@ async def create_goal(
                         request.description,
                         request.priority,
                         request.target_date,
-                        '{}',
+                        "{}",
                     ),
                 )
                 new_goal = cur.fetchone()
@@ -119,11 +125,11 @@ async def create_goal(
             return {
                 "status": "success",
                 "message": "Goal created successfully",
-                "data": serialize_row(new_goal)
+                "data": serialize_row(new_goal),
             }
         else:
             raise HTTPException(status_code=500, detail="Failed to create goal")
-            
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating goal: {str(e)}")
 
@@ -132,16 +138,16 @@ async def create_goal(
 async def list_goals(
     user_id: str = Depends(get_current_read_user_id),
     status: Optional[str] = None,
-    active_only: bool = True
+    active_only: bool = True,
 ):
     """
     List user's goals
-    
+
     Args:
         user_id: Current user ID
         status: Filter by status (active, completed, paused, archived)
         active_only: Only return active goals
-    
+
     Returns:
         List of goals
     """
@@ -158,32 +164,25 @@ async def list_goals(
                     query += " AND status = 'active'"
 
                 query += " ORDER BY priority"
-                
+
                 cur.execute(query, tuple(params))
                 goals = cur.fetchall()
 
-        return {
-            "status": "success",
-            "count": len(goals),
-            "data": serialize_rows(goals)
-        }
-        
+        return {"status": "success", "count": len(goals), "data": serialize_rows(goals)}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching goals: {str(e)}")
 
 
 @router.get("/{goal_id}", response_model=dict)
-async def get_goal(
-    goal_id: str,
-    user_id: str = Depends(get_current_read_user_id)
-):
+async def get_goal(goal_id: str, user_id: str = Depends(get_current_read_user_id)):
     """
     Get a specific goal by ID
-    
+
     Args:
         goal_id: Goal ID
         user_id: Current user ID
-    
+
     Returns:
         Goal data
     """
@@ -198,12 +197,9 @@ async def get_goal(
 
         if not goal:
             raise HTTPException(status_code=404, detail="Goal not found")
-        
-        return {
-            "status": "success",
-            "data": serialize_row(goal)
-        }
-        
+
+        return {"status": "success", "data": serialize_row(goal)}
+
     except Exception as e:
         if "not found" in str(e).lower():
             raise HTTPException(status_code=404, detail="Goal not found")
@@ -215,7 +211,7 @@ async def update_goal(
     goal_id: str,
     request: UpdateGoalRequest,
     user_id: str = Depends(get_current_user_id),
-    esl: EthicalSafeguardLayer = Depends(get_esl)
+    esl: EthicalSafeguardLayer = Depends(get_esl),
 ):
     """
     Update a goal
@@ -236,14 +232,16 @@ async def update_goal(
             content_type="goal_update",
             content=f"Updating goal: {goal_id}",
             urgency=UrgencyLevel.LOW,
-            metadata={"goal_id": goal_id, "updates": request.model_dump(exclude_none=True)}
+            metadata={
+                "goal_id": goal_id,
+                "updates": request.model_dump(exclude_none=True),
+            },
         )
         decision = await esl.evaluate_action(proposed_action, user_id)
 
         if decision.status == ESLDecisionStatus.VETOED:
             raise HTTPException(
-                status_code=403,
-                detail=f"Goal update blocked by ESL: {decision.reason}"
+                status_code=403, detail=f"Goal update blocked by ESL: {decision.reason}"
             )
 
         with get_db() as conn:
@@ -274,16 +272,16 @@ async def update_goal(
                     tuple(params),
                 )
                 updated_goal = cur.fetchone()
-        
+
         if not updated_goal:
             raise HTTPException(status_code=404, detail="Goal not found")
-        
+
         return {
             "status": "success",
             "message": "Goal updated successfully",
-            "data": serialize_row(updated_goal)
+            "data": serialize_row(updated_goal),
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -294,7 +292,7 @@ async def update_goal(
 async def complete_goal(
     goal_id: str,
     user_id: str = Depends(get_current_user_id),
-    esl: EthicalSafeguardLayer = Depends(get_esl)
+    esl: EthicalSafeguardLayer = Depends(get_esl),
 ):
     """
     Mark a goal as completed
@@ -313,14 +311,14 @@ async def complete_goal(
             content_type="goal_completion",
             content=f"Completing goal: {goal_id}",
             urgency=UrgencyLevel.LOW,
-            metadata={"goal_id": goal_id}
+            metadata={"goal_id": goal_id},
         )
         decision = await esl.evaluate_action(proposed_action, user_id)
 
         if decision.status == ESLDecisionStatus.VETOED:
             raise HTTPException(
                 status_code=403,
-                detail=f"Goal completion blocked by ESL: {decision.reason}"
+                detail=f"Goal completion blocked by ESL: {decision.reason}",
             )
 
         with get_db() as conn:
@@ -337,10 +335,12 @@ async def complete_goal(
         # Insert notification
         try:
             from routes.notifications import create_notification
+
             goal_title = updated_goal.get("title", goal_id)
             with get_db() as notif_conn:
                 create_notification(
-                    notif_conn, user_id,
+                    notif_conn,
+                    user_id,
                     type="goal_completed",
                     title="Goal Completed",
                     message=f'You completed "{goal_title}"',
@@ -351,9 +351,9 @@ async def complete_goal(
         return {
             "status": "success",
             "message": "Goal completed! 🎉",
-            "data": serialize_row(updated_goal)
+            "data": serialize_row(updated_goal),
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -366,8 +366,7 @@ class ReorderGoalsRequest(BaseModel):
 
 @router.patch("/reorder", response_model=dict)
 async def reorder_goals(
-    request: ReorderGoalsRequest,
-    user_id: str = Depends(get_current_user_id)
+    request: ReorderGoalsRequest, user_id: str = Depends(get_current_user_id)
 ):
     """
     Reorder goals by updating their priority based on provided order.
@@ -399,17 +398,14 @@ async def reorder_goals(
 
 
 @router.delete("/{goal_id}", response_model=dict)
-async def delete_goal(
-    goal_id: str,
-    user_id: str = Depends(get_current_user_id)
-):
+async def delete_goal(goal_id: str, user_id: str = Depends(get_current_user_id)):
     """
     Delete (archive) a goal
-    
+
     Args:
         goal_id: Goal ID
         user_id: Current user ID
-    
+
     Returns:
         Success message
     """
@@ -428,9 +424,9 @@ async def delete_goal(
         return {
             "status": "success",
             "message": "Goal archived successfully",
-            "data": serialize_row(archived_goal)
+            "data": serialize_row(archived_goal),
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -438,6 +434,7 @@ async def delete_goal(
 
 
 # ==================== Milestones ====================
+
 
 class MilestoneCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
@@ -464,7 +461,9 @@ async def list_milestones(
                 rows = cur.fetchall()
         return {"milestones": [serialize_row(r) for r in rows]}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching milestones: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching milestones: {str(e)}"
+        )
 
 
 @router.post("/{goal_id}/milestones", response_model=dict)
@@ -488,7 +487,9 @@ async def create_milestone(
                 row = cur.fetchone()
         return {"milestone": serialize_row(row)}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error creating milestone: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error creating milestone: {str(e)}"
+        )
 
 
 @router.patch("/{goal_id}/milestones/{milestone_id}", response_model=dict)
@@ -529,7 +530,9 @@ async def toggle_milestone(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error updating milestone: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error updating milestone: {str(e)}"
+        )
 
 
 @router.delete("/{goal_id}/milestones/{milestone_id}", response_model=dict)
@@ -548,4 +551,6 @@ async def delete_milestone(
                 )
         return {"success": True}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error deleting milestone: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error deleting milestone: {str(e)}"
+        )

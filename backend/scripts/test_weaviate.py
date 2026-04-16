@@ -41,15 +41,13 @@ def test_weaviate_connection():
             "role": "user",
             "timestamp": datetime.now(),
             "source": "test",
-            "metadata": "{}"
+            "metadata": "{}",
         }
 
         test_vector = [0.1] * 768  # Dummy 768-dim vector
 
         uuid = client.store_memory(
-            collection="ConversationMemory",
-            content=test_memory,
-            vector=test_vector
+            collection="ConversationMemory", content=test_memory, vector=test_vector
         )
         print(f"✅ Stored test memory with UUID: {uuid}")
 
@@ -59,7 +57,7 @@ def test_weaviate_connection():
             collection="ConversationMemory",
             query="test conversation",
             user_id="test_user_123",
-            limit=5
+            limit=5,
         )
         print(f"✅ Keyword search returned {len(results)} results")
 
@@ -75,6 +73,7 @@ def test_weaviate_connection():
     except Exception as e:
         print(f"\n❌ Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 

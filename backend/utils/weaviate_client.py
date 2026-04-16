@@ -38,17 +38,17 @@ class WeaviateClient:
                 host="localhost",
                 port=8080,
                 grpc_port=50051,
-                skip_init_checks=False  # Try with gRPC enabled
+                skip_init_checks=False,  # Try with gRPC enabled
             )
             logger.info(f"✅ Connected to Weaviate at {self.url} (with gRPC)")
         except Exception as e:
-            logger.warning(f"⚠️  gRPC connection failed, falling back to HTTP-only: {e}")
+            logger.warning(
+                f"⚠️  gRPC connection failed, falling back to HTTP-only: {e}"
+            )
             try:
                 # Fallback to HTTP-only if gRPC fails
                 self.client = weaviate.connect_to_local(
-                    host="localhost",
-                    port=8080,
-                    skip_init_checks=True
+                    host="localhost", port=8080, skip_init_checks=True
                 )
                 logger.info(f"✅ Connected to Weaviate at {self.url} (HTTP-only mode)")
             except Exception as e2:
@@ -76,10 +76,7 @@ class WeaviateClient:
             raise
 
     def store_memory(
-        self,
-        collection: str,
-        content: Dict[str, Any],
-        vector: List[float]
+        self, collection: str, content: Dict[str, Any], vector: List[float]
     ) -> str:
         """
         Store a memory entry with embedding
@@ -101,10 +98,7 @@ class WeaviateClient:
                     content[key] = value.isoformat()
 
             # Add object with vector
-            uuid = collection_obj.data.insert(
-                properties=content,
-                vector=vector
-            )
+            uuid = collection_obj.data.insert(properties=content, vector=vector)
 
             logger.debug(f"✅ Stored memory in {collection}: {uuid}")
             return str(uuid)
@@ -118,7 +112,7 @@ class WeaviateClient:
         query_vector: List[float],
         user_id: str,
         limit: int = 5,
-        filters: Optional[Dict[str, Any]] = None
+        filters: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Query collection using semantic search (vector similarity)
@@ -147,19 +141,23 @@ class WeaviateClient:
                 near_vector=query_vector,
                 limit=limit,
                 return_metadata=["distance"],
-                filters=where_filter  # Note: 'filters' not 'where' in v4
+                filters=where_filter,  # Note: 'filters' not 'where' in v4
             )
 
             # Format results
             results = []
             for obj in response.objects:
-                results.append({
-                    "uuid": str(obj.uuid),
-                    "properties": obj.properties,
-                    "distance": obj.metadata.distance if obj.metadata else None
-                })
+                results.append(
+                    {
+                        "uuid": str(obj.uuid),
+                        "properties": obj.properties,
+                        "distance": obj.metadata.distance if obj.metadata else None,
+                    }
+                )
 
-            logger.debug(f"✅ Semantic query returned {len(results)} results from {collection}")
+            logger.debug(
+                f"✅ Semantic query returned {len(results)} results from {collection}"
+            )
             return results
         except Exception as e:
             logger.error(f"❌ Semantic query failed: {e}")
@@ -171,7 +169,7 @@ class WeaviateClient:
         query: str,
         user_id: str,
         limit: int = 5,
-        properties: Optional[List[str]] = None
+        properties: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Query collection using keyword search (BM25)
@@ -198,19 +196,23 @@ class WeaviateClient:
                 limit=limit,
                 return_metadata=["score"],
                 filters=where_filter,  # Note: 'filters' not 'where' in v4
-                query_properties=properties
+                query_properties=properties,
             )
 
             # Format results
             results = []
             for obj in response.objects:
-                results.append({
-                    "uuid": str(obj.uuid),
-                    "properties": obj.properties,
-                    "score": obj.metadata.score if obj.metadata else None
-                })
+                results.append(
+                    {
+                        "uuid": str(obj.uuid),
+                        "properties": obj.properties,
+                        "score": obj.metadata.score if obj.metadata else None,
+                    }
+                )
 
-            logger.debug(f"✅ Keyword query returned {len(results)} results from {collection}")
+            logger.debug(
+                f"✅ Keyword query returned {len(results)} results from {collection}"
+            )
             return results
         except Exception as e:
             logger.error(f"❌ Keyword query failed: {e}")
@@ -223,7 +225,7 @@ class WeaviateClient:
         query_vector: List[float],
         user_id: str,
         limit: int = 5,
-        alpha: float = 0.7
+        alpha: float = 0.7,
     ) -> List[Dict[str, Any]]:
         """
         Hybrid search combining semantic (vector) and keyword (BM25)
@@ -252,19 +254,23 @@ class WeaviateClient:
                 limit=limit,
                 alpha=alpha,
                 return_metadata=["score"],
-                filters=where_filter  # Note: 'filters' not 'where' in v4
+                filters=where_filter,  # Note: 'filters' not 'where' in v4
             )
 
             # Format results
             results = []
             for obj in response.objects:
-                results.append({
-                    "uuid": str(obj.uuid),
-                    "properties": obj.properties,
-                    "score": obj.metadata.score if obj.metadata else None
-                })
+                results.append(
+                    {
+                        "uuid": str(obj.uuid),
+                        "properties": obj.properties,
+                        "score": obj.metadata.score if obj.metadata else None,
+                    }
+                )
 
-            logger.debug(f"✅ Hybrid search returned {len(results)} results from {collection}")
+            logger.debug(
+                f"✅ Hybrid search returned {len(results)} results from {collection}"
+            )
             return results
         except Exception as e:
             logger.error(f"❌ Hybrid search failed: {e}")

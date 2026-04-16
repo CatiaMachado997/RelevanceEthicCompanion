@@ -6,6 +6,7 @@ Storage:
   M1 (PostgreSQL): documents table (metadata) + source_items (one row per chunk)
   M2 (Weaviate): DocumentMemory collection (one object per chunk)
 """
+
 import json
 import logging
 import uuid
@@ -25,7 +26,9 @@ CHUNK_SIZE = 2000
 CHUNK_OVERLAP = 200
 
 
-def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> List[str]:
+def chunk_text(
+    text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP
+) -> List[str]:
     """Split text into overlapping chunks. Returns empty list if text is blank."""
     text = text.strip()
     if not text:
@@ -53,7 +56,9 @@ class DocumentProcessor:
         "application/pdf": "_extract_pdf",
     }
 
-    def __init__(self, context_manager: ContextManager, embedding_service: "EmbeddingService"):
+    def __init__(
+        self, context_manager: ContextManager, embedding_service: "EmbeddingService"
+    ):
         self.context_manager = context_manager
         self.embedding_service = embedding_service
 
@@ -75,6 +80,7 @@ class DocumentProcessor:
         try:
             import io
             from pypdf import PdfReader
+
             reader = PdfReader(io.BytesIO(file_bytes))
             pages = []
             for page in reader.pages:
@@ -131,12 +137,14 @@ class DocumentProcessor:
                                 chunk_external_id,
                                 f"{filename} [chunk {idx + 1}/{len(chunks)}]",
                                 chunk,
-                                json.dumps({
-                                    "document_id": document_id,
-                                    "chunk_index": idx,
-                                    "chunk_count": len(chunks),
-                                    "filename": filename,
-                                }),
+                                json.dumps(
+                                    {
+                                        "document_id": document_id,
+                                        "chunk_index": idx,
+                                        "chunk_count": len(chunks),
+                                        "filename": filename,
+                                    }
+                                ),
                             ),
                         )
 
@@ -157,7 +165,9 @@ class DocumentProcessor:
 
         except Exception as e:
             logger.error(f"❌ Document processing failed for {document_id}: {e}")
-            self._update_document_status(document_id, "failed", error_message=str(e)[:500])
+            self._update_document_status(
+                document_id, "failed", error_message=str(e)[:500]
+            )
             raise
 
     async def _embed_chunk(
@@ -201,7 +211,9 @@ class DocumentProcessor:
                         (user_id, f"{document_id}_chunk_{chunk_index}"),
                     )
         except Exception as e:
-            logger.warning(f"⚠️ Embed failed for chunk {chunk_index} of {document_id}: {e}")
+            logger.warning(
+                f"⚠️ Embed failed for chunk {chunk_index} of {document_id}: {e}"
+            )
 
     def _update_document_status(
         self,

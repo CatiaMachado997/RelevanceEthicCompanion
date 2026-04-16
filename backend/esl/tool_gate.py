@@ -8,6 +8,7 @@ Rules:
   record=ask or no record (medium) → PENDING_CONFIRMATION
   record=deny → VETOED
 """
+
 from __future__ import annotations
 
 import logging

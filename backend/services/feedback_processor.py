@@ -16,7 +16,7 @@ from models.feedback import (
     FeedbackType,
     ItemType,
     FeedbackSubmission,
-    FeedbackAnalytics
+    FeedbackAnalytics,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,7 +52,7 @@ class FeedbackProcessor:
         item_type: str,
         feedback_type: str,
         context_snapshot: Optional[Dict[str, Any]] = None,
-        additional_notes: Optional[str] = None
+        additional_notes: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Submit user feedback on an item
@@ -91,7 +91,8 @@ class FeedbackProcessor:
 
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         INSERT INTO relevance_feedback (
                             id,
                             user_id,
@@ -104,16 +105,18 @@ class FeedbackProcessor:
                         )
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                         RETURNING id
-                    """, (
-                        feedback_id,
-                        user_id,
-                        item_type,
-                        item_id,
-                        feedback_type,
-                        Json(context_snapshot or {}),
-                        additional_notes,
-                        datetime.utcnow()
-                    ))
+                    """,
+                        (
+                            feedback_id,
+                            user_id,
+                            item_type,
+                            item_id,
+                            feedback_type,
+                            Json(context_snapshot or {}),
+                            additional_notes,
+                            datetime.utcnow(),
+                        ),
+                    )
 
                     conn.commit()
 
@@ -125,28 +128,19 @@ class FeedbackProcessor:
             return {
                 "success": True,
                 "feedback_id": feedback_id,
-                "message": "Feedback recorded successfully"
+                "message": "Feedback recorded successfully",
             }
 
         except ValueError as e:
             logger.error(f"❌ Invalid feedback submission: {e}")
-            return {
-                "success": False,
-                "error": str(e)
-            }
+            return {"success": False, "error": str(e)}
 
         except Exception as e:
             logger.error(f"❌ Failed to submit feedback: {e}", exc_info=True)
-            return {
-                "success": False,
-                "error": "Failed to record feedback"
-            }
+            return {"success": False, "error": "Failed to record feedback"}
 
     async def get_user_feedback_history(
-        self,
-        user_id: str,
-        limit: int = 50,
-        item_type: Optional[str] = None
+        self, user_id: str, limit: int = 50, item_type: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
         Get feedback history for a user
@@ -163,7 +157,8 @@ class FeedbackProcessor:
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
                     if item_type:
-                        cur.execute("""
+                        cur.execute(
+                            """
                             SELECT
                                 id,
                                 item_type,
@@ -175,9 +170,12 @@ class FeedbackProcessor:
                             WHERE user_id = %s AND item_type = %s
                             ORDER BY timestamp DESC
                             LIMIT %s
-                        """, (user_id, item_type, limit))
+                        """,
+                            (user_id, item_type, limit),
+                        )
                     else:
-                        cur.execute("""
+                        cur.execute(
+                            """
                             SELECT
                                 id,
                                 item_type,
@@ -189,7 +187,9 @@ class FeedbackProcessor:
                             WHERE user_id = %s
                             ORDER BY timestamp DESC
                             LIMIT %s
-                        """, (user_id, limit))
+                        """,
+                            (user_id, limit),
+                        )
 
                     rows = cur.fetchall()
 
@@ -200,7 +200,7 @@ class FeedbackProcessor:
                             "item_id": row[2],
                             "feedback_type": row[3],
                             "additional_notes": row[4],
-                            "timestamp": row[5].isoformat()
+                            "timestamp": row[5].isoformat(),
                         }
                         for row in rows
                     ]
@@ -210,9 +210,7 @@ class FeedbackProcessor:
             return []
 
     async def get_feedback_analytics(
-        self,
-        user_id: Optional[str] = None,
-        days: int = 30
+        self, user_id: Optional[str] = None, days: int = 30
     ) -> FeedbackAnalytics:
         """
         Get feedback analytics (for admin or user)
@@ -233,7 +231,8 @@ class FeedbackProcessor:
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
                     if user_id:
-                        cur.execute("""
+                        cur.execute(
+                            """
                             SELECT
                                 feedback_type,
                                 COUNT(*) as count
@@ -241,27 +240,32 @@ class FeedbackProcessor:
                             WHERE user_id = %s
                               AND timestamp > NOW() - INTERVAL '%s days'
                             GROUP BY feedback_type
-                        """, (user_id, days))
+                        """,
+                            (user_id, days),
+                        )
                     else:
-                        cur.execute("""
+                        cur.execute(
+                            """
                             SELECT
                                 feedback_type,
                                 COUNT(*) as count
                             FROM relevance_feedback
                             WHERE timestamp > NOW() - INTERVAL '%s days'
                             GROUP BY feedback_type
-                        """, (days,))
+                        """,
+                            (days,),
+                        )
 
                     rows = cur.fetchall()
 
                     # Aggregate feedback counts
                     feedback_counts = {row[0]: row[1] for row in rows}
 
-                    thumbs_up = feedback_counts.get('thumbs_up', 0)
-                    thumbs_down = feedback_counts.get('thumbs_down', 0)
-                    not_relevant = feedback_counts.get('not_relevant', 0)
-                    value_conflict = feedback_counts.get('value_conflict', 0)
-                    inaccurate = feedback_counts.get('inaccurate', 0)
+                    thumbs_up = feedback_counts.get("thumbs_up", 0)
+                    thumbs_down = feedback_counts.get("thumbs_down", 0)
+                    not_relevant = feedback_counts.get("not_relevant", 0)
+                    value_conflict = feedback_counts.get("value_conflict", 0)
+                    inaccurate = feedback_counts.get("inaccurate", 0)
 
                     total_feedback = sum(feedback_counts.values())
 
@@ -279,7 +283,7 @@ class FeedbackProcessor:
                         inaccurate_count=inaccurate,
                         total_feedback=total_feedback,
                         satisfaction_rate=satisfaction_rate,
-                        days_analyzed=days
+                        days_analyzed=days,
                     )
 
         except Exception as e:
@@ -292,13 +296,11 @@ class FeedbackProcessor:
                 inaccurate_count=0,
                 total_feedback=0,
                 satisfaction_rate=0.0,
-                days_analyzed=days
+                days_analyzed=days,
             )
 
     async def get_item_feedback(
-        self,
-        item_id: str,
-        item_type: str
+        self, item_id: str, item_type: str
     ) -> List[Dict[str, Any]]:
         """
         Get all feedback for a specific item
@@ -315,7 +317,8 @@ class FeedbackProcessor:
         try:
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         SELECT
                             user_id,
                             feedback_type,
@@ -324,7 +327,9 @@ class FeedbackProcessor:
                         FROM relevance_feedback
                         WHERE item_id = %s AND item_type = %s
                         ORDER BY timestamp DESC
-                    """, (item_id, item_type))
+                    """,
+                        (item_id, item_type),
+                    )
 
                     rows = cur.fetchall()
 
@@ -333,7 +338,7 @@ class FeedbackProcessor:
                             "user_id": row[0],
                             "feedback_type": row[1],
                             "additional_notes": row[2],
-                            "timestamp": row[3].isoformat()
+                            "timestamp": row[3].isoformat(),
                         }
                         for row in rows
                     ]
@@ -341,7 +346,6 @@ class FeedbackProcessor:
         except Exception as e:
             logger.error(f"❌ Failed to get item feedback: {e}")
             return []
-
 
     async def get_user_adjustments(self, user_id: str) -> Dict[str, float]:
         """
@@ -355,10 +359,14 @@ class FeedbackProcessor:
                 with conn.cursor() as cur:
                     cur.execute(
                         "SELECT signal_type, multiplier FROM relevance_adjustments WHERE user_id = %s",
-                        (str(user_id),)
+                        (str(user_id),),
                     )
                     rows = cur.fetchall()
-            return {row['signal_type']: float(row['multiplier']) for row in rows} if rows else {}
+            return (
+                {row["signal_type"]: float(row["multiplier"]) for row in rows}
+                if rows
+                else {}
+            )
         except Exception as e:
             logger.warning(f"Could not fetch relevance adjustments for {user_id}: {e}")
             return {}
@@ -379,10 +387,10 @@ class FeedbackProcessor:
             analytics = await self.get_feedback_analytics(user_id=user_id, days=30)
             satisfaction = analytics.satisfaction_rate if analytics else 50.0
 
-            if satisfaction < 40 and feedback_type == 'thumbs_down':
+            if satisfaction < 40 and feedback_type == "thumbs_down":
                 # User is consistently dissatisfied — boost goal alignment, reduce raw query match
-                await self._upsert_adjustment(user_id, 'goal_alignment', 1.3)
-                await self._upsert_adjustment(user_id, 'query_match', 0.8)
+                await self._upsert_adjustment(user_id, "goal_alignment", 1.3)
+                await self._upsert_adjustment(user_id, "query_match", 0.8)
                 logger.info(
                     f"[FeedbackProcessor] Adjusted goal_alignment→1.3, query_match→0.8 for user {user_id} "
                     f"(satisfaction={satisfaction:.0f}%)"
@@ -390,7 +398,9 @@ class FeedbackProcessor:
         except Exception as e:
             logger.warning(f"Could not adjust relevance signal for {user_id}: {e}")
 
-    async def note_esl_sensitivity_boost(self, user_id: str, content_category: str, increment: float = 0.1) -> None:
+    async def note_esl_sensitivity_boost(
+        self, user_id: str, content_category: str, increment: float = 0.1
+    ) -> None:
         """
         Record a value_conflict event so the ESL becomes more cautious
         about this content category for this user.
@@ -410,7 +420,7 @@ class FeedbackProcessor:
                             sensitivity_boost = LEAST(user_esl_sensitivity.sensitivity_boost + %s, 1.0),
                             updated_at = NOW()
                         """,
-                        (user_id, content_category, increment, increment)
+                        (user_id, content_category, increment, increment),
                     )
                 conn.commit()
             logger.info(
@@ -419,7 +429,9 @@ class FeedbackProcessor:
         except Exception as e:
             logger.warning(f"Could not record ESL sensitivity boost for {user_id}: {e}")
 
-    async def _upsert_adjustment(self, user_id: str, signal_type: str, multiplier: float) -> None:
+    async def _upsert_adjustment(
+        self, user_id: str, signal_type: str, multiplier: float
+    ) -> None:
         """Insert or update a relevance_adjustments row."""
         try:
             with get_db_connection() as conn:
@@ -431,7 +443,7 @@ class FeedbackProcessor:
                         ON CONFLICT (user_id, signal_type)
                         DO UPDATE SET multiplier = %s, updated_at = NOW()
                         """,
-                        (str(user_id), signal_type, multiplier, multiplier)
+                        (str(user_id), signal_type, multiplier, multiplier),
                     )
                 conn.commit()
         except Exception as e:
@@ -462,17 +474,16 @@ if __name__ == "__main__":
             feedback_type="thumbs_up",
             context_snapshot={
                 "active_goals": ["learn Python"],
-                "query": "What should I focus on today?"
+                "query": "What should I focus on today?",
             },
-            additional_notes="Very helpful response!"
+            additional_notes="Very helpful response!",
         )
         print(f"   Result: {result}")
 
         # Get feedback history
         print("\n2. Getting feedback history...")
         history = await processor.get_user_feedback_history(
-            user_id=test_user_id,
-            limit=10
+            user_id=test_user_id, limit=10
         )
         print(f"   Found {len(history)} feedback records")
         if history:
@@ -481,8 +492,7 @@ if __name__ == "__main__":
         # Get analytics
         print("\n3. Getting feedback analytics...")
         analytics = await processor.get_feedback_analytics(
-            user_id=test_user_id,
-            days=30
+            user_id=test_user_id, days=30
         )
         print(f"   Thumbs up: {analytics.thumbs_up_count}")
         print(f"   Thumbs down: {analytics.thumbs_down_count}")

@@ -44,8 +44,7 @@ def _auth_error(message: str, code: str = "not_authenticated") -> HTTPException:
 
 def _is_dev_fallback_enabled() -> bool:
     return (
-        settings.ENVIRONMENT == "development"
-        and not settings.AUTH_ENFORCEMENT_ENABLED
+        settings.ENVIRONMENT == "development" and not settings.AUTH_ENFORCEMENT_ENABLED
     )
 
 
@@ -58,7 +57,11 @@ def _build_issuer() -> str:
 
 def _fetch_jwks() -> Dict[str, Any]:
     now = datetime.now(timezone.utc)
-    if _JWKS_CACHE["expires_at"] and _JWKS_CACHE["expires_at"] > now and _JWKS_CACHE["keys"]:
+    if (
+        _JWKS_CACHE["expires_at"]
+        and _JWKS_CACHE["expires_at"] > now
+        and _JWKS_CACHE["keys"]
+    ):
         return {"keys": _JWKS_CACHE["keys"]}
 
     issuer = _build_issuer()
@@ -111,7 +114,9 @@ def get_user_id_from_token(token: str) -> str:
         claims = _decode_supabase_token(token)
         user_id = claims.get("sub")
         if not user_id:
-            raise HTTPException(status_code=401, detail="Invalid token: missing sub claim")
+            raise HTTPException(
+                status_code=401, detail="Invalid token: missing sub claim"
+            )
         return str(user_id)
     except HTTPException:
         raise
@@ -126,7 +131,9 @@ def _extract_bearer_token(request: Request) -> str:
 
     parts = auth_header.split(" ", 1)
     if len(parts) != 2 or parts[0].lower() != "bearer":
-        raise _auth_error("Authorization header must use Bearer scheme", code="invalid_token")
+        raise _auth_error(
+            "Authorization header must use Bearer scheme", code="invalid_token"
+        )
 
     token = parts[1].strip()
     if not token:
@@ -152,8 +159,12 @@ def _extract_token(request: Request) -> str:
 
 async def get_current_user(request: Request) -> UserPrincipal:
     if _is_dev_fallback_enabled():
-        logger.warning("Auth enforcement disabled in development, using mock user fallback")
-        return UserPrincipal(user_id=MOCK_USER_ID, email=None, claims={"sub": MOCK_USER_ID})
+        logger.warning(
+            "Auth enforcement disabled in development, using mock user fallback"
+        )
+        return UserPrincipal(
+            user_id=MOCK_USER_ID, email=None, claims={"sub": MOCK_USER_ID}
+        )
 
     try:
         token = _extract_token(request)
@@ -164,6 +175,7 @@ async def get_current_user(request: Request) -> UserPrincipal:
         logger.warning("Token expired: %s", exc)
         try:
             from utils.auth_audit import log_auth_event
+
             log_auth_event(
                 event="token_expired",
                 ip_address=request.client.host if request.client else None,
@@ -177,6 +189,7 @@ async def get_current_user(request: Request) -> UserPrincipal:
         logger.warning("Token validation failed: %s", exc)
         try:
             from utils.auth_audit import log_auth_event
+
             log_auth_event(
                 event="token_invalid",
                 ip_address=request.client.host if request.client else None,

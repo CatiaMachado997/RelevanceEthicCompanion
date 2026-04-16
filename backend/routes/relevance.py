@@ -11,6 +11,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 from services.context_manager import ContextManager
+
 # OrchestratorV2 imported lazily inside get_orchestrator() below
 from services.relevance_engine import RelevanceEngine
 from utils.supabase_auth import get_current_read_user_id
@@ -33,6 +34,7 @@ def get_engine() -> RelevanceEngine:
 
 def get_orchestrator():
     from services.orchestrator_v2 import OrchestratorV2  # lazy import
+
     cm = ContextManager()
     return OrchestratorV2(cm)
 

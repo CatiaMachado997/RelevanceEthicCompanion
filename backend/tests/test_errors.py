@@ -1,10 +1,15 @@
 """Tests for the typed error hierarchy and FastAPI handler."""
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from utils.errors import (
-    IntegrationError, DBError, AuthError, ESLError, register_error_handlers,
+    IntegrationError,
+    DBError,
+    AuthError,
+    ESLError,
+    register_error_handlers,
 )
 
 

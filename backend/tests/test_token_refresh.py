@@ -33,8 +33,9 @@ async def test_valid_token_returned_without_refresh():
         "token_expires_at": future,
     }
     mock_conn, _ = _db_mock(row)
-    with patch("services.data_ingestion.get_db_connection", return_value=mock_conn), \
-         patch("services.data_ingestion.Credentials") as mock_creds_cls:
+    with patch(
+        "services.data_ingestion.get_db_connection", return_value=mock_conn
+    ), patch("services.data_ingestion.Credentials") as mock_creds_cls:
         token = await svc._get_valid_token("user1", "google_calendar")
     assert token == "valid_token"
     mock_creds_cls.assert_not_called()
@@ -54,9 +55,11 @@ async def test_expired_token_triggers_refresh():
     mock_creds = MagicMock()
     mock_creds.token = "new_access_token"
     mock_creds.expiry = datetime.now(timezone.utc) + timedelta(hours=1)
-    with patch("services.data_ingestion.get_db_connection", return_value=mock_conn), \
-         patch("services.data_ingestion.Credentials", return_value=mock_creds), \
-         patch("services.data_ingestion.Request"):
+    with patch(
+        "services.data_ingestion.get_db_connection", return_value=mock_conn
+    ), patch("services.data_ingestion.Credentials", return_value=mock_creds), patch(
+        "services.data_ingestion.Request"
+    ):
         token = await svc._get_valid_token("user1", "google_calendar")
     assert token == "new_access_token"
     execute_calls = " ".join(str(c) for c in mock_cur.execute.call_args_list)
@@ -76,9 +79,11 @@ async def test_refresh_failure_disables_source():
     mock_conn, mock_cur = _db_mock(row)
     mock_creds = MagicMock()
     mock_creds.refresh.side_effect = Exception("invalid_grant")
-    with patch("services.data_ingestion.get_db_connection", return_value=mock_conn), \
-         patch("services.data_ingestion.Credentials", return_value=mock_creds), \
-         patch("services.data_ingestion.Request"):
+    with patch(
+        "services.data_ingestion.get_db_connection", return_value=mock_conn
+    ), patch("services.data_ingestion.Credentials", return_value=mock_creds), patch(
+        "services.data_ingestion.Request"
+    ):
         with pytest.raises(TokenExpiredError):
             await svc._get_valid_token("user1", "google_calendar")
     execute_calls = " ".join(str(c) for c in mock_cur.execute.call_args_list)
@@ -96,8 +101,9 @@ async def test_missing_refresh_token_raises_error():
         "token_expires_at": past,
     }
     mock_conn, _ = _db_mock(row)
-    with patch("services.data_ingestion.get_db_connection", return_value=mock_conn), \
-         patch("services.data_ingestion.Credentials") as mock_creds_cls:
+    with patch(
+        "services.data_ingestion.get_db_connection", return_value=mock_conn
+    ), patch("services.data_ingestion.Credentials") as mock_creds_cls:
         with pytest.raises(TokenExpiredError):
             await svc._get_valid_token("user1", "google_calendar")
     mock_creds_cls.assert_not_called()

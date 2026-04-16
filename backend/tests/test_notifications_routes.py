@@ -38,6 +38,7 @@ def make_mock_esl():
 
 def make_app():
     from routes.notifications import router as notif_router, get_esl
+
     app = FastAPI()
     app.include_router(notif_router)
     app.dependency_overrides[get_current_user_id] = lambda: TEST_USER_ID
@@ -106,6 +107,7 @@ def test_mark_all_read(client):
 def test_notification_count_endpoint(client, monkeypatch):
     """GET /api/notifications/count returns {unread_count: N}."""
     from unittest.mock import patch, MagicMock
+
     mock_row = {"cnt": 3}
     mock_cur = MagicMock()
     mock_cur.__enter__ = lambda s: s

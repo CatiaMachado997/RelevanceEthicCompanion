@@ -41,7 +41,7 @@ class ContextManager:
     def __init__(
         self,
         weaviate_client: Optional[WeaviateClient] = None,
-        embedding_service: Optional[Any] = None
+        embedding_service: Optional[Any] = None,
     ):
         """
         Initialize context manager
@@ -55,7 +55,9 @@ class ContextManager:
                 weaviate_client = get_weaviate_client()
                 logger.info("✅ Weaviate singleton connected")
             except Exception as e:
-                logger.warning(f"⚠️  Weaviate auto-connect failed: {e} — semantic memory disabled")
+                logger.warning(
+                    f"⚠️  Weaviate auto-connect failed: {e} — semantic memory disabled"
+                )
                 weaviate_client = None
 
         self.weaviate = weaviate_client
@@ -73,28 +75,33 @@ class ContextManager:
         """
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT id, user_id, type, value, priority, active, metadata, created_at, updated_at
                     FROM user_values
                     WHERE user_id = %s AND active = TRUE
                     ORDER BY priority ASC
-                """, (user_id,))
+                """,
+                    (user_id,),
+                )
 
                 rows = cur.fetchall()
                 values = []
 
                 for row in rows:
-                    values.append(UserValue(
-                        id=str(row['id']),
-                        user_id=str(row['user_id']),
-                        type=ValueType(row['type']),
-                        value=row['value'],
-                        priority=row['priority'],
-                        active=row['active'],
-                        metadata=row['metadata'] or {},
-                        created_at=row['created_at'],
-                        updated_at=row['updated_at']
-                    ))
+                    values.append(
+                        UserValue(
+                            id=str(row["id"]),
+                            user_id=str(row["user_id"]),
+                            type=ValueType(row["type"]),
+                            value=row["value"],
+                            priority=row["priority"],
+                            active=row["active"],
+                            metadata=row["metadata"] or {},
+                            created_at=row["created_at"],
+                            updated_at=row["updated_at"],
+                        )
+                    )
 
                 logger.debug(f"✅ Retrieved {len(values)} user values for {user_id}")
                 return values
@@ -104,19 +111,22 @@ class ContextManager:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 value_id = user_value.id or str(uuid.uuid4())
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO user_values (id, user_id, type, value, priority, active, metadata)
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
                     RETURNING id, created_at
-                """, (
-                    value_id,
-                    user_value.user_id,
-                    user_value.type.value,
-                    user_value.value,
-                    user_value.priority,
-                    user_value.active,
-                    json.dumps(user_value.metadata)
-                ))
+                """,
+                    (
+                        value_id,
+                        user_value.user_id,
+                        user_value.type.value,
+                        user_value.value,
+                        user_value.priority,
+                        user_value.active,
+                        json.dumps(user_value.metadata),
+                    ),
+                )
 
                 result = cur.fetchone()
                 user_value.id = str(result[0])
@@ -136,7 +146,7 @@ class ContextManager:
                 params = []
 
                 for key, val in updates.items():
-                    if key in ['type', 'value', 'priority', 'active', 'metadata']:
+                    if key in ["type", "value", "priority", "active", "metadata"]:
                         set_clauses.append(f"{key} = %s")
                         params.append(val)
 
@@ -157,24 +167,27 @@ class ContextManager:
         """Get a single user value by ID"""
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT id, user_id, type, value, priority, active, metadata, created_at, updated_at
                     FROM user_values
                     WHERE id = %s
-                """, (value_id,))
+                """,
+                    (value_id,),
+                )
 
                 row = cur.fetchone()
                 if row:
                     return UserValue(
-                        id=str(row['id']),
-                        user_id=str(row['user_id']),
-                        type=ValueType(row['type']),
-                        value=row['value'],
-                        priority=row['priority'],
-                        active=row['active'],
-                        metadata=row['metadata'] or {},
-                        created_at=row['created_at'],
-                        updated_at=row['updated_at']
+                        id=str(row["id"]),
+                        user_id=str(row["user_id"]),
+                        type=ValueType(row["type"]),
+                        value=row["value"],
+                        priority=row["priority"],
+                        active=row["active"],
+                        metadata=row["metadata"] or {},
+                        created_at=row["created_at"],
+                        updated_at=row["updated_at"],
                     )
                 return None
 
@@ -196,7 +209,7 @@ class ContextManager:
         user_id: str,
         role: Literal["user", "assistant"],
         content: str,
-        conversation_id: str = None
+        conversation_id: str = None,
     ) -> None:
         """Store a single conversation turn in PostgreSQL for reliable ordered retrieval."""
         if role not in ("user", "assistant"):
@@ -205,22 +218,25 @@ class ContextManager:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 if conversation_id:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         INSERT INTO conversation_turns (user_id, role, content, conversation_id)
                         VALUES (%s, %s, %s, %s)
-                    """, (user_id, role, content, conversation_id))
+                    """,
+                        (user_id, role, content, conversation_id),
+                    )
                 else:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         INSERT INTO conversation_turns (user_id, role, content)
                         VALUES (%s, %s, %s)
-                    """, (user_id, role, content))
+                    """,
+                        (user_id, role, content),
+                    )
         logger.debug(f"Stored conversation turn ({role}) for user {user_id}")
 
     async def get_conversation_history(
-        self,
-        user_id: str,
-        limit: int = 20,
-        conversation_id: str = None
+        self, user_id: str, limit: int = 20, conversation_id: str = None
     ) -> List[Dict[str, str]]:
         """
         Retrieve the last N conversation turns in chronological order.
@@ -230,13 +246,17 @@ class ContextManager:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 if conversation_id:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         SELECT role, content, created_at FROM conversation_turns
                         WHERE user_id = %s AND conversation_id = %s
                         ORDER BY created_at ASC LIMIT %s
-                    """, (user_id, conversation_id, limit))
+                    """,
+                        (user_id, conversation_id, limit),
+                    )
                 else:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         SELECT role, content
                         FROM (
                             SELECT role, content, created_at
@@ -246,9 +266,18 @@ class ContextManager:
                             LIMIT %s
                         ) recent
                         ORDER BY created_at ASC
-                    """, (user_id, limit))
+                    """,
+                        (user_id, limit),
+                    )
                 rows = cur.fetchall()
-        return [{'role': row['role'], 'content': row['content'], 'created_at': row.get('created_at')} for row in rows]
+        return [
+            {
+                "role": row["role"],
+                "content": row["content"],
+                "created_at": row.get("created_at"),
+            }
+            for row in rows
+        ]
 
     # ==================== M1: Goals (PostgreSQL) ====================
 
@@ -260,30 +289,35 @@ class ContextManager:
         """
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT id, user_id, title, description, status, priority,
                            target_date, created_at, completed_at, metadata
                     FROM goals
                     WHERE user_id = %s AND status = 'active'
                     ORDER BY priority DESC
-                """, (user_id,))
+                """,
+                    (user_id,),
+                )
 
                 rows = cur.fetchall()
                 goals = []
 
                 for row in rows:
-                    goals.append(Goal(
-                        id=str(row['id']),
-                        user_id=str(row['user_id']),
-                        title=row['title'],
-                        description=row['description'],
-                        status=GoalStatus(row['status']),
-                        priority=row['priority'],
-                        target_date=row['target_date'],
-                        created_at=row['created_at'],
-                        completed_at=row['completed_at'],
-                        metadata=row['metadata'] or {}
-                    ))
+                    goals.append(
+                        Goal(
+                            id=str(row["id"]),
+                            user_id=str(row["user_id"]),
+                            title=row["title"],
+                            description=row["description"],
+                            status=GoalStatus(row["status"]),
+                            priority=row["priority"],
+                            target_date=row["target_date"],
+                            created_at=row["created_at"],
+                            completed_at=row["completed_at"],
+                            metadata=row["metadata"] or {},
+                        )
+                    )
 
                 logger.debug(f"✅ Retrieved {len(goals)} active goals for {user_id}")
                 return goals
@@ -293,20 +327,23 @@ class ContextManager:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 goal_id = goal.id or str(uuid.uuid4())
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO goals (id, user_id, title, description, status, priority, target_date, metadata)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id, created_at
-                """, (
-                    goal_id,
-                    goal.user_id,
-                    goal.title,
-                    goal.description,
-                    goal.status.value,
-                    goal.priority,
-                    goal.target_date,
-                    json.dumps(goal.metadata)
-                ))
+                """,
+                    (
+                        goal_id,
+                        goal.user_id,
+                        goal.title,
+                        goal.description,
+                        goal.status.value,
+                        goal.priority,
+                        goal.target_date,
+                        json.dumps(goal.metadata),
+                    ),
+                )
 
                 result = cur.fetchone()
                 goal.id = str(result[0])
@@ -325,38 +362,68 @@ class ContextManager:
 
                 # Check if event with same source_id already exists
                 if event.source_id:
-                    cur.execute("""
+                    cur.execute(
+                        """
                         SELECT id FROM events
                         WHERE source = %s AND source_id = %s
-                    """, (event.source, event.source_id))
+                    """,
+                        (event.source, event.source_id),
+                    )
 
                     existing = cur.fetchone()
                     if existing:
                         # Update existing event
                         event_id = str(existing[0])
-                        cur.execute("""
+                        cur.execute(
+                            """
                             UPDATE events
                             SET title = %s, description = %s, start_time = %s, end_time = %s,
                                 location = %s, metadata = %s
                             WHERE id = %s
                             RETURNING id, created_at
-                        """, (
-                            event.title,
-                            event.description,
-                            event.start_time,
-                            event.end_time,
-                            event.location,
-                            json.dumps(event.metadata),
-                            event_id
-                        ))
+                        """,
+                            (
+                                event.title,
+                                event.description,
+                                event.start_time,
+                                event.end_time,
+                                event.location,
+                                json.dumps(event.metadata),
+                                event_id,
+                            ),
+                        )
                     else:
                         # Insert new event
-                        cur.execute("""
+                        cur.execute(
+                            """
                             INSERT INTO events (id, user_id, title, description, start_time, end_time,
                                                location, source, source_id, metadata)
                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                             RETURNING id, created_at
-                        """, (
+                        """,
+                            (
+                                event_id,
+                                event.user_id,
+                                event.title,
+                                event.description,
+                                event.start_time,
+                                event.end_time,
+                                event.location,
+                                event.source,
+                                event.source_id,
+                                json.dumps(event.metadata),
+                            ),
+                        )
+                else:
+                    # No source_id, just insert
+                    cur.execute(
+                        """
+                        INSERT INTO events (id, user_id, title, description, start_time, end_time,
+                                           location, source, source_id, metadata)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        RETURNING id, created_at
+                    """,
+                        (
                             event_id,
                             event.user_id,
                             event.title,
@@ -366,27 +433,9 @@ class ContextManager:
                             event.location,
                             event.source,
                             event.source_id,
-                            json.dumps(event.metadata)
-                        ))
-                else:
-                    # No source_id, just insert
-                    cur.execute("""
-                        INSERT INTO events (id, user_id, title, description, start_time, end_time,
-                                           location, source, source_id, metadata)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        RETURNING id, created_at
-                    """, (
-                        event_id,
-                        event.user_id,
-                        event.title,
-                        event.description,
-                        event.start_time,
-                        event.end_time,
-                        event.location,
-                        event.source,
-                        event.source_id,
-                        json.dumps(event.metadata)
-                    ))
+                            json.dumps(event.metadata),
+                        ),
+                    )
 
                 result = cur.fetchone()
                 event.id = str(result[0])
@@ -408,7 +457,8 @@ class ContextManager:
                 now = datetime.now(timezone.utc)
                 cutoff = now + timedelta(hours=hours_ahead)
 
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT id, user_id, title, description, start_time, end_time,
                            location, source, source_id, metadata, created_at
                     FROM events
@@ -416,34 +466,38 @@ class ContextManager:
                       AND start_time >= %s
                       AND start_time <= %s
                     ORDER BY start_time ASC
-                """, (user_id, now, cutoff))
+                """,
+                    (user_id, now, cutoff),
+                )
 
                 rows = cur.fetchall()
                 events = []
 
                 for row in rows:
-                    events.append(Event(
-                        id=str(row['id']),
-                        user_id=str(row['user_id']),
-                        title=row['title'],
-                        description=row['description'],
-                        start_time=row['start_time'],
-                        end_time=row['end_time'],
-                        location=row['location'],
-                        source=row['source'],
-                        source_id=row['source_id'],
-                        metadata=row['metadata'] or {},
-                        created_at=row['created_at']
-                    ))
+                    events.append(
+                        Event(
+                            id=str(row["id"]),
+                            user_id=str(row["user_id"]),
+                            title=row["title"],
+                            description=row["description"],
+                            start_time=row["start_time"],
+                            end_time=row["end_time"],
+                            location=row["location"],
+                            source=row["source"],
+                            source_id=row["source_id"],
+                            metadata=row["metadata"] or {},
+                            created_at=row["created_at"],
+                        )
+                    )
 
-                logger.debug(f"✅ Retrieved {len(events)} upcoming events for {user_id}")
+                logger.debug(
+                    f"✅ Retrieved {len(events)} upcoming events for {user_id}"
+                )
                 return events
 
     # ==================== M2: Semantic Memory (Weaviate) ====================
 
-    async def store_semantic_memory(
-        self, entry: SemanticMemoryEntry
-    ) -> Optional[str]:
+    async def store_semantic_memory(self, entry: SemanticMemoryEntry) -> Optional[str]:
         """
         Store content in Weaviate with embedding
 
@@ -453,18 +507,22 @@ class ContextManager:
         3. Return UUID
         """
         if not self.weaviate:
-            logger.warning("⚠️  Weaviate client not initialized - skipping semantic memory storage")
+            logger.warning(
+                "⚠️  Weaviate client not initialized - skipping semantic memory storage"
+            )
             return None
 
         try:
             # Generate embedding if not provided
             if not entry.embedding and self.embedding_service:
-                entry.embedding = await self.embedding_service.generate_embedding(entry.content)
+                entry.embedding = await self.embedding_service.generate_embedding(
+                    entry.content
+                )
 
             # Store in Weaviate (ensure RFC3339 format for timestamp)
             timestamp_str = entry.timestamp.isoformat()
-            if not timestamp_str.endswith('Z') and '+' not in timestamp_str:
-                timestamp_str += 'Z'  # Add UTC marker if missing
+            if not timestamp_str.endswith("Z") and "+" not in timestamp_str:
+                timestamp_str += "Z"  # Add UTC marker if missing
 
             uuid_str = self.weaviate.store_memory(
                 collection="ConversationMemory",
@@ -474,9 +532,9 @@ class ContextManager:
                     "role": entry.metadata.get("role", "user"),
                     "timestamp": timestamp_str,
                     "source": entry.source,
-                    "metadata": json.dumps(entry.metadata)
+                    "metadata": json.dumps(entry.metadata),
                 },
-                vector=entry.embedding
+                vector=entry.embedding,
             )
 
             logger.debug(f"✅ Stored semantic memory: {uuid_str}")
@@ -495,7 +553,9 @@ class ContextManager:
         YOUR HYBRID LOGIC: Combine vector similarity + keyword matching
         """
         if not self.weaviate:
-            logger.warning("⚠️  Weaviate client not initialized - returning empty results")
+            logger.warning(
+                "⚠️  Weaviate client not initialized - returning empty results"
+            )
             return []
 
         # BM25 requires a non-empty query — skip Weaviate for blank queries
@@ -505,14 +565,16 @@ class ContextManager:
         try:
             # Generate query embedding
             if self.embedding_service:
-                query_embedding = await self.embedding_service.generate_query_embedding(query)
+                query_embedding = await self.embedding_service.generate_query_embedding(
+                    query
+                )
             else:
                 logger.warning("⚠️  No embedding service - using keyword search only")
                 results = self.weaviate.query_keyword(
                     collection="ConversationMemory",
                     query=query,
                     user_id=user_id,
-                    limit=limit
+                    limit=limit,
                 )
                 return self._convert_weaviate_results(results)
 
@@ -523,38 +585,52 @@ class ContextManager:
                 query_vector=query_embedding,
                 user_id=user_id,
                 limit=limit,
-                alpha=0.7  # 70% semantic, 30% keyword
+                alpha=0.7,  # 70% semantic, 30% keyword
             )
 
             entries = self._convert_weaviate_results(results)
-            logger.debug(f"✅ Retrieved {len(entries)} semantic memories for query: {query}")
+            logger.debug(
+                f"✅ Retrieved {len(entries)} semantic memories for query: {query}"
+            )
             return entries
 
         except Exception as e:
             logger.error(f"❌ Failed to query semantic memory: {e}")
             return []
 
-    def _convert_weaviate_results(self, results: List[Dict[str, Any]]) -> List[SemanticMemoryEntry]:
+    def _convert_weaviate_results(
+        self, results: List[Dict[str, Any]]
+    ) -> List[SemanticMemoryEntry]:
         """Convert Weaviate results to SemanticMemoryEntry objects"""
         entries = []
         for result in results:
-            props = result['properties']
-            metadata = json.loads(props.get('metadata', '{}'))
+            props = result["properties"]
+            metadata = json.loads(props.get("metadata", "{}"))
 
-            entries.append(SemanticMemoryEntry(
-                id=result['uuid'],
-                user_id=props['user_id'],
-                content=props['content'],
-                source=props['source'],
-                timestamp=props['timestamp'] if isinstance(props['timestamp'], datetime) else datetime.fromisoformat(str(props['timestamp']).replace('Z', '+00:00')),
-                metadata=metadata
-            ))
+            entries.append(
+                SemanticMemoryEntry(
+                    id=result["uuid"],
+                    user_id=props["user_id"],
+                    content=props["content"],
+                    source=props["source"],
+                    timestamp=(
+                        props["timestamp"]
+                        if isinstance(props["timestamp"], datetime)
+                        else datetime.fromisoformat(
+                            str(props["timestamp"]).replace("Z", "+00:00")
+                        )
+                    ),
+                    metadata=metadata,
+                )
+            )
         return entries
 
     async def clear_semantic_memory(self, user_id: str) -> int:
         """Clear all semantic memory for a user (use with caution!)"""
         # This would require Weaviate batch delete - not implemented in MVP
-        logger.warning(f"⚠️  clear_semantic_memory called for {user_id} - not implemented in MVP")
+        logger.warning(
+            f"⚠️  clear_semantic_memory called for {user_id} - not implemented in MVP"
+        )
         return 0
 
     # ==================== User Context (For ESL) ====================
@@ -578,8 +654,10 @@ class ContextManager:
             recent_interactions=[],  # Could query semantic memory here
             additional_context={
                 "goal_count": len(active_goals),
-                "boundary_count": len([v for v in user_values if v.type == ValueType.BOUNDARY])
-            }
+                "boundary_count": len(
+                    [v for v in user_values if v.type == ValueType.BOUNDARY]
+                ),
+            },
         )
 
     # ==================== V2: Current Context (For Relevance Scoring) ====================
@@ -609,7 +687,7 @@ class ContextManager:
                 recent_memories = await self.query_semantic_memory(
                     user_id=user_id,
                     query="recent",  # Simple query to get recent items
-                    limit=10
+                    limit=10,
                 )
                 # Extract topics from content
                 recent_topics = [memory.content[:50] for memory in recent_memories[:5]]
@@ -625,17 +703,19 @@ class ContextManager:
                 {
                     "title": event.title,
                     "start_time": event.start_time,
-                    "description": event.description
+                    "description": event.description,
                 }
                 for event in upcoming_events
             ],
             recent_topics=recent_topics,
             focus_mode=focus_mode,
             user_values=[value.value for value in user_values],
-            time_of_day=datetime.now(timezone.utc).hour
+            time_of_day=datetime.now(timezone.utc).hour,
         )
 
-        logger.debug(f"✅ Built current context for {user_id}: {len(active_goals)} goals, {len(upcoming_events)} events")
+        logger.debug(
+            f"✅ Built current context for {user_id}: {len(active_goals)} goals, {len(upcoming_events)} events"
+        )
         return context
 
     # ==================== Focus Mode ====================
@@ -644,26 +724,32 @@ class ContextManager:
         """Check if user is in focus mode from PostgreSQL"""
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT focus_mode
                     FROM user_sessions
                     WHERE user_id = %s
-                """, (user_id,))
+                """,
+                    (user_id,),
+                )
 
                 row = cur.fetchone()
-                return row['focus_mode'] if row else False
+                return row["focus_mode"] if row else False
 
     async def set_focus_mode(self, user_id: str, enabled: bool) -> bool:
         """Set focus mode for a user in PostgreSQL"""
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO user_sessions (user_id, focus_mode)
                     VALUES (%s, %s)
                     ON CONFLICT (user_id) DO UPDATE
                     SET focus_mode = EXCLUDED.focus_mode,
                         updated_at = NOW()
-                """, (user_id, enabled))
+                """,
+                    (user_id, enabled),
+                )
 
                 logger.debug(f"✅ Set focus mode for {user_id}: {enabled}")
                 return True

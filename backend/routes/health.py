@@ -1,4 +1,5 @@
 """GET /health — returns status of all backend dependencies."""
+
 from fastapi import APIRouter
 from utils.health import check_db, check_weaviate
 

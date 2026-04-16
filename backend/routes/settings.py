@@ -34,7 +34,9 @@ def get_context_manager() -> ContextManager:
     return ContextManager()
 
 
-def get_esl(context_manager: ContextManager = Depends(get_context_manager)) -> EthicalSafeguardLayer:
+def get_esl(
+    context_manager: ContextManager = Depends(get_context_manager),
+) -> EthicalSafeguardLayer:
     return EthicalSafeguardLayer(context_manager)
 
 
@@ -69,15 +71,19 @@ async def get_settings(
         data = serialize_row(row) if row else {**DEFAULTS, "user_id": str(user_id)}
         # Ensure weight fields are always present (handles DB rows created before migration)
         for key, default in [
-            ("weight_goal_alignment", 1.0), ("weight_time_sensitivity", 1.0),
-            ("weight_personal_values", 1.0), ("weight_context_relevance", 1.0),
+            ("weight_goal_alignment", 1.0),
+            ("weight_time_sensitivity", 1.0),
+            ("weight_personal_values", 1.0),
+            ("weight_context_relevance", 1.0),
         ]:
             if key not in data or data[key] is None:
                 data[key] = default
         return {"status": "success", "data": data}
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching settings: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching settings: {str(e)}"
+        )
 
 
 @router.put("/", response_model=dict)

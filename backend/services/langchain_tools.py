@@ -19,10 +19,16 @@ logger = logging.getLogger(__name__)
 
 # ==================== Memory Query Tool ====================
 
+
 class MemoryQueryInput(BaseModel):
     """Input for the memory query tool"""
-    query: str = Field(description="Search query to find relevant conversation history and context")
-    limit: int = Field(default=5, description="Maximum number of memory entries to retrieve")
+
+    query: str = Field(
+        description="Search query to find relevant conversation history and context"
+    )
+    limit: int = Field(
+        default=5, description="Maximum number of memory entries to retrieve"
+    )
 
 
 class MemoryQueryTool(BaseTool):
@@ -49,9 +55,7 @@ class MemoryQueryTool(BaseTool):
         """Async implementation (LangChain requirement)"""
         try:
             results = await self.context_manager.query_semantic_memory(
-                user_id=self.user_id,
-                query=query,
-                limit=int(limit)
+                user_id=self.user_id, query=query, limit=int(limit)
             )
 
             if not results:
@@ -78,11 +82,13 @@ class MemoryQueryTool(BaseTool):
 
 # ==================== Calendar Query Tool ====================
 
+
 class CalendarQueryInput(BaseModel):
     """Input for the calendar query tool"""
+
     time_frame: str = Field(
         default="today",
-        description="Time frame for calendar events: 'today', 'tomorrow', 'this week', 'next week', or number of hours (e.g., '24')"
+        description="Time frame for calendar events: 'today', 'tomorrow', 'this week', 'next week', or number of hours (e.g., '24')",
     )
 
 
@@ -110,12 +116,7 @@ class CalendarQueryTool(BaseTool):
         """Async implementation"""
         try:
             # Map time_frame to hours
-            time_map = {
-                "today": 24,
-                "tomorrow": 48,
-                "this week": 168,
-                "next week": 336
-            }
+            time_map = {"today": 24, "tomorrow": 48, "this week": 168, "next week": 336}
 
             hours_ahead = time_map.get(time_frame.lower(), 24)
 
@@ -126,8 +127,7 @@ class CalendarQueryTool(BaseTool):
                 pass
 
             events = await self.context_manager.get_upcoming_events(
-                user_id=self.user_id,
-                hours_ahead=hours_ahead
+                user_id=self.user_id, hours_ahead=hours_ahead
             )
 
             if not events:
@@ -138,7 +138,9 @@ class CalendarQueryTool(BaseTool):
             for i, event in enumerate(events, 1):
                 event_text += f"{i}. {event.title}"
                 if event.start_time:
-                    event_text += f" at {event.start_time.strftime('%I:%M %p on %b %d')}"
+                    event_text += (
+                        f" at {event.start_time.strftime('%I:%M %p on %b %d')}"
+                    )
                 if event.location:
                     event_text += f" ({event.location})"
                 event_text += "\n"
@@ -161,10 +163,14 @@ class CalendarQueryTool(BaseTool):
 
 # ==================== Web Search Tool ====================
 
+
 class WebSearchInput(BaseModel):
     """Input for the web search tool"""
+
     query: str = Field(description="Search query to find information on the web")
-    max_results: int = Field(default=5, description="Maximum number of search results to return")
+    max_results: int = Field(
+        default=5, description="Maximum number of search results to return"
+    )
 
 
 class WebSearchTool(BaseTool):
@@ -199,9 +205,8 @@ class WebSearchTool(BaseTool):
             search_results = await loop.run_in_executor(
                 None,
                 lambda: self.tavily_client.search(
-                    query=query,
-                    max_results=max_results * 2  # Get more, then rank
-                )
+                    query=query, max_results=max_results * 2  # Get more, then rank
+                ),
             )
 
             if not search_results or not search_results.get("results"):
@@ -233,11 +238,13 @@ class WebSearchTool(BaseTool):
 
 # ==================== User Goals Tool ====================
 
+
 class UserGoalsInput(BaseModel):
     """Input for the user goals tool"""
+
     status: str = Field(
         default="active",
-        description="Filter goals by status: 'active', 'completed', or 'all'"
+        description="Filter goals by status: 'active', 'completed', or 'all'",
     )
 
 
@@ -304,10 +311,14 @@ class UserGoalsTool(BaseTool):
 
 # ==================== Note Create Tool ====================
 
+
 class NoteCreateInput(BaseModel):
     """Input for the note creation tool"""
+
     content: str = Field(description="The note or task text to save")
-    as_goal: bool = Field(default=False, description="If true, also creates a goal from this note")
+    as_goal: bool = Field(
+        default=False, description="If true, also creates a goal from this note"
+    )
 
 
 class NoteCreateTool(BaseTool):
@@ -343,11 +354,13 @@ class NoteCreateTool(BaseTool):
                         (
                             self.user_id,
                             content,
-                            json.dumps({
-                                "subtype": "note",
-                                "as_goal": as_goal,
-                                "source": "chat_tool",
-                            }),
+                            json.dumps(
+                                {
+                                    "subtype": "note",
+                                    "as_goal": as_goal,
+                                    "source": "chat_tool",
+                                }
+                            ),
                         ),
                     )
                 conn.commit()
@@ -362,7 +375,7 @@ class NoteCreateTool(BaseTool):
                     user_id=self.user_id,
                     content=content,
                     source="note",
-                    metadata={"type": "user_note", "as_goal": as_goal}
+                    metadata={"type": "user_note", "as_goal": as_goal},
                 )
             )
         except Exception as e:
@@ -385,11 +398,11 @@ class NoteCreateTool(BaseTool):
 # Maps tool name → source identifier used by the active_sources filter.
 # None = always included (write tools, utility tools).
 _TOOL_SOURCE_MAP: dict = {
-    "query_memory":   "memory",
+    "query_memory": "memory",
     "query_calendar": "calendar",
     "get_user_goals": "goals",
-    "web_search":     "web",
-    "create_note":    None,  # always available
+    "web_search": "web",
+    "create_note": None,  # always available
 }
 
 
@@ -411,20 +424,25 @@ async def create_langchain_tools(
     ]
 
     if tavily_client:
-        candidates.append(WebSearchTool(
-            tavily_client=tavily_client,
-            relevance_engine=relevance_engine,
-            user_id=user_id,
-        ))
+        candidates.append(
+            WebSearchTool(
+                tavily_client=tavily_client,
+                relevance_engine=relevance_engine,
+                user_id=user_id,
+            )
+        )
 
     # Load marketplace tools
     try:
         from services.tool_registry import ToolRegistry
+
         registry = ToolRegistry()
         marketplace_tools = await registry.get_tools_for_user(user_id)
         candidates.extend(marketplace_tools)
         if marketplace_tools:
-            logger.debug(f"Loaded {len(marketplace_tools)} marketplace tools for user {user_id}")
+            logger.debug(
+                f"Loaded {len(marketplace_tools)} marketplace tools for user {user_id}"
+            )
     except Exception as e:
         logger.warning(f"Could not load marketplace tools: {e}")
 
@@ -432,7 +450,8 @@ async def create_langchain_tools(
         return candidates
 
     return [
-        t for t in candidates
+        t
+        for t in candidates
         if _TOOL_SOURCE_MAP.get(t.name) is None
         or _TOOL_SOURCE_MAP.get(t.name) in filter_sources
     ]

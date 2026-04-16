@@ -43,4 +43,6 @@ async def submit_feedback(
             )
         return {"status": "success", "data": result}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error submitting feedback: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error submitting feedback: {str(e)}"
+        )

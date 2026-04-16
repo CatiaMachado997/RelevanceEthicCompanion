@@ -1,4 +1,5 @@
 """Test that get_db_connection works with a mocked pool."""
+
 from unittest.mock import MagicMock, patch
 from utils.db import get_db_connection
 

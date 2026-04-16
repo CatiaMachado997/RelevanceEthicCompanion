@@ -61,6 +61,7 @@ def client():
 
 # ── Auth checks ─────────────────────────────────────────────────────────────
 
+
 def test_view_no_token_returns_401(client):
     """No Authorization header and no ?token= param → 401."""
     with patch("routes.documents.get_db_connection", return_value=make_db_mock()):
@@ -112,6 +113,7 @@ def test_view_auth_via_bearer_header(client):
 
 # ── 404 cases ────────────────────────────────────────────────────────────────
 
+
 def test_view_document_not_found_returns_404(client):
     """Document not in DB (or wrong user) → 404."""
     with patch(
@@ -119,7 +121,7 @@ def test_view_document_not_found_returns_404(client):
         return_value=TEST_USER_ID,
     ), patch(
         "routes.documents.get_db_connection",
-        return_value=make_db_mock(row=None),   # fetchone returns None
+        return_value=make_db_mock(row=None),  # fetchone returns None
     ):
         resp = client.get(
             f"/api/documents/{TEST_DOC_ID}/view",
@@ -149,6 +151,7 @@ def test_view_null_raw_content_returns_404(client):
 
 
 # ── Successful response ───────────────────────────────────────────────────────
+
 
 def test_view_returns_pdf_bytes(client):
     """200 response body contains the raw PDF bytes."""
@@ -220,6 +223,7 @@ def test_view_content_type_fallback_to_octet_stream(client):
 
 
 # ── Filename sanitisation ─────────────────────────────────────────────────────
+
 
 def test_view_sanitises_filename_quotes(client):
     """Double-quotes in filename are replaced to prevent header injection."""

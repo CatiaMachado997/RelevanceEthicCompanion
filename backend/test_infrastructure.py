@@ -3,19 +3,23 @@
 Test Infrastructure Setup
 Tests components that don't require API keys
 """
+
 import sys
-sys.path.insert(0, '/Users/catiamachado/RelevanceEthicCompanion/backend')
+
+sys.path.insert(0, "/Users/catiamachado/RelevanceEthicCompanion/backend")
 
 import asyncio
 from datetime import datetime
 
+
 def test_weaviate_connection():
     """Test Weaviate connection"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("TEST 1: Weaviate Connection")
-    print("="*60)
+    print("=" * 60)
     try:
         from utils.weaviate_client import get_weaviate_client
+
         client = get_weaviate_client()
         print("✅ Weaviate connected successfully")
 
@@ -31,17 +35,29 @@ def test_weaviate_connection():
         print(f"❌ Weaviate connection failed: {e}")
         return False
 
+
 def test_database_tables():
     """Test PostgreSQL tables"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("TEST 2: PostgreSQL Tables")
-    print("="*60)
+    print("=" * 60)
     import subprocess
+
     result = subprocess.run(
-        ["docker", "exec", "backend-db-1", "psql", "-U", "postgres", "-d", "ethic-companion",
-         "-c", "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename;"],
+        [
+            "docker",
+            "exec",
+            "backend-db-1",
+            "psql",
+            "-U",
+            "postgres",
+            "-d",
+            "ethic-companion",
+            "-c",
+            "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename;",
+        ],
         capture_output=True,
-        text=True
+        text=True,
     )
 
     if result.returncode == 0:
@@ -52,7 +68,7 @@ def test_database_tables():
             "context_snapshots",
             "users",
             "goals",
-            "events"
+            "events",
         ]
 
         for table in required_tables:
@@ -65,19 +81,21 @@ def test_database_tables():
         print(f"❌ Database query failed: {result.stderr}")
         return False
 
+
 def test_models():
     """Test that models can be imported"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("TEST 3: V2 Models")
-    print("="*60)
+    print("=" * 60)
     try:
         from models.relevance import (
             CandidateItem,
             ScoredItem,
             RelevanceContext,
             ContentSafetyCheck,
-            ItemType
+            ItemType,
         )
+
         print("✅ All V2 models imported successfully")
 
         # Test model creation
@@ -86,7 +104,7 @@ def test_models():
             type=ItemType.SEARCH_RESULT,
             content="Test content",
             source="test",
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
         )
         print(f"  ✅ CandidateItem created: {item.id}")
         return True
@@ -94,11 +112,12 @@ def test_models():
         print(f"❌ Model import failed: {e}")
         return False
 
+
 async def test_relevance_scoring_without_api():
     """Test relevance scoring logic (without API calls)"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("TEST 4: Relevance Scoring (No API)")
-    print("="*60)
+    print("=" * 60)
     try:
         from services.relevance_scoring import RelevanceScoringEngine
         from services.context_manager import ContextManager
@@ -119,7 +138,7 @@ async def test_relevance_scoring_without_api():
             content="Python programming tutorial for beginners",
             title="Learn Python",
             source="test",
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
         )
 
         context = RelevanceContext(
@@ -129,7 +148,7 @@ async def test_relevance_scoring_without_api():
             upcoming_events=[],
             recent_topics=[],
             focus_mode=False,
-            user_values=[]
+            user_values=[],
         )
 
         # Test internal scoring function
@@ -141,14 +160,16 @@ async def test_relevance_scoring_without_api():
     except Exception as e:
         print(f"❌ Relevance scoring test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
+
 def test_esl_content_safety():
     """Test ESL content safety check"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("TEST 5: ESL Content Safety Check")
-    print("="*60)
+    print("=" * 60)
     try:
         from services.context_manager import ContextManager
         from esl.engine import EthicalSafeguardLayer
@@ -164,11 +185,12 @@ def test_esl_content_safety():
         print(f"❌ ESL test failed: {e}")
         return False
 
+
 async def run_all_tests():
     """Run all infrastructure tests"""
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("V2 INFRASTRUCTURE TEST SUITE")
-    print("="*70)
+    print("=" * 70)
 
     results = []
 
@@ -182,9 +204,9 @@ async def run_all_tests():
     results.append(("Relevance Scoring", await test_relevance_scoring_without_api()))
 
     # Summary
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("TEST SUMMARY")
-    print("="*70)
+    print("=" * 70)
 
     passed = sum(1 for _, result in results if result)
     total = len(results)
@@ -205,6 +227,7 @@ async def run_all_tests():
         print("\n⚠️  Some tests failed. Please check the output above.")
 
     return passed == total
+
 
 if __name__ == "__main__":
     success = asyncio.run(run_all_tests())

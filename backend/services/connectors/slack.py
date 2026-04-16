@@ -1,5 +1,6 @@
 # backend/services/connectors/slack.py
 """Slack connector — wraps SlackSync, implements BaseConnector."""
+
 from typing import Any, Dict, List, Optional
 
 from services.connectors.base import BaseConnector, SourceItem
@@ -43,5 +44,7 @@ class SlackConnector(BaseConnector):
             },
         )
 
-    async def execute_action(self, action_name: str, params: dict, credentials: dict) -> str:
+    async def execute_action(
+        self, action_name: str, params: dict, credentials: dict
+    ) -> str:
         return f"Action {action_name} not yet implemented for this connector"

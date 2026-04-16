@@ -34,8 +34,8 @@ from esl.rules import (
 from esl.engine import EthicalSafeguardLayer
 from esl.audit import ESLAuditLogger
 
-
 # ==================== Fixtures ====================
+
 
 @pytest.fixture
 def time_rules():
@@ -61,13 +61,15 @@ def topic_filter():
 def mock_context_manager():
     """Create a mock context manager for ESL tests"""
     cm = MagicMock()
-    cm.get_user_context = AsyncMock(return_value=UserContext(
-        user_id="test-user-123",
-        current_time=datetime.now(UTC),
-        focus_mode=False,
-        active_goals=["goal-1"],
-        user_values=[],
-    ))
+    cm.get_user_context = AsyncMock(
+        return_value=UserContext(
+            user_id="test-user-123",
+            current_time=datetime.now(UTC),
+            focus_mode=False,
+            active_goals=["goal-1"],
+            user_values=[],
+        )
+    )
     return cm
 
 
@@ -117,6 +119,7 @@ def create_user_value(
 
 
 # ==================== TimeBasedRules Tests ====================
+
 
 class TestTimeBasedRules:
     """Tests for time-based boundary enforcement"""
@@ -168,7 +171,9 @@ class TestTimeBasedRules:
     def test_inactive_boundary_ignored(self, time_rules):
         """Inactive boundaries should not be enforced"""
         action = create_action(content_type="work_summary")
-        values = [create_user_value(ValueType.BOUNDARY, "no_work_after_19h", active=False)]
+        values = [
+            create_user_value(ValueType.BOUNDARY, "no_work_after_19h", active=False)
+        ]
         evening_time = datetime(2025, 1, 15, 21, 0)  # 9 PM
 
         result = time_rules.check_boundaries(action, values, evening_time)
@@ -187,6 +192,7 @@ class TestTimeBasedRules:
 
 
 # ==================== ManipulationDetector Tests ====================
+
 
 class TestManipulationDetector:
     """Tests for psychological manipulation detection"""
@@ -227,9 +233,7 @@ class TestManipulationDetector:
 
     def test_detects_fomo_limited_time_act_now(self, manipulation_detector):
         """'limited time' + 'act now' triggers two patterns — should be flagged"""
-        result = manipulation_detector.check_content(
-            "Limited time offer - act now!"
-        )
+        result = manipulation_detector.check_content("Limited time offer - act now!")
 
         assert result.passed is False
 
@@ -283,6 +287,7 @@ class TestManipulationDetector:
 
 # ==================== EngagementDetector Tests ====================
 
+
 class TestEngagementDetector:
     """Tests for engagement vs assistance intent detection"""
 
@@ -313,12 +318,14 @@ class TestEngagementDetector:
 
     def test_blocks_heavy_engagement_optimization(self, engagement_detector):
         """≥4 engagement metrics without assistance intent should be blocked (score > 0.7)"""
-        action = create_action(metadata={
-            "click_rate": 0.15,
-            "time_in_app": 300,
-            "daily_active": True,
-            "session_length": 600,
-        })
+        action = create_action(
+            metadata={
+                "click_rate": 0.15,
+                "time_in_app": 300,
+                "daily_active": True,
+                "session_length": 600,
+            }
+        )
 
         result = engagement_detector.check_intent(action)
 
@@ -337,8 +344,7 @@ class TestEngagementDetector:
     def test_allows_critical_with_user_request(self, engagement_detector):
         """Critical urgency with user request should pass"""
         action = create_action(
-            urgency=UrgencyLevel.CRITICAL,
-            metadata={"user_request": True}
+            urgency=UrgencyLevel.CRITICAL, metadata={"user_request": True}
         )
 
         result = engagement_detector.check_intent(action)
@@ -355,6 +361,7 @@ class TestEngagementDetector:
 
 
 # ==================== TopicFilter Tests ====================
+
 
 class TestTopicFilter:
     """Tests for topic-based content filtering"""
@@ -390,7 +397,9 @@ class TestTopicFilter:
     def test_inactive_filter_ignored(self, topic_filter):
         """Inactive topic filters should be ignored"""
         action = create_action(content="Politics discussion")
-        values = [create_user_value(ValueType.TOPIC_FILTER, "no_politics", active=False)]
+        values = [
+            create_user_value(ValueType.TOPIC_FILTER, "no_politics", active=False)
+        ]
 
         result = topic_filter.check_topic(action, values)
 
@@ -417,6 +426,7 @@ class TestTopicFilter:
 
 # ==================== ESL Engine Integration Tests ====================
 
+
 class TestEthicalSafeguardLayer:
     """Integration tests for the full ESL engine"""
 
@@ -438,7 +448,7 @@ class TestEthicalSafeguardLayer:
         # Use PUSH_NOTIFICATION (non-advisory) with multiple manipulation patterns
         action = create_action(
             action_type=ActionType.PUSH_NOTIFICATION,
-            content="Don't miss out! Limited time offer — act now!"
+            content="Don't miss out! Limited time offer — act now!",
         )
 
         decision = await esl.evaluate_action(action, "test-user")
@@ -452,7 +462,7 @@ class TestEthicalSafeguardLayer:
         esl = EthicalSafeguardLayer(mock_context_manager)
         action = create_action(
             action_type=ActionType.CHAT_RESPONSE,
-            content="Don't miss out! Limited time offer — act now!"
+            content="Don't miss out! Limited time offer — act now!",
         )
 
         decision = await esl.evaluate_action(action, "test-user")
@@ -463,13 +473,15 @@ class TestEthicalSafeguardLayer:
     @pytest.mark.asyncio
     async def test_vetoes_focus_mode_violation(self, mock_context_manager):
         """Non-critical actions during focus mode should be vetoed"""
-        mock_context_manager.get_user_context = AsyncMock(return_value=UserContext(
-            user_id="test-user",
-            current_time=datetime.now(UTC),
-            focus_mode=True,  # Focus mode enabled
-            active_goals=[],
-            user_values=[],
-        ))
+        mock_context_manager.get_user_context = AsyncMock(
+            return_value=UserContext(
+                user_id="test-user",
+                current_time=datetime.now(UTC),
+                focus_mode=True,  # Focus mode enabled
+                active_goals=[],
+                user_values=[],
+            )
+        )
         esl = EthicalSafeguardLayer(mock_context_manager)
         action = create_action(urgency=UrgencyLevel.LOW)
 
@@ -481,17 +493,19 @@ class TestEthicalSafeguardLayer:
     @pytest.mark.asyncio
     async def test_allows_critical_during_focus_mode(self, mock_context_manager):
         """Critical actions should be allowed even during focus mode"""
-        mock_context_manager.get_user_context = AsyncMock(return_value=UserContext(
-            user_id="test-user",
-            current_time=datetime.now(UTC),
-            focus_mode=True,
-            active_goals=[],
-            user_values=[],
-        ))
+        mock_context_manager.get_user_context = AsyncMock(
+            return_value=UserContext(
+                user_id="test-user",
+                current_time=datetime.now(UTC),
+                focus_mode=True,
+                active_goals=[],
+                user_values=[],
+            )
+        )
         esl = EthicalSafeguardLayer(mock_context_manager)
         action = create_action(
             urgency=UrgencyLevel.CRITICAL,
-            metadata={"user_request": True}  # Has assistance intent
+            metadata={"user_request": True},  # Has assistance intent
         )
 
         decision = await esl.evaluate_action(action, "test-user")
@@ -501,20 +515,21 @@ class TestEthicalSafeguardLayer:
     @pytest.mark.asyncio
     async def test_vetoes_time_boundary_violation(self, mock_context_manager):
         """Non-chat actions violating time boundaries should be vetoed"""
-        mock_context_manager.get_user_context = AsyncMock(return_value=UserContext(
-            user_id="test-user",
-            current_time=datetime(2025, 1, 15, 21, 0),  # 9 PM
-            focus_mode=False,
-            active_goals=[],
-            user_values=[
-                create_user_value(ValueType.BOUNDARY, "no_work_after_19h")
-            ],
-        ))
+        mock_context_manager.get_user_context = AsyncMock(
+            return_value=UserContext(
+                user_id="test-user",
+                current_time=datetime(2025, 1, 15, 21, 0),  # 9 PM
+                focus_mode=False,
+                active_goals=[],
+                user_values=[
+                    create_user_value(ValueType.BOUNDARY, "no_work_after_19h")
+                ],
+            )
+        )
         esl = EthicalSafeguardLayer(mock_context_manager)
         # Use PUSH_NOTIFICATION (non-advisory) for time boundary test
         action = create_action(
-            action_type=ActionType.PUSH_NOTIFICATION,
-            content_type="work_summary"
+            action_type=ActionType.PUSH_NOTIFICATION, content_type="work_summary"
         )
 
         decision = await esl.evaluate_action(action, "test-user")
@@ -525,19 +540,20 @@ class TestEthicalSafeguardLayer:
     @pytest.mark.asyncio
     async def test_chat_time_violation_is_advisory(self, mock_context_manager):
         """Chat responses with time boundary violations return APPROVED in advisory mode"""
-        mock_context_manager.get_user_context = AsyncMock(return_value=UserContext(
-            user_id="test-user",
-            current_time=datetime(2025, 1, 15, 21, 0),  # 9 PM
-            focus_mode=False,
-            active_goals=[],
-            user_values=[
-                create_user_value(ValueType.BOUNDARY, "no_work_after_19h")
-            ],
-        ))
+        mock_context_manager.get_user_context = AsyncMock(
+            return_value=UserContext(
+                user_id="test-user",
+                current_time=datetime(2025, 1, 15, 21, 0),  # 9 PM
+                focus_mode=False,
+                active_goals=[],
+                user_values=[
+                    create_user_value(ValueType.BOUNDARY, "no_work_after_19h")
+                ],
+            )
+        )
         esl = EthicalSafeguardLayer(mock_context_manager)
         action = create_action(
-            action_type=ActionType.CHAT_RESPONSE,
-            content_type="work_summary"
+            action_type=ActionType.CHAT_RESPONSE, content_type="work_summary"
         )
 
         decision = await esl.evaluate_action(action, "test-user")
@@ -562,6 +578,7 @@ class TestEthicalSafeguardLayer:
 
 # ==================== ESL Audit Logger Tests ====================
 
+
 class TestESLAuditLogger:
     """Tests for ESL audit logging"""
 
@@ -579,7 +596,7 @@ class TestESLAuditLogger:
             user_id="test-user",
             proposed_action=action,
             decision=decision,
-            context_snapshot={"test": True}
+            context_snapshot={"test": True},
         )
 
         logs = await audit_logger.get_user_logs("test-user", days=1)
@@ -593,14 +610,18 @@ class TestESLAuditLogger:
 
         # Log approved and vetoed decisions
         await audit_logger.log_decision(
-            "test-user", action,
+            "test-user",
+            action,
             ESLDecision(status=ESLDecisionStatus.APPROVED, reason="ok", confidence=0.9),
-            {}
+            {},
         )
         await audit_logger.log_decision(
-            "test-user", action,
-            ESLDecision(status=ESLDecisionStatus.VETOED, reason="blocked", confidence=0.9),
-            {}
+            "test-user",
+            action,
+            ESLDecision(
+                status=ESLDecisionStatus.VETOED, reason="blocked", confidence=0.9
+            ),
+            {},
         )
 
         vetoed_logs = await audit_logger.get_user_logs(
@@ -617,14 +638,20 @@ class TestESLAuditLogger:
         # Log 3 approved, 1 vetoed
         for _ in range(3):
             await audit_logger.log_decision(
-                "test-user", action,
-                ESLDecision(status=ESLDecisionStatus.APPROVED, reason="ok", confidence=0.9),
-                {}
+                "test-user",
+                action,
+                ESLDecision(
+                    status=ESLDecisionStatus.APPROVED, reason="ok", confidence=0.9
+                ),
+                {},
             )
         await audit_logger.log_decision(
-            "test-user", action,
-            ESLDecision(status=ESLDecisionStatus.VETOED, reason="blocked", confidence=0.9),
-            {}
+            "test-user",
+            action,
+            ESLDecision(
+                status=ESLDecisionStatus.VETOED, reason="blocked", confidence=0.9
+            ),
+            {},
         )
 
         stats = await audit_logger.get_statistics("test-user", days=1)
@@ -639,14 +666,18 @@ class TestESLAuditLogger:
         action = create_action()
 
         await audit_logger.log_decision(
-            "user-1", action,
+            "user-1",
+            action,
             ESLDecision(status=ESLDecisionStatus.APPROVED, reason="ok", confidence=0.9),
-            {}
+            {},
         )
         await audit_logger.log_decision(
-            "user-2", action,
-            ESLDecision(status=ESLDecisionStatus.VETOED, reason="blocked", confidence=0.9),
-            {}
+            "user-2",
+            action,
+            ESLDecision(
+                status=ESLDecisionStatus.VETOED, reason="blocked", confidence=0.9
+            ),
+            {},
         )
 
         user1_logs = await audit_logger.get_user_logs("user-1", days=1)
@@ -656,3 +687,173 @@ class TestESLAuditLogger:
         assert len(user2_logs) == 1
         assert user1_logs[0].decision.status == ESLDecisionStatus.APPROVED
         assert user2_logs[0].decision.status == ESLDecisionStatus.VETOED
+
+
+# ==================== ESL Audit Logger DB Persistence Tests ====================
+
+
+def _make_mock_db_factory(rows=None, raise_on_enter=False):
+    """Build a factory that mimics `with get_db_connection() as conn: with conn.cursor() as cur: ...`.
+
+    If `raise_on_enter` is True, entering the outer context raises RuntimeError
+    to simulate DB unavailability. Returned factory has `.executed` attached,
+    a list capturing (query, params) pairs for inspection.
+    """
+    from contextlib import contextmanager
+
+    executed = []
+
+    @contextmanager
+    def factory():
+        if raise_on_enter:
+            raise RuntimeError("DB unavailable")
+        conn = MagicMock()
+        cursor = MagicMock()
+        cursor.execute.side_effect = lambda q, p=(): executed.append((q, p))
+        cursor.fetchall.return_value = rows or []
+        cursor_cm = MagicMock()
+        cursor_cm.__enter__ = MagicMock(return_value=cursor)
+        cursor_cm.__exit__ = MagicMock(return_value=None)
+        conn.cursor.return_value = cursor_cm
+        yield conn
+
+    factory.executed = executed
+    return factory
+
+
+class TestESLAuditLoggerDatabase:
+    """Tests for ESL audit logger when backed by a PostgreSQL-style connection.
+
+    Covers the database-persistence code paths in esl/audit.py that are not
+    exercised by the in-memory tests above (~60 lines of coverage).
+    """
+
+    @pytest.mark.asyncio
+    async def test_db_log_decision_executes_insert(self):
+        """log_decision with DB factory should issue INSERT with correct params."""
+        factory = _make_mock_db_factory()
+        logger_inst = ESLAuditLogger(db_connection_factory=factory)
+        action = create_action()
+        decision = ESLDecision(
+            status=ESLDecisionStatus.APPROVED,
+            reason="ok",
+            confidence=0.9,
+            applied_rules=["time_based_rules"],
+            violated_values=[],
+        )
+
+        await logger_inst.log_decision(
+            user_id="db-user-1",
+            proposed_action=action,
+            decision=decision,
+            context_snapshot={"focus_mode": False},
+        )
+
+        assert len(factory.executed) == 1
+        query, params = factory.executed[0]
+        assert "INSERT INTO esl_audit_log" in query
+        # positional params: user_id, timestamp, proposed_action, status, reason, ...
+        assert params[0] == "db-user-1"
+        assert params[3] == "APPROVED"
+        assert params[4] == "ok"
+
+    @pytest.mark.asyncio
+    async def test_db_log_decision_falls_back_on_exception(self):
+        """If DB factory raises, log should still be captured in memory."""
+        failing_factory = _make_mock_db_factory(raise_on_enter=True)
+        logger_inst = ESLAuditLogger(db_connection_factory=failing_factory)
+        action = create_action()
+        decision = ESLDecision(
+            status=ESLDecisionStatus.VETOED, reason="blocked", confidence=0.8
+        )
+
+        await logger_inst.log_decision(
+            user_id="db-user-2",
+            proposed_action=action,
+            decision=decision,
+            context_snapshot={},
+        )
+
+        # Fallback path pushed into _in_memory_logs directly
+        assert len(logger_inst._in_memory_logs) == 1
+        assert logger_inst._in_memory_logs[0].user_id == "db-user-2"
+
+    @pytest.mark.asyncio
+    async def test_db_get_user_logs_returns_rows(self):
+        """get_user_logs should convert DB rows into ESLAuditLog objects."""
+        action_dict = {
+            "action_type": "chat_response",
+            "content": "hello",
+            "content_type": "text",
+            "urgency": "medium",
+            "metadata": {},
+        }
+        rows = [
+            {
+                "id": "row-1",
+                "user_id": "db-user-3",
+                "timestamp": datetime.now(UTC),
+                "proposed_action": action_dict,
+                "decision_status": "APPROVED",
+                "decision_reason": "safe",
+                "violated_values": [],
+                "applied_rules": ["time_based_rules"],
+                "confidence": 0.95,
+                "context_snapshot": {"focus_mode": False},
+            }
+        ]
+        factory = _make_mock_db_factory(rows=rows)
+        logger_inst = ESLAuditLogger(db_connection_factory=factory)
+
+        logs = await logger_inst.get_user_logs("db-user-3", days=7)
+
+        assert len(logs) == 1
+        assert logs[0].user_id == "db-user-3"
+        assert logs[0].decision.status == ESLDecisionStatus.APPROVED
+        assert logs[0].decision.applied_rules == ["time_based_rules"]
+        # Verify SELECT executed without AND decision_status (no filter)
+        assert len(factory.executed) == 1
+        query, _params = factory.executed[0]
+        assert "SELECT" in query
+        assert "decision_status = %s" not in query
+
+    @pytest.mark.asyncio
+    async def test_db_get_user_logs_with_status_filter(self):
+        """status_filter should append an AND decision_status = %s clause."""
+        factory = _make_mock_db_factory(rows=[])
+        logger_inst = ESLAuditLogger(db_connection_factory=factory)
+
+        await logger_inst.get_user_logs("db-user-4", days=30, status_filter="VETOED")
+
+        assert len(factory.executed) == 1
+        query, params = factory.executed[0]
+        assert "decision_status = %s" in query
+        assert "VETOED" in params
+
+    @pytest.mark.asyncio
+    async def test_db_get_user_logs_falls_back_on_exception(self):
+        """If DB query raises, should fall back to in-memory logs."""
+        failing_factory = _make_mock_db_factory(raise_on_enter=True)
+        logger_inst = ESLAuditLogger(db_connection_factory=failing_factory)
+
+        # Seed an in-memory log to prove fallback reads from there
+        action = create_action()
+        decision = ESLDecision(
+            status=ESLDecisionStatus.APPROVED, reason="ok", confidence=0.9
+        )
+        # Manually insert (bypassing log_decision, which would also fail)
+        from esl.models import ESLAuditLog
+
+        logger_inst._in_memory_logs.append(
+            ESLAuditLog(
+                user_id="db-user-5",
+                proposed_action=action,
+                decision=decision,
+                context_snapshot={},
+                timestamp=datetime.now(UTC),
+            )
+        )
+
+        logs = await logger_inst.get_user_logs("db-user-5", days=7)
+        assert len(logs) == 1
+        assert logs[0].user_id == "db-user-5"

@@ -2,6 +2,7 @@
 MCP Client — connects to an MCP server and wraps discovered tools as LangChain tools.
 Falls back gracefully if the server is unreachable or mcp package not installed.
 """
+
 from __future__ import annotations
 
 import logging
@@ -34,7 +35,9 @@ class MCPClient:
                     tools_response = await session.list_tools()
                     mcp_tools = tools_response.tools
 
-            lc_tools = [_wrap_mcp_tool(t, server_url=self.server_url) for t in mcp_tools]
+            lc_tools = [
+                _wrap_mcp_tool(t, server_url=self.server_url) for t in mcp_tools
+            ]
             logger.info(f"MCP: loaded {len(lc_tools)} tools from {self.server_url}")
             return lc_tools
 
@@ -58,7 +61,9 @@ def _wrap_mcp_tool(mcp_tool: Any, server_url: str) -> BaseTool:
         (BaseModel,),
         {
             "__annotations__": {"params": dict},
-            "params": Field(default_factory=dict, description="Parameters for the MCP tool"),
+            "params": Field(
+                default_factory=dict, description="Parameters for the MCP tool"
+            ),
         },
     )
 

@@ -18,12 +18,7 @@ import re
 from datetime import datetime, timedelta
 import logging
 
-from models.relevance import (
-    CandidateItem,
-    ScoredItem,
-    RelevanceContext,
-    ItemType
-)
+from models.relevance import CandidateItem, ScoredItem, RelevanceContext, ItemType
 from esl.engine import EthicalSafeguardLayer
 from utils.db import get_db
 
@@ -66,7 +61,10 @@ def get_user_relevance_weights(user_id: str) -> Dict[str, float]:
                 row = cur.fetchone()
                 if row:
                     keys = list(defaults.keys())
-                    weights = {keys[i]: (row[i] if row[i] is not None else 1.0) for i in range(4)}
+                    weights = {
+                        keys[i]: (row[i] if row[i] is not None else 1.0)
+                        for i in range(4)
+                    }
                 else:
                     weights = dict(defaults)
 
@@ -123,10 +121,7 @@ class RelevanceScoringEngine:
         logger.info("✅ RelevanceScoringEngine initialized")
 
     async def score_candidates(
-        self,
-        user_id: str,
-        candidates: List[CandidateItem],
-        context: RelevanceContext
+        self, user_id: str, candidates: List[CandidateItem], context: RelevanceContext
     ) -> List[ScoredItem]:
         """
         Score and rank candidates by relevance
@@ -151,7 +146,7 @@ class RelevanceScoringEngine:
             safety_check = await self.esl.check_content_safety(
                 content=candidate.content,
                 user_id=user_id,
-                content_type=candidate.type.value
+                content_type=candidate.type.value,
             )
 
             if safety_check.blocked:
@@ -160,24 +155,30 @@ class RelevanceScoringEngine:
                 continue
 
             # Calculate relevance score (YOUR ALGORITHM)
-            score, breakdown = self._calculate_relevance_score(candidate, context, weights)
+            score, breakdown = self._calculate_relevance_score(
+                candidate, context, weights
+            )
 
             # Generate explanation (YOUR TRANSPARENCY LOGIC)
             explanation = self._generate_explanation(candidate, context, breakdown)
 
-            scored_items.append(ScoredItem(
-                item=candidate,
-                relevance_score=score,
-                explanation=explanation,
-                score_breakdown=breakdown,
-                ethical_flags=safety_check.violated_values,
-                confidence=safety_check.confidence
-            ))
+            scored_items.append(
+                ScoredItem(
+                    item=candidate,
+                    relevance_score=score,
+                    explanation=explanation,
+                    score_breakdown=breakdown,
+                    ethical_flags=safety_check.violated_values,
+                    confidence=safety_check.confidence,
+                )
+            )
 
         # Sort by score (YOUR RANKING)
         scored_items.sort(key=lambda x: x.relevance_score, reverse=True)
 
-        logger.info(f"✅ Scored {len(scored_items)}/{len(candidates)} candidates for user {user_id}")
+        logger.info(
+            f"✅ Scored {len(scored_items)}/{len(candidates)} candidates for user {user_id}"
+        )
         return scored_items
 
     def _calculate_relevance_score(
@@ -214,9 +215,7 @@ class RelevanceScoringEngine:
         # Scaled by weight_context_relevance
         if context.query:
             query_score = self._score_query_match(
-                candidate.content,
-                candidate.title or "",
-                context.query
+                candidate.content, candidate.title or "", context.query
             )
             query_score *= weights.get("weight_context_relevance", 1.0)
             breakdown["query_match"] = query_score
@@ -227,9 +226,7 @@ class RelevanceScoringEngine:
         # Factor 2: Goal overlap (30 points max)
         # Scaled by weight_goal_alignment
         goal_score = self._score_goal_overlap(
-            candidate.content,
-            candidate.title or "",
-            context.active_goals
+            candidate.content, candidate.title or "", context.active_goals
         )
         goal_score *= weights.get("weight_goal_alignment", 1.0)
         breakdown["goal_overlap"] = goal_score
@@ -237,20 +234,14 @@ class RelevanceScoringEngine:
 
         # Factor 3: Timeliness (15 points max)
         # Scaled by weight_time_sensitivity
-        timeliness_score = self._score_timeliness(
-            candidate,
-            context.upcoming_events
-        )
+        timeliness_score = self._score_timeliness(candidate, context.upcoming_events)
         timeliness_score *= weights.get("weight_time_sensitivity", 1.0)
         breakdown["timeliness"] = timeliness_score
         total_score += timeliness_score
 
         # Factor 4: Recency (5 points max)
         # Scaled by weight_personal_values
-        recency_score = self._score_recency(
-            candidate.content,
-            context.recent_topics
-        )
+        recency_score = self._score_recency(candidate.content, context.recent_topics)
         recency_score *= weights.get("weight_personal_values", 1.0)
         breakdown["recency"] = recency_score
         total_score += recency_score
@@ -267,12 +258,7 @@ class RelevanceScoringEngine:
 
         return total_score, breakdown
 
-    def _score_query_match(
-        self,
-        content: str,
-        title: str,
-        query: str
-    ) -> float:
+    def _score_query_match(self, content: str, title: str, query: str) -> float:
         """
         Score how well content matches user's query
 
@@ -300,13 +286,17 @@ class RelevanceScoringEngine:
             return 40.0
 
         # Keyword matching (YOUR LOGIC)
-        query_words = set(re.findall(r'\w+', query_lower))
-        content_words = set(re.findall(r'\w+', content_lower))
-        title_words = set(re.findall(r'\w+', title_lower))
+        query_words = set(re.findall(r"\w+", query_lower))
+        content_words = set(re.findall(r"\w+", content_lower))
+        title_words = set(re.findall(r"\w+", title_lower))
 
         # Calculate overlap
-        title_overlap = len(query_words & title_words) / len(query_words) if query_words else 0
-        content_overlap = len(query_words & content_words) / len(query_words) if query_words else 0
+        title_overlap = (
+            len(query_words & title_words) / len(query_words) if query_words else 0
+        )
+        content_overlap = (
+            len(query_words & content_words) / len(query_words) if query_words else 0
+        )
 
         # Weight title more than content
         score = (title_overlap * 30) + (content_overlap * 20)
@@ -314,10 +304,7 @@ class RelevanceScoringEngine:
         return min(50.0, score)
 
     def _score_goal_overlap(
-        self,
-        content: str,
-        title: str,
-        active_goals: List[str]
+        self, content: str, title: str, active_goals: List[str]
     ) -> float:
         """
         Score alignment with user's active goals
@@ -354,12 +341,16 @@ class RelevanceScoringEngine:
                 continue
 
             # Keyword overlap with goal
-            goal_words = set(re.findall(r'\w+', goal_lower))
-            content_words = set(re.findall(r'\w+', content_lower))
-            title_words = set(re.findall(r'\w+', title_lower))
+            goal_words = set(re.findall(r"\w+", goal_lower))
+            content_words = set(re.findall(r"\w+", content_lower))
+            title_words = set(re.findall(r"\w+", title_lower))
 
-            title_overlap = len(goal_words & title_words) / len(goal_words) if goal_words else 0
-            content_overlap = len(goal_words & content_words) / len(goal_words) if goal_words else 0
+            title_overlap = (
+                len(goal_words & title_words) / len(goal_words) if goal_words else 0
+            )
+            content_overlap = (
+                len(goal_words & content_words) / len(goal_words) if goal_words else 0
+            )
 
             score = (title_overlap * 15) + (content_overlap * 10)
             max_score = max(max_score, score)
@@ -367,9 +358,7 @@ class RelevanceScoringEngine:
         return min(30.0, max_score)
 
     def _score_timeliness(
-        self,
-        candidate: CandidateItem,
-        upcoming_events: List[Dict[str, Any]]
+        self, candidate: CandidateItem, upcoming_events: List[Dict[str, Any]]
     ) -> float:
         """
         Score temporal relevance (proximity to calendar events)
@@ -397,13 +386,19 @@ class RelevanceScoringEngine:
             event_start = event.get("start_time")
 
             # Check content overlap with event
-            if event_title and (event_title in content_lower or event_title in title_lower):
+            if event_title and (
+                event_title in content_lower or event_title in title_lower
+            ):
                 # Score based on proximity to event
                 if isinstance(event_start, str):
-                    event_start = datetime.fromisoformat(event_start.replace('Z', '+00:00'))
+                    event_start = datetime.fromisoformat(
+                        event_start.replace("Z", "+00:00")
+                    )
 
                 if isinstance(event_start, datetime):
-                    hours_until = (event_start - datetime.utcnow()).total_seconds() / 3600
+                    hours_until = (
+                        event_start - datetime.utcnow()
+                    ).total_seconds() / 3600
 
                     if hours_until < 0:
                         # Event already passed
@@ -422,11 +417,7 @@ class RelevanceScoringEngine:
 
         return min(15.0, max_score)
 
-    def _score_recency(
-        self,
-        content: str,
-        recent_topics: List[str]
-    ) -> float:
+    def _score_recency(self, content: str, recent_topics: List[str]) -> float:
         """
         Score based on recent conversation topics
 
@@ -470,7 +461,7 @@ class RelevanceScoringEngine:
         self,
         candidate: CandidateItem,
         context: RelevanceContext,
-        breakdown: Dict[str, float]
+        breakdown: Dict[str, float],
     ) -> str:
         """
         Generate human-readable explanation of relevance score

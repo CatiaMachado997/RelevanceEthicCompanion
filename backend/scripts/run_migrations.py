@@ -8,6 +8,7 @@ Usage:
     python -m scripts.run_migrations
     python -m scripts.run_migrations --migrations-dir /path/to/migrations
 """
+
 from __future__ import annotations
 
 import argparse
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 def get_db_connection():
     from utils.db import get_db_connection as _get
+
     return _get()
 
 
@@ -29,9 +31,7 @@ def run_migrations(migrations_dir: str | None = None) -> None:
     if migrations_dir is None:
         migrations_dir = str(Path(__file__).parent.parent / "migrations")
 
-    sql_files = sorted(
-        f for f in os.listdir(migrations_dir) if f.endswith(".sql")
-    )
+    sql_files = sorted(f for f in os.listdir(migrations_dir) if f.endswith(".sql"))
 
     if not sql_files:
         logger.info("No migration files found in %s", migrations_dir)

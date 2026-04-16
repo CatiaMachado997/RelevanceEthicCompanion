@@ -12,6 +12,7 @@ Usage:
         with conn.cursor() as cur:
             cur.execute("SELECT 1")
 """
+
 from __future__ import annotations
 
 import logging

@@ -10,6 +10,7 @@ TEST_USER_ID = "00000000-0000-0000-0000-000000000000"
 
 def make_app():
     from routes.tool_marketplace import router
+
     app = FastAPI()
     app.include_router(router)
     app.dependency_overrides[get_current_user_id] = lambda: TEST_USER_ID
@@ -42,10 +43,20 @@ def make_db_mock(mock_db, fetchall_result=None, fetchone_result=None):
 def test_get_catalogue_returns_tools(client):
     """GET /api/tools returns all enabled tool definitions."""
     with patch("routes.tool_marketplace.get_db_connection") as mock_db:
-        conn, cur = make_db_mock(mock_db, fetchall_result=[
-            {"id": "github", "name": "GitHub", "description": "Issues and PRs",
-             "auth_type": "oauth", "actions": [], "icon_url": None, "enabled": True}
-        ])
+        conn, cur = make_db_mock(
+            mock_db,
+            fetchall_result=[
+                {
+                    "id": "github",
+                    "name": "GitHub",
+                    "description": "Issues and PRs",
+                    "auth_type": "oauth",
+                    "actions": [],
+                    "icon_url": None,
+                    "enabled": True,
+                }
+            ],
+        )
         resp = client.get("/api/tools")
 
     assert resp.status_code == 200
@@ -57,12 +68,23 @@ def test_get_catalogue_returns_tools(client):
 def test_get_connected_returns_user_tools(client):
     """GET /api/tools/connected returns user's active connections."""
     with patch("routes.tool_marketplace.get_db_connection") as mock_db:
-        conn, cur = make_db_mock(mock_db, fetchall_result=[
-            {"tool_id": "github", "enabled": True, "connected_at": "2026-04-08T00:00:00+00:00",
-             "last_used_at": None, "mcp_url": None,
-             "name": "GitHub", "description": "Issues", "auth_type": "oauth",
-             "actions": [], "icon_url": None}
-        ])
+        conn, cur = make_db_mock(
+            mock_db,
+            fetchall_result=[
+                {
+                    "tool_id": "github",
+                    "enabled": True,
+                    "connected_at": "2026-04-08T00:00:00+00:00",
+                    "last_used_at": None,
+                    "mcp_url": None,
+                    "name": "GitHub",
+                    "description": "Issues",
+                    "auth_type": "oauth",
+                    "actions": [],
+                    "icon_url": None,
+                }
+            ],
+        )
         resp = client.get("/api/tools/connected")
 
     assert resp.status_code == 200
@@ -79,7 +101,7 @@ def test_set_permission_upserts_trust(client):
 
         resp = client.post(
             "/api/tools/github/permissions",
-            json={"action_name": "create_issue", "trust_level": "allow"}
+            json={"action_name": "create_issue", "trust_level": "allow"},
         )
 
     assert resp.status_code == 200

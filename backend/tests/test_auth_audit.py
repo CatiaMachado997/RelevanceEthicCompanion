@@ -1,4 +1,5 @@
 """Tests for auth_audit.py logger."""
+
 import time
 from unittest.mock import MagicMock, patch
 import pytest
@@ -15,6 +16,7 @@ def test_log_auth_event_inserts_row():
 
     with patch("utils.auth_audit.get_db_connection", return_value=mock_conn):
         from utils.auth_audit import _write_audit_event
+
         _write_audit_event(
             event="login_success",
             user_id="user-123",
@@ -33,6 +35,7 @@ def test_log_auth_event_does_not_raise_on_db_error():
     """A DB failure in the audit logger must NOT propagate to the caller."""
     with patch("utils.auth_audit.get_db_connection", side_effect=Exception("DB down")):
         from utils import auth_audit
+
         # Should not raise
         auth_audit._write_audit_event(
             event="login_success",
@@ -52,6 +55,7 @@ def test_log_auth_event_public_api_is_fire_and_forget():
 
     with patch("utils.auth_audit._write_audit_event", side_effect=fake_write):
         from utils.auth_audit import log_auth_event
+
         log_auth_event(event="logout", user_id="u1")
         # Give the background thread time to run
         time.sleep(0.05)

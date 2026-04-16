@@ -82,9 +82,26 @@ async def get_daily_insight(
         except Exception as e:
             logger.warning(f"Could not fetch values for insight: {e}")
 
-        goal_text = "\n".join(f"- {g.title if hasattr(g, 'title') else g['title']}" for g in goals[:5]) or "None set yet."
-        event_text = "\n".join(f"- {e.title if hasattr(e, 'title') else e['title']}" for e in events[:3]) or "Nothing scheduled."
-        value_text = "\n".join(f"- {v.value if hasattr(v, 'value') else v['value']}" for v in values[:5]) or "None set yet."
+        goal_text = (
+            "\n".join(
+                f"- {g.title if hasattr(g, 'title') else g['title']}" for g in goals[:5]
+            )
+            or "None set yet."
+        )
+        event_text = (
+            "\n".join(
+                f"- {e.title if hasattr(e, 'title') else e['title']}"
+                for e in events[:3]
+            )
+            or "Nothing scheduled."
+        )
+        value_text = (
+            "\n".join(
+                f"- {v.value if hasattr(v, 'value') else v['value']}"
+                for v in values[:5]
+            )
+            or "None set yet."
+        )
 
         prompt = f"""You are Ethic Companion, an AI assistant that helps users act on their goals with integrity.
 
@@ -131,4 +148,6 @@ Write one specific, actionable insight or suggestion for today. Reference concre
 
     except Exception as e:
         logger.error(f"Daily insight generation failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Could not generate insight: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Could not generate insight: {str(e)}"
+        )

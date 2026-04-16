@@ -7,6 +7,7 @@ GET  /api/documents/            — list user's documents
 DELETE /api/documents/{id}      — delete a document + its chunks
 GET  /api/documents/{id}/view   — stream document bytes inline (Bearer or ?token=)
 """
+
 import io
 import logging
 import uuid
@@ -115,7 +116,14 @@ async def upload_document(
                 INSERT INTO documents (id, user_id, filename, content_type, size_bytes, status, raw_content)
                 VALUES (%s, %s, %s, %s, %s, 'processing', %s)
                 """,
-                (document_id, user_id, file.filename or "untitled", base_type, len(file_bytes), file_bytes),
+                (
+                    document_id,
+                    user_id,
+                    file.filename or "untitled",
+                    base_type,
+                    len(file_bytes),
+                    file_bytes,
+                ),
             )
 
     # Process synchronously
