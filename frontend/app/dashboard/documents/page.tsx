@@ -373,7 +373,7 @@ export default function DocumentsPage() {
       {/* Info footer */}
       <div
         className="flex items-start gap-2 px-4 py-3 rounded-xl"
-        style={{ background: 'var(--ec-surface-2, #f9f6fa)', border: '1px solid var(--ec-card-border)' }}
+        style={{ background: 'var(--ec-surface-2, #fafafa)', border: '1px solid var(--ec-card-border)' }}
       >
         <AlertCircle size={13} className="mt-0.5 shrink-0" style={{ color: 'var(--ec-text-subtle)' }} />
         <p className="text-xs leading-relaxed" style={{ color: 'var(--ec-text-subtle)' }}>

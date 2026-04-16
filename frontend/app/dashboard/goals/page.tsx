@@ -178,7 +178,7 @@ export default function GoalsPage() {
           )}
           {/* Milestones */}
           <div className="mt-3 pt-3 border-t border-[rgba(0,0,0,0.06)]">
-            <p className="text-xs font-medium mb-2" style={{ color: '#695e6e' }}>
+            <p className="text-xs font-medium mb-2" style={{ color: '#6b6b6b' }}>
               Milestones
               {milestones[goal.id] && (
                 <span className="ml-1" style={{ color: '#9e9e9e' }}>
@@ -205,7 +205,7 @@ export default function GoalsPage() {
                   <span
                     className="text-xs flex-1"
                     style={{
-                      color: m.completed ? '#9e9e9e' : '#1c1520',
+                      color: m.completed ? '#9e9e9e' : '#1a1a1a',
                       textDecoration: m.completed ? 'line-through' : 'none',
                     }}
                   >
@@ -253,7 +253,7 @@ export default function GoalsPage() {
                 }}
                 placeholder="Add milestone…"
                 className="flex-1 text-xs px-2 py-1 rounded-lg outline-none"
-                style={{ background: '#f5f2ef', color: '#1c1520', border: '1px solid transparent' }}
+                style={{ background: '#f5f2ef', color: '#1a1a1a', border: '1px solid transparent' }}
               />
               <button
                 type="submit"

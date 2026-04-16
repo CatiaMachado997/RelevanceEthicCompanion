@@ -9,20 +9,20 @@ Adapted for: Ethic Companion (Next.js + TypeScript + Tailwind CSS v4)
 | Token | Value | Usage |
 |-------|-------|-------|
 | `--gray-950` | `#2A222D` | Logo backgrounds, deepest elements |
-| `--gray-900` | `#332B36` | Primary text, headings, active states |
-| `--gray-600` | `#695E6E` | Secondary text, labels, muted content |
-| `--gray-400` | `#B0A6B4` | Placeholder text, disabled states |
-| `--gray-200` | `#E4DEE7` | Borders, dividers, inactive dots |
-| `--gray-50`  | `#F9F6FA` | Surface tint, card backgrounds, panels |
+| `--gray-900` | `#1a1a1a` | Primary text, headings, active states |
+| `--gray-600` | `#6b6b6b` | Secondary text, labels, muted content |
+| `--gray-400` | `#9e9e9e` | Placeholder text, disabled states |
+| `--gray-200` | `#e5e5e5` | Borders, dividers, inactive dots |
+| `--gray-50`  | `#fafafa` | Surface tint, card backgrounds, panels |
 | `--white`    | `#FFFFFF` | Page background, form inputs |
 
 Semantic mappings:
-- `--foreground` → `#332B36`
+- `--foreground` → `#1a1a1a`
 - `--background` → `#FFFFFF`
-- `--muted-foreground` → `#695E6E`
-- `--border` → `#E4DEE7`
-- `--input` → `#E4DEE7`
-- `--ring` → `#332B36`
+- `--muted-foreground` → `#6b6b6b`
+- `--border` → `#e5e5e5`
+- `--input` → `#e5e5e5`
+- `--ring` → `#1a1a1a`
 
 Functional colors (preserved from original design):
 - ESL Approved: `#4A7C59`
@@ -58,22 +58,22 @@ Font: Inter (weight 400, 500)
 
 ### Input
 ```tsx
-<input className="border border-[#E4DEE7] rounded-xl px-3 py-2.5 text-sm text-[#332B36] placeholder:text-[#B0A6B4] focus:border-[#332B36] focus:ring-2 focus:ring-[#332B36]/10 bg-white" />
+<input className="border border-[#e5e5e5] rounded-xl px-3 py-2.5 text-sm text-[#1a1a1a] placeholder:text-[#9e9e9e] focus:border-[#1a1a1a] focus:ring-2 focus:ring-[#1a1a1a]/10 bg-white" />
 ```
 
 ### Button (Primary)
 ```tsx
-<button className="bg-[#332B36] text-white rounded-[14px] px-5 py-3 text-base font-medium hover:bg-[#2A222D] disabled:bg-[#E4DEE7] transition-colors" />
+<button className="bg-[#1a1a1a] text-white rounded-[14px] px-5 py-3 text-base font-medium hover:bg-[#2A222D] disabled:bg-[#e5e5e5] transition-colors" />
 ```
 
 ### Card
 ```tsx
-<div className="bg-white rounded-2xl border border-[#E4DEE7] shadow-[0_1px_3px_rgba(42,34,45,0.08)] hover:shadow-[0_4px_12px_rgba(42,34,45,0.10)]" />
+<div className="bg-white rounded-2xl border border-[#e5e5e5] shadow-[0_1px_3px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)]" />
 ```
 
 ### Surface Panel (testimonial / sidebar bg)
 ```tsx
-<div className="bg-[#F9F6FA] rounded-2xl" />
+<div className="bg-[#fafafa] rounded-2xl" />
 ```
 
 ## Asset Handling

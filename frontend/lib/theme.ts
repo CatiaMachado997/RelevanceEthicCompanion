@@ -1,21 +1,21 @@
-// Figma Design System — Ethic Companion (warm purple-gray palette)
+// Design System — Ethic Companion (neutral gray + sage green accent)
 
 export const colors = {
   // Backgrounds
   pageBg: '#ffffff',
-  sidebarBg: '#f9f6fa',
+  sidebarBg: '#fafafa',
   surface: '#ffffff',
-  surfaceBorder: '#e4dee7',
+  surfaceBorder: '#e5e5e5',
 
   // Text
-  textPrimary: '#332b36',
-  textSecondary: '#695e6e',
-  textMuted: '#b0a6b4',
+  textPrimary: '#1a1a1a',
+  textSecondary: '#6b6b6b',
+  textMuted: '#9e9e9e',
 
-  // Accent (warm purple-gray)
-  accent: '#332b36',
-  accentLight: 'rgba(51,43,54,0.05)',
-  accentBorder: '#e4dee7',
+  // Accent (neutral dark)
+  accent: '#1a1a1a',
+  accentLight: 'rgba(26,26,26,0.05)',
+  accentBorder: '#e5e5e5',
 
   // ESL status (unchanged — functional colors)
   eslApproved: '#4A7C59',
@@ -26,8 +26,8 @@ export const colors = {
   eslModifiedBg: 'rgba(155,122,61,0.10)',
 
   // Value type badges — monochrome (boundary) + functional (others)
-  badgeBoundary: '#332b36',
-  badgeBoundaryBg: 'rgba(51,43,54,0.06)',
+  badgeBoundary: '#1a1a1a',
+  badgeBoundaryBg: 'rgba(26,26,26,0.06)',
   badgePreference: '#4A7C59',
   badgePreferenceBg: 'rgba(74,124,89,0.10)',
   badgeTopicFilter: '#9B7A3D',
@@ -38,18 +38,18 @@ export const colors = {
   // Goal status badges
   statusActive: '#4A7C59',
   statusActiveBg: 'rgba(74,124,89,0.10)',
-  statusCompleted: '#332b36',
-  statusCompletedBg: 'rgba(51,43,54,0.08)',
+  statusCompleted: '#1a1a1a',
+  statusCompletedBg: 'rgba(26,26,26,0.08)',
   statusPaused: '#9B7A3D',
   statusPausedBg: 'rgba(155,122,61,0.10)',
-  statusArchived: '#b0a6b4',
-  statusArchivedBg: 'rgba(176,166,180,0.10)',
+  statusArchived: '#9e9e9e',
+  statusArchivedBg: 'rgba(158,158,158,0.10)',
 } as const
 
 export const shadows = {
-  card: '0 1px 3px rgba(42,34,45,0.08)',
-  cardHover: '0 4px 12px rgba(42,34,45,0.10)',
-  toggle: '0 1px 3px rgba(42,34,45,0.12)',
+  card: '0 1px 3px rgba(0,0,0,0.08)',
+  cardHover: '0 4px 12px rgba(0,0,0,0.10)',
+  toggle: '0 1px 3px rgba(0,0,0,0.12)',
 } as const
 
 export const radius = {

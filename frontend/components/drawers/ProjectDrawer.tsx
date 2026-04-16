@@ -152,7 +152,7 @@ export function ProjectDrawer({ project, open, onClose, onSaved }: ProjectDrawer
             onClick={handleSave}
             disabled={saving || !title.trim()}
             className="px-4 h-9 rounded-xl text-sm font-medium transition-colors disabled:opacity-40"
-            style={{ background: '#1c1520', color: '#fff' }}
+            style={{ background: '#1a1a1a', color: '#fff' }}
           >
             {saving ? 'Saving…' : 'Save'}
           </button>
@@ -248,7 +248,7 @@ export function ProjectDrawer({ project, open, onClose, onSaved }: ProjectDrawer
             type="submit"
             disabled={addingTask || !newTaskTitle.trim()}
             className="w-9 h-9 flex items-center justify-center rounded-xl transition-colors disabled:opacity-40"
-            style={{ background: '#1c1520', color: '#fff' }}
+            style={{ background: '#1a1a1a', color: '#fff' }}
             aria-label="Add task"
           >
             <Plus size={16} />

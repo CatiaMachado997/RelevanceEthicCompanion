@@ -315,8 +315,8 @@ function IntegrationsContent() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-lg font-semibold" style={{ color: '#1c1520' }}>Integrations</h2>
-          <p className="text-sm mt-0.5" style={{ color: '#695e6e' }}>
+          <h2 className="text-lg font-semibold" style={{ color: '#1a1a1a' }}>Integrations</h2>
+          <p className="text-sm mt-0.5" style={{ color: '#6b6b6b' }}>
             Connect your apps to give ESL real context about your work and life.
           </p>
         </div>
@@ -391,7 +391,7 @@ function IntegrationsContent() {
               key={type}
               className="rounded-2xl overflow-hidden transition-all"
               style={{
-                border: isConn ? `1px solid ${borderColor}` : '1px solid #e4dee7',
+                border: isConn ? `1px solid ${borderColor}` : '1px solid #e5e5e5',
                 opacity: loading ? 0.5 : 1,
               }}
             >
@@ -415,10 +415,10 @@ function IntegrationsContent() {
                     {/* Info */}
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                        <span className="text-sm font-semibold" style={{ color: '#1c1520' }}>{label}</span>
+                        <span className="text-sm font-semibold" style={{ color: '#1a1a1a' }}>{label}</span>
                         {isConn && <StatusBadge status={status} />}
                       </div>
-                      <p className="text-xs leading-relaxed" style={{ color: '#695e6e' }}>
+                      <p className="text-xs leading-relaxed" style={{ color: '#6b6b6b' }}>
                         {isConn && sync
                           ? `Last synced ${new Date(sync).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
                           : description}
@@ -440,7 +440,7 @@ function IntegrationsContent() {
                         <div className="mt-3 pt-3" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}>
                           <div className="space-y-1">
                             {(src?.recent_items ?? []).slice(0, 3).map((item, i) => (
-                              <p key={i} className="text-[11px] truncate" style={{ color: '#695e6e' }}>
+                              <p key={i} className="text-[11px] truncate" style={{ color: '#6b6b6b' }}>
                                 {type === 'google_calendar'
                                   ? `${item.title} · ${formatRelativeTime(item.item_at)}`
                                   : item.title
@@ -474,13 +474,13 @@ function IntegrationsContent() {
                             title={`Sync ${label}`}
                             aria-label={`Sync ${label}`}
                           >
-                            <RefreshCw size={13} style={{ color: '#695e6e' }} className={isSyncing ? 'animate-spin' : ''} />
+                            <RefreshCw size={13} style={{ color: '#6b6b6b' }} className={isSyncing ? 'animate-spin' : ''} />
                           </button>
                         )}
                         <button
                           onClick={() => handleDisconnect(type)}
                           className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-                          style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(0,0,0,0.1)', color: '#695e6e' }}
+                          style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(0,0,0,0.1)', color: '#6b6b6b' }}
                         >
                           Disconnect
                         </button>
@@ -538,7 +538,7 @@ function IntegrationsContent() {
       )}
 
       {/* Advanced / MCP */}
-      <div className="mt-6 pt-4" style={{ borderTop: '1px solid #e4dee7' }}>
+      <div className="mt-6 pt-4" style={{ borderTop: '1px solid #e5e5e5' }}>
         <button
           onClick={() => setShowAdvanced((v) => !v)}
           className="text-xs transition-colors"
@@ -551,10 +551,10 @@ function IntegrationsContent() {
             className="mt-3 rounded-xl p-4"
             style={{ border: '1px dashed #d4cdd8', background: '#faf8fb' }}
           >
-            <p className="text-sm font-medium mb-1" style={{ color: '#1c1520' }}>
+            <p className="text-sm font-medium mb-1" style={{ color: '#1a1a1a' }}>
               Custom MCP Server
             </p>
-            <p className="text-xs mb-3" style={{ color: '#695e6e' }}>
+            <p className="text-xs mb-3" style={{ color: '#6b6b6b' }}>
               Connect any Model Context Protocol server via its SSE endpoint URL.
             </p>
             <div className="flex gap-2">
@@ -567,7 +567,7 @@ function IntegrationsContent() {
                 style={{
                   background: '#ffffff',
                   border: '1px solid #d4cdd8',
-                  color: '#1c1520',
+                  color: '#1a1a1a',
                 }}
               />
               <button
@@ -585,10 +585,10 @@ function IntegrationsContent() {
 
       {/* Info footer */}
       <div className="flex items-start gap-2 px-4 py-3 rounded-xl" style={{
-        background: '#f9f6fa',
-        border: '1px solid #e4dee7',
+        background: '#fafafa',
+        border: '1px solid #e5e5e5',
       }}>
-        <AlertCircle size={13} className="mt-0.5 shrink-0" style={{ color: '#b0a6b4' }} />
+        <AlertCircle size={13} className="mt-0.5 shrink-0" style={{ color: '#9e9e9e' }} />
         <p className="text-xs leading-relaxed" style={{ color: '#9e9e9e' }}>
           Ethic Companion only reads data — it never sends messages or modifies your accounts.
           All data is processed locally to inform ESL decisions and never stored externally.
@@ -600,7 +600,7 @@ function IntegrationsContent() {
 
 export default function IntegrationsPage() {
   return (
-    <Suspense fallback={<div className="h-40 flex items-center justify-center text-sm" style={{ color: '#b0a6b4' }}>Loading...</div>}>
+    <Suspense fallback={<div className="h-40 flex items-center justify-center text-sm" style={{ color: '#9e9e9e' }}>Loading...</div>}>
       <IntegrationsContent />
     </Suspense>
   )

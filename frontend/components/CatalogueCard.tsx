@@ -15,7 +15,7 @@ export function CatalogueCard({ tool, isConnected, onConnect, onDisconnect }: Pr
       className="flex items-center justify-between rounded-2xl p-4 transition-all"
       style={{
         background: isConnected ? 'linear-gradient(135deg, #f0f7f2 0%, #f9fff9 100%)' : '#ffffff',
-        border: isConnected ? '1px solid #c8e6d3' : '1px solid #e4dee7',
+        border: isConnected ? '1px solid #c8e6d3' : '1px solid #e5e5e5',
       }}
     >
       {/* Left: icon + info */}
@@ -27,16 +27,16 @@ export function CatalogueCard({ tool, isConnected, onConnect, onDisconnect }: Pr
           {tool.icon_url ? (
             <img src={tool.icon_url} alt={tool.name} className="w-6 h-6 rounded" />
           ) : (
-            <span className="text-sm font-semibold" style={{ color: '#695e6e' }}>
+            <span className="text-sm font-semibold" style={{ color: '#6b6b6b' }}>
               {tool.name[0]}
             </span>
           )}
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-semibold truncate" style={{ color: '#1c1520' }}>
+          <p className="text-sm font-semibold truncate" style={{ color: '#1a1a1a' }}>
             {tool.name}
           </p>
-          <p className="text-xs truncate" style={{ color: '#695e6e' }}>
+          <p className="text-xs truncate" style={{ color: '#6b6b6b' }}>
             {tool.description}
           </p>
         </div>
