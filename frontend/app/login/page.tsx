@@ -85,12 +85,12 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex" style={{ background: '#f9f6fa' }}>
+    <div className="min-h-screen flex" style={{ background: '#f2f2f2' }}>
 
       {/* Left panel — brand / atmospheric */}
       <div
         className="hidden lg:flex flex-col justify-between w-[480px] shrink-0 p-12 relative overflow-hidden"
-        style={{ background: '#1c1520' }}
+        style={{ background: '#111111' }}
       >
         {/* Noise texture overlay */}
         <div className="absolute inset-0 opacity-[0.04]" style={{
@@ -99,11 +99,11 @@ export default function LoginPage() {
         }} />
 
         {/* Glowing orb */}
-        <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full opacity-20" style={{
-          background: 'radial-gradient(circle, #9b7ec8 0%, transparent 70%)',
+        <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full opacity-15" style={{
+          background: 'radial-gradient(circle, #4a7c59 0%, transparent 70%)',
         }} />
         <div className="absolute bottom-0 right-0 w-64 h-64 rounded-full opacity-10" style={{
-          background: 'radial-gradient(circle, #c78b8b 0%, transparent 70%)',
+          background: 'radial-gradient(circle, #4a7c59 0%, transparent 70%)',
         }} />
 
         {/* Logo */}
@@ -139,7 +139,7 @@ export default function LoginPage() {
               'Zero engagement manipulation',
             ].map((item) => (
               <div key={item} className="flex items-center gap-3">
-                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: '#9b7ec8' }} />
+                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: '#4a7c59' }} />
                 <span className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>{item}</span>
               </div>
             ))}
@@ -160,24 +160,24 @@ export default function LoginPage() {
 
           {/* Mobile logo */}
           <div className="flex items-center gap-2 mb-10 lg:hidden">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#1c1520' }}>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#111111' }}>
               <Shield size={14} color="white" />
             </div>
-            <span className="text-sm font-medium" style={{ color: '#332b36' }}>Ethic Companion</span>
+            <span className="text-sm font-medium" style={{ color: '#1a1a1a' }}>Ethic Companion</span>
           </div>
 
           {sent ? (
             <div className="space-y-6">
-              <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: '#f0ede8', border: '1px solid #e4dee7' }}>
-                <Mail size={22} style={{ color: '#332b36' }} />
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: '#f0f0f0', border: '1px solid #e0e0e0' }}>
+                <Mail size={22} style={{ color: '#1a1a1a' }} />
               </div>
               <div>
-                <h1 className="text-2xl font-semibold mb-2" style={{ fontFamily: 'var(--font-fraunces)', color: '#1c1520', fontWeight: 400 }}>
+                <h1 className="text-2xl font-semibold mb-2" style={{ fontFamily: 'var(--font-fraunces)', color: '#111111', fontWeight: 400 }}>
                   Check your inbox
                 </h1>
-                <p className="text-sm leading-relaxed" style={{ color: '#695e6e' }}>
+                <p className="text-sm leading-relaxed" style={{ color: '#666666' }}>
                   We sent a magic link to{' '}
-                  <span className="font-medium" style={{ color: '#332b36' }}>{email}</span>.
+                  <span className="font-medium" style={{ color: '#1a1a1a' }}>{email}</span>.
                   Click it to sign in — no password needed.
                 </p>
               </div>
@@ -192,7 +192,7 @@ export default function LoginPage() {
               <button
                 onClick={() => { setSent(false); setEmail('') }}
                 className="text-xs underline underline-offset-2 transition-opacity hover:opacity-60"
-                style={{ color: '#695e6e' }}
+                style={{ color: '#666666' }}
               >
                 Use a different email
               </button>
@@ -210,10 +210,10 @@ export default function LoginPage() {
               )}
 
               <div>
-                <h1 className="text-3xl mb-2" style={{ fontFamily: 'var(--font-fraunces)', color: '#1c1520', fontWeight: 400 }}>
+                <h1 className="text-3xl mb-2" style={{ fontFamily: 'var(--font-fraunces)', color: '#111111', fontWeight: 400 }}>
                   Welcome back
                 </h1>
-                <p className="text-sm" style={{ color: '#695e6e' }}>
+                <p className="text-sm" style={{ color: '#666666' }}>
                   Enter your email to receive a sign-in link.
                 </p>
               </div>
@@ -284,7 +284,7 @@ export default function LoginPage() {
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium tracking-widest uppercase" style={{ color: '#b0a6b4' }}>
+                  <label className="text-xs font-medium tracking-widest uppercase" style={{ color: '#9e9e9e' }}>
                     Email address
                   </label>
                   <input
@@ -297,11 +297,11 @@ export default function LoginPage() {
                     className="w-full h-12 rounded-xl px-4 text-sm transition-all outline-none disabled:opacity-50"
                     style={{
                       background: '#ffffff',
-                      border: '1px solid #e4dee7',
-                      color: '#1c1520',
+                      border: '1px solid #e0e0e0',
+                      color: '#111111',
                     }}
-                    onFocus={(e) => { e.currentTarget.style.borderColor = '#9b7ec8'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(155,126,200,0.12)' }}
-                    onBlur={(e) => { e.currentTarget.style.borderColor = '#e4dee7'; e.currentTarget.style.boxShadow = 'none' }}
+                    onFocus={(e) => { e.currentTarget.style.borderColor = '#4a7c59'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(74,124,89,0.12)' }}
+                    onBlur={(e) => { e.currentTarget.style.borderColor = '#e0e0e0'; e.currentTarget.style.boxShadow = 'none' }}
                   />
                 </div>
 
@@ -333,7 +333,7 @@ export default function LoginPage() {
                 </button>
               </form>
 
-              <p className="text-xs text-center" style={{ color: '#b0a6b4' }}>
+              <p className="text-xs text-center" style={{ color: '#9e9e9e' }}>
                 No account yet? Just enter your email — we&apos;ll create one.
               </p>
             </div>
