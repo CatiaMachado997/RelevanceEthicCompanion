@@ -73,8 +73,9 @@ The callback route (`frontend/app/auth/callback/page.tsx`) already handles all O
 | File | Change |
 |------|--------|
 | `frontend/app/login/page.tsx` | Replace OTP-only form with new layout: 3 OAuth buttons + divider + existing email form |
+| `frontend/app/globals.css` | Add `--color-accent: #4a7c59` CSS variable; apply to existing primary buttons, active nav items, focus rings, and links — no layout or structural changes |
 
-**No other files change.** The rest of the app — dashboard, sidebar, settings, chat — is untouched.
+**Everything else is untouched.** No new components, no layout changes, no redesigns. The green is applied by swapping the existing accent colour (purple/other) for sage green at the CSS variable level.
 
 ---
 
@@ -103,8 +104,9 @@ These steps must be completed in external dashboards before the buttons work:
 
 ## What Is Not In Scope
 
-- Redesigning any page other than login
-- Changing the dashboard colour scheme
+- Redesigning any page layout
+- Adding new components or sections to existing pages
 - Adding Slack or any other provider
 - Dark mode
 - User profile / account management
+- Changing typography, spacing, or structure anywhere
