@@ -136,7 +136,7 @@ export default function ProfilePage() {
       <div className="rounded-2xl p-6 flex items-center gap-5" style={CARD_STYLE}>
         <div
           className="w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-bold shrink-0"
-          style={{ background: '#332b36', color: '#ffffff' }}
+          style={{ background: '#1a1a1a', color: '#ffffff' }}
         >
           {initials}
         </div>

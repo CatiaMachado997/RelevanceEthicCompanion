@@ -128,7 +128,7 @@ export function TaskDrawer({ task, open, onClose, onSaved }: TaskDrawerProps) {
             onClick={handleSave}
             disabled={saving || !title.trim()}
             className="px-4 h-9 rounded-xl text-sm font-medium transition-colors disabled:opacity-40"
-            style={{ background: '#1c1520', color: '#fff' }}
+            style={{ background: '#1a1a1a', color: '#fff' }}
           >
             {saving ? 'Saving…' : 'Save'}
           </button>

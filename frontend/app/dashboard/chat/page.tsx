@@ -688,7 +688,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                       {/* User avatar */}
                       <div
                         className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold shrink-0"
-                        style={{ background: '#332b36', color: '#ffffff' }}
+                        style={{ background: '#1a1a1a', color: '#ffffff' }}
                         aria-label="You"
                       >
                         {initials}

@@ -25,7 +25,7 @@ export function ToolConfirmation({ toolName, actionName, preview, onAllowOnce, o
         </button>
         <button
           onClick={onAlwaysAllow}
-          className="rounded bg-indigo-600 px-3 py-1 text-xs text-white hover:bg-indigo-500"
+          className="rounded bg-green-900 px-3 py-1 text-xs text-white hover:bg-green-800"
         >
           Always allow
         </button>
