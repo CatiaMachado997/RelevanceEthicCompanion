@@ -22,7 +22,7 @@
   --destructive-foreground: 0 0% 100%;
   --border: 0 0% 88%;              /* #e0e0e0 */
   --input: 0 0% 88%;               /* #e0e0e0 */
-  --ring: 145 25% 39%;             /* #4a7c59 — sage green focus rings */
+  --ring: 138 25% 39%;             /* #4a7c59 — sage green focus rings */
   --radius: 0.5rem;
 
   /* Sidebar tokens */
@@ -150,6 +150,10 @@
   --ec-sidebar-active: #2a2a2a;
   --ec-sidebar-text: #f0f0f0;
   --ec-sidebar-muted: #909090;
+
+  --ec-accent:       #5a9069;                /* lighter for dark bg */
+  --ec-accent-hover: #4a7c59;
+  --ec-accent-muted: rgba(74, 124, 89, 0.15);
 }
 
 /* ── Chat message prose ── */
