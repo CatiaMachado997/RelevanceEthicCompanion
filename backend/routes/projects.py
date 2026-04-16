@@ -12,7 +12,6 @@ from esl.models import ProposedAction, ActionType, UrgencyLevel, ESLDecisionStat
 from utils.db import get_db_connection
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 from services.context_manager import ContextManager
-from config import settings
 
 logger = logging.getLogger(__name__)
 

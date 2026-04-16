@@ -5,7 +5,6 @@ Manages periodic tasks like data source syncing.
 """
 
 import logging
-from typing import Optional
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
@@ -357,7 +356,6 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
             from config import settings
 
             now = datetime.utcnow()
-            window_start = now
             window_end = datetime(
                 now.year, now.month, now.day, now.hour, now.minute
             ).__class__(now.year, now.month, now.day, now.hour, now.minute)
@@ -482,7 +480,6 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
             from langchain_core.messages import HumanMessage
             from langchain_groq import ChatGroq
             from config import settings
-            import datetime as dt_module
 
             today_str = datetime.utcnow().strftime("%Y-%m-%d")
 
@@ -491,7 +488,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                     cur.execute("SELECT id FROM users LIMIT 100")
                     users = cur.fetchall()
 
-            ctx = ContextManager()
+            ContextManager()
             snapshot_svc = ContextSnapshotService()
             llm = ChatGroq(
                 model="llama-3.1-8b-instant",
@@ -536,7 +533,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                     )
                     tasks_text = (
                         "\n".join(
-                            f"- {t['title']} (due {t['due_date'][:10] if t.get('due_date') else 'soon'}, priority {t.get('priority', 5)})"
+                            f"- {t['title']} (due {t['due_date'][:10] if t.get('due_date') else 'soon'}, priority {t.get('priority', 5)})"  # noqa: E501
                             for t in tasks[:5]
                         )
                         or "None"
@@ -881,13 +878,13 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                     with get_db_connection() as conn:
                         with conn.cursor() as cur:
                             cur.execute(
-                                "SELECT title FROM tasks WHERE user_id = %s AND status NOT IN ('done','cancelled') LIMIT 30",
+                                "SELECT title FROM tasks WHERE user_id = %s AND status NOT IN ('done','cancelled') LIMIT 30",  # noqa: E501
                                 (user_id,),
                             )
                             tasks = [r["title"] for r in cur.fetchall()]
 
                             cur.execute(
-                                "SELECT title FROM events WHERE user_id = %s AND start_time >= %s AND start_time <= %s LIMIT 20",
+                                "SELECT title FROM events WHERE user_id = %s AND start_time >= %s AND start_time <= %s LIMIT 20",  # noqa: E501
                                 (user_id, now, in_7_days),
                             )
                             events = [r["title"] for r in cur.fetchall()]
@@ -942,7 +939,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
 
                     message = (
                         "Items across your tasks, events, and goals share a common thread:\n"
-                        + "\n".join(f"• {l}" for l in lines)
+                        + "\n".join(f"• {line}" for line in lines)
                         + "\nConsider linking them or reviewing them together."
                     )
 

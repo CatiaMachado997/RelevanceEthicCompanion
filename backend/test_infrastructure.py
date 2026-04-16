@@ -90,9 +90,6 @@ def test_models():
     try:
         from models.relevance import (
             CandidateItem,
-            ScoredItem,
-            RelevanceContext,
-            ContentSafetyCheck,
             ItemType,
         )
 
@@ -175,7 +172,7 @@ def test_esl_content_safety():
         from esl.engine import EthicalSafeguardLayer
 
         context_mgr = ContextManager()
-        esl = EthicalSafeguardLayer(context_mgr)
+        EthicalSafeguardLayer(context_mgr)
 
         print("✅ ESL engine initialized")
         print("  ℹ️  Content safety check is async - skipping actual test")

@@ -1,6 +1,5 @@
 """Tests for Composio connect/callback route endpoints."""
 
-import json
 import pytest
 from unittest.mock import MagicMock, patch
 from fastapi import FastAPI

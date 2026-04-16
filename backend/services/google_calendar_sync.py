@@ -351,10 +351,10 @@ if __name__ == "__main__":
         test_user_id = "test-user-123"
         auth_url = sync.get_authorization_url(test_user_id)
 
-        print(f"\n1. Authorization URL:")
+        print("\n1. Authorization URL:")
         print(f"   {auth_url}")
-        print(f"\n2. Open this URL in browser and authorize")
-        print(f"3. Copy the 'code' parameter from redirect URL")
+        print("\n2. Open this URL in browser and authorize")
+        print("3. Copy the 'code' parameter from redirect URL")
 
         # In real flow, user would be redirected and you'd get the code from callback
         # For testing, you'd need to manually paste the code here

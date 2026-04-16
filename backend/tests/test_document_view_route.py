@@ -12,7 +12,6 @@ Covers:
 - Filename sanitisation in Content-Disposition header
 """
 
-import io
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient

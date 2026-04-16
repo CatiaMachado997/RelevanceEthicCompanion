@@ -114,7 +114,7 @@ Upcoming events (next 24 h):
 User's stated values:
 {value_text}
 
-Write one specific, actionable insight or suggestion for today. Reference concrete goals or events where possible. Be warm, direct, and under 3 sentences. Do not start with "I" or "As your"."""
+Write one specific, actionable insight or suggestion for today. Reference concrete goals or events where possible. Be warm, direct, and under 3 sentences. Do not start with "I" or "As your"."""  # noqa: E501
 
         llm = ChatGroq(
             model="llama-3.3-70b-versatile",

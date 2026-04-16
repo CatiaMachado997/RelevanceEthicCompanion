@@ -15,10 +15,10 @@ Base models (Groq/Llama) don't do any of this.
 
 from typing import List, Optional, Dict, Any
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
 
-from models.relevance import CandidateItem, ScoredItem, RelevanceContext, ItemType
+from models.relevance import CandidateItem, ScoredItem, RelevanceContext
 from esl.engine import EthicalSafeguardLayer
 from utils.db import get_db
 

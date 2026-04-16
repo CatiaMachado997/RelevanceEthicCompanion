@@ -16,7 +16,6 @@ async def test_context_manager_v2():
     """Test the refactored context manager"""
     from services.context_manager import ContextManager
     from utils.weaviate_client import get_weaviate_client
-    from esl.models import UserValue, ValueType
     from models.context import Goal, Event, GoalStatus
 
     print("\n" + "=" * 70)
@@ -79,7 +78,7 @@ async def test_context_manager_v2():
     # Test 6: Get user context (for ESL)
     print("\n6. Testing get_user_context (for ESL)...")
     user_context = await context_mgr.get_user_context(test_user_id)
-    print(f"   ✅ Built user context")
+    print("   ✅ Built user context")
     print(f"      - User ID: {user_context.user_id}")
     print(f"      - Active goals: {len(user_context.active_goals)}")
     print(f"      - User values: {len(user_context.user_values)}")
@@ -88,7 +87,7 @@ async def test_context_manager_v2():
     # Test 7: Get current context (for V2 relevance scoring)
     print("\n7. Testing get_current_context (for V2)...")
     current_context = await context_mgr.get_current_context(test_user_id)
-    print(f"   ✅ Built current context (RelevanceContext)")
+    print("   ✅ Built current context (RelevanceContext)")
     print(f"      - Active goals: {len(current_context.active_goals)}")
     for g in current_context.active_goals:
         print(f"        • {g}")

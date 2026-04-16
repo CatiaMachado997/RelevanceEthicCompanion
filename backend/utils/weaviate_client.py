@@ -4,15 +4,13 @@ Manages connection and operations for M2 (semantic memory)
 """
 
 import weaviate
-from weaviate.classes.init import Auth
 from weaviate.classes.query import Filter
 from typing import List, Dict, Any, Optional
 import logging
-import json
 import time
 from datetime import datetime
 
-from weaviate_config import WEAVIATE_SCHEMAS, get_collection_schema
+from weaviate_config import WEAVIATE_SCHEMAS
 
 logger = logging.getLogger(__name__)
 

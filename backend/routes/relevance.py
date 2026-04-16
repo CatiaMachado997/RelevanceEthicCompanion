@@ -6,8 +6,8 @@ like event summaries for meetings starting soon.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from pydantic import BaseModel
+from typing import List, Dict, Any
 from datetime import datetime
 
 from services.context_manager import ContextManager

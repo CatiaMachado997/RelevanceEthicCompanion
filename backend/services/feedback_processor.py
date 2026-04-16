@@ -15,7 +15,6 @@ from utils.db import get_db_connection
 from models.feedback import (
     FeedbackType,
     ItemType,
-    FeedbackSubmission,
     FeedbackAnalytics,
 )
 

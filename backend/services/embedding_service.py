@@ -14,7 +14,6 @@ from google.genai import types
 from typing import List, Dict, Any, Optional
 import logging
 import hashlib
-import json
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)

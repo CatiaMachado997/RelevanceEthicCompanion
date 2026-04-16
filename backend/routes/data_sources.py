@@ -142,7 +142,7 @@ async def trigger_manual_sync(
         if not result["success"]:
             raise HTTPException(status_code=400, detail=result["message"])
         return result
-    except TokenExpiredError as e:
+    except TokenExpiredError:
         raise HTTPException(
             status_code=422,
             detail={

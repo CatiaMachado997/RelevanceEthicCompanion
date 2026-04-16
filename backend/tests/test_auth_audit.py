@@ -2,7 +2,6 @@
 
 import time
 from unittest.mock import MagicMock, patch
-import pytest
 
 
 def test_log_auth_event_inserts_row():

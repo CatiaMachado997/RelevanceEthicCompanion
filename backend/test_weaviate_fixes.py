@@ -46,7 +46,7 @@ async def test_weaviate_fixes():
     if memory_id:
         print(f"   ✅ Storage successful: {memory_id}")
     else:
-        print(f"   ❌ Storage failed")
+        print("   ❌ Storage failed")
         return False
 
     # Test 2: Query with hybrid search

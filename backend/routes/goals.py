@@ -4,12 +4,11 @@ Goals API Routes
 User goals inform ESL about priorities and help AI provide relevant assistance.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Body
+from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Optional
 from pydantic import BaseModel, Field
 from datetime import datetime, UTC
 
-from models.context import Goal
 from utils.db import get_db
 from utils.serialization import serialize_row, serialize_rows
 from services.context_manager import ContextManager
@@ -108,7 +107,7 @@ async def create_goal(
                     """
                     INSERT INTO goals (user_id, title, description, status, priority, target_date, metadata)
                     VALUES (%s, %s, %s, 'active', %s, %s, %s)
-                    RETURNING id, user_id, title, description, status, priority, target_date, created_at, completed_at, metadata
+                    RETURNING id, user_id, title, description, status, priority, target_date, created_at, completed_at, metadata  # noqa: E501
                     """,
                     (
                         str(user_id),
@@ -324,7 +323,7 @@ async def complete_goal(
         with get_db() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "UPDATE goals SET status = 'completed', completed_at = %s WHERE id = %s AND user_id = %s RETURNING *",
+                    "UPDATE goals SET status = 'completed', completed_at = %s WHERE id = %s AND user_id = %s RETURNING *",  # noqa: E501
                     (datetime.now(UTC).isoformat(), goal_id, user_id),
                 )
                 updated_goal = cur.fetchone()

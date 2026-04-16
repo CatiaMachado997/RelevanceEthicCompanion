@@ -1,0 +1,8 @@
+[flake8]
+max-line-length = 120
+exclude = venv, __pycache__, .git, .venv
+# E203: whitespace before ':' — conflicts with Black's slicing style
+# E402: module level import not at top — legit in main.py (env var setup
+#       must happen before Google/oauthlib imports) and scripts using
+#       sys.path manipulation
+extend-ignore = E203, E402

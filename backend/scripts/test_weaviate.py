@@ -27,7 +27,7 @@ def test_weaviate_connection():
 
         # List all collections
         collections = client.client.collections.list_all()
-        print(f"\n📚 Available Collections:")
+        print("\n📚 Available Collections:")
         for collection_name in collections:
             print(f"  - {collection_name}")
 

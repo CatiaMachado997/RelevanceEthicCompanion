@@ -45,7 +45,7 @@ async def test_full_v2_pipeline():
     from utils.weaviate_client import get_weaviate_client
     from esl.engine import EthicalSafeguardLayer
     from models.context import SemanticMemoryEntry, Goal, Event, GoalStatus
-    from models.relevance import CandidateItem, RelevanceContext, ItemType
+    from models.relevance import CandidateItem, ItemType
 
     print("\n" + "=" * 80)
     print("STEP 1: Initialize V2 Components")
@@ -60,10 +60,10 @@ async def test_full_v2_pipeline():
     relevance_engine = RelevanceScoringEngine(esl)
 
     print("✅ All V2 components initialized")
-    print(f"   - EmbeddingService: Ready")
-    print(f"   - ContextManager: PostgreSQL + Weaviate")
-    print(f"   - RelevanceScoringEngine: Loaded")
-    print(f"   - ESL: Loaded")
+    print("   - EmbeddingService: Ready")
+    print("   - ContextManager: PostgreSQL + Weaviate")
+    print("   - RelevanceScoringEngine: Loaded")
+    print("   - ESL: Loaded")
 
     test_user_id = "00000000-0000-0000-0000-000000000000"
 
@@ -160,7 +160,7 @@ async def test_full_v2_pipeline():
 
     # Get current context
     context = await context_manager.get_current_context(test_user_id)
-    print(f"\n✅ Built RelevanceContext:")
+    print("\n✅ Built RelevanceContext:")
     print(f"   - Active goals: {len(context.active_goals)}")
     for goal in context.active_goals[:3]:
         print(f"     • {goal}")
@@ -211,7 +211,7 @@ async def test_full_v2_pipeline():
         user_id=test_user_id, candidates=candidates, context=context
     )
 
-    print(f"\n✅ Relevance Scoring Results:")
+    print("\n✅ Relevance Scoring Results:")
     for i, item in enumerate(scored_items, 1):
         print(f"\n{i}. {item.item.title}")
         print(f"   Score: {item.relevance_score:.2f}/100")

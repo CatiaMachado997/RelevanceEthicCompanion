@@ -1,12 +1,10 @@
 """Tests for GCP Secret Manager integration in config.py."""
 
-from unittest.mock import MagicMock, patch
-import pytest
+from unittest.mock import MagicMock
 
 
 def test_load_secrets_from_gcp_sets_env_vars():
     """load_secrets_from_gcp reads each secret and sets it as an env var."""
-    import os
 
     mock_client = MagicMock()
     mock_response = MagicMock()

@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from services.composio_tools import (
     TOOL_ID_TO_COMPOSIO_TOOLKIT,

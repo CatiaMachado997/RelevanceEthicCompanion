@@ -1,4 +1,3 @@
-import pytest
 from services.connectors.google_calendar import GoogleCalendarConnector
 from services.connectors.gmail import GmailConnector
 from services import data_ingestion

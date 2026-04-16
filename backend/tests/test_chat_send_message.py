@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from routes.chat import router as chat_router
 from utils.supabase_auth import get_current_user_id
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch
 import pytest
 
 TEST_USER_ID = "00000000-0000-0000-0000-000000000000"

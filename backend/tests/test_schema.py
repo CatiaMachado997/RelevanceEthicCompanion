@@ -1,6 +1,5 @@
 """Tests that critical DB tables exist and have expected columns."""
 
-import pytest
 from utils.db import get_db_connection
 
 

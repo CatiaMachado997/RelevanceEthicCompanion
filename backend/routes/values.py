@@ -7,13 +7,12 @@ User values are SACRED - they define what ESL protects.
 Philosophy: User empowerment first. No hidden defaults, no dark patterns.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Body
+from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
 from services.context_manager import ContextManager
 from esl.models import (
-    UserValue,
     ValueType,
     ProposedAction,
     ActionType,

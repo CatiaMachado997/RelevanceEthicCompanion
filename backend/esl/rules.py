@@ -6,7 +6,7 @@ Each rule is testable and auditable
 """
 
 from typing import Optional, List, Dict
-from datetime import datetime, time
+from datetime import datetime
 from pydantic import BaseModel
 import re
 import hashlib
@@ -262,7 +262,7 @@ class EngagementDetector:
         if engagement_score > 0.7 and goal_relevance_score < 0.3:
             return RuleCheckResult(
                 passed=False,
-                reason=f"Action strongly optimized for engagement metrics (score: {engagement_score:.1f}) without assistance intent",
+                reason=f"Action strongly optimized for engagement metrics (score: {engagement_score:.1f}) without assistance intent",  # noqa: E501
             )
 
         # High urgency without any assistance intent is suspicious

@@ -3,13 +3,12 @@
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import MagicMock, AsyncMock
 from datetime import datetime, UTC
 
 from routes.transparency import (
     router as transparency_router,
     get_audit_logger,
-    get_orchestrator,
 )
 from utils.supabase_auth import get_current_read_user_id
 from esl.audit import ESLAuditLogger

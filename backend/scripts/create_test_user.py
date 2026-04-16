@@ -3,7 +3,6 @@ Create a test user in the database for API testing.
 """
 
 import asyncio
-import uuid
 from supabase import create_client
 import sys
 import os
@@ -41,10 +40,10 @@ async def create_test_user():
 
         result = supabase.table("users").insert(user_data).execute()
 
-        print(f"✅ Test user created successfully!")
+        print("✅ Test user created successfully!")
         print(f"   User ID: {test_user_id}")
         print(f"   Email: {test_email}")
-        print(f"\n💡 Use this user_id in your API tests:")
+        print("\n💡 Use this user_id in your API tests:")
         print(f'   curl -H "X-User-ID: {test_user_id}" ...')
 
         return test_user_id

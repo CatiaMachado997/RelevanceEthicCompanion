@@ -10,10 +10,8 @@ from fastapi.responses import StreamingResponse
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from datetime import datetime, UTC
-import json
 
 from services.context_manager import ContextManager
-from esl.models import ActionType
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 from utils.rate_limit import limiter
 from config import settings

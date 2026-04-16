@@ -12,7 +12,7 @@ Comprehensive tests for the core ESL components:
 
 import pytest
 from datetime import datetime, UTC
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from esl.models import (
     ProposedAction,
@@ -29,7 +29,6 @@ from esl.rules import (
     ManipulationDetector,
     EngagementDetector,
     TopicFilter,
-    RuleCheckResult,
 )
 from esl.engine import EthicalSafeguardLayer
 from esl.audit import ESLAuditLogger

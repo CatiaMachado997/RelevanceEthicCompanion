@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Type, Optional
+from typing import Dict, Any, Type, Optional
 
 from pydantic import BaseModel, Field
 
@@ -15,13 +15,11 @@ class Tool(ABC):
     @abstractmethod
     def name(self) -> str:
         """The name of the tool. Must be unique."""
-        pass
 
     @property
     @abstractmethod
     def description(self) -> str:
         """A brief description of what the tool does."""
-        pass
 
     @property
     @abstractmethod
@@ -30,7 +28,6 @@ class Tool(ABC):
         Pydantic model defining the input parameters for the tool's execute method.
         This will be converted into a JSON schema for the LLM.
         """
-        pass
 
     @abstractmethod
     async def execute(self, **kwargs: Any) -> Dict[str, Any]:
@@ -43,7 +40,6 @@ class Tool(ABC):
         Returns:
             A dictionary containing the result of the tool's execution.
         """
-        pass
 
 
 class ExampleToolParameters(BaseModel):

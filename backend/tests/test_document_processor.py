@@ -1,6 +1,6 @@
 # backend/tests/test_document_processor.py
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 from services.document_processor import DocumentProcessor, chunk_text
 
 # ── chunk_text ──────────────────────────────────────────────────────────────

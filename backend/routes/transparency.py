@@ -7,12 +7,12 @@ No hidden behavior, complete transparency.
 
 from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 # OrchestratorV2 imported lazily inside get_orchestrator() below
 from services.context_manager import ContextManager
 from esl.audit import ESLAuditLogger
-from utils.db import get_db, get_db_connection
+from utils.db import get_db_connection
 from utils.supabase_auth import get_current_read_user_id
 
 

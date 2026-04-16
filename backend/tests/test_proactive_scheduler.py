@@ -5,7 +5,7 @@ Tests use mocking so no live DB, Groq, or scheduler is required.
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timedelta
 
 # ─────────────────────────────────────────────
@@ -127,9 +127,6 @@ class TestDeadlineWarnings:
             ctx.__enter__ = MagicMock(return_value=conn)
             ctx.__exit__ = MagicMock(return_value=False)
             return ctx
-
-        insert_calls = []
-        original_create = None
 
         with patch("services.scheduler.get_db_connection", side_effect=db_side_effect):
             await sched._generate_deadline_warnings()
@@ -341,7 +338,7 @@ class TestProjectStatusSnapshot:
             return ctx
 
         mock_response = MagicMock()
-        mock_response.content = "Q3 Report is progressing well with 2 tasks done. One task is overdue — prioritise it Monday morning."
+        mock_response.content = "Q3 Report is progressing well with 2 tasks done. One task is overdue — prioritise it Monday morning."  # noqa: E501
 
         with patch(
             "services.scheduler.get_db_connection", side_effect=db_side_effect

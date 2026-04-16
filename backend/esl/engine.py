@@ -8,15 +8,15 @@ No action can bypass this evaluation.
 """
 
 import logging
-from typing import Optional
-from datetime import datetime
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from models.relevance import ContentSafetyCheck  # noqa: F401  (forward ref only)
 
 from .models import (
     ProposedAction,
     ESLDecision,
     ESLDecisionStatus,
-    UserContext,
-    UserValue,
 )
 from .rules import (
     TimeBasedRules,
@@ -297,7 +297,7 @@ class EthicalSafeguardLayer:
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
-                        "SELECT sensitivity_boost FROM user_esl_sensitivity WHERE user_id = %s AND content_category = %s",
+                        "SELECT sensitivity_boost FROM user_esl_sensitivity WHERE user_id = %s AND content_category = %s",  # noqa: E501
                         (user_id, content_category),
                     )
                     row = cur.fetchone()

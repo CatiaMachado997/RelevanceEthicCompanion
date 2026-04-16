@@ -6,7 +6,7 @@ Converts internal tools to LangChain-compatible format for agent use.
 
 import asyncio
 import json
-from typing import Optional, Type, Any, Dict
+from typing import Type, Any
 from langchain.tools import BaseTool
 from pydantic import BaseModel, Field
 import logging
@@ -88,7 +88,7 @@ class CalendarQueryInput(BaseModel):
 
     time_frame: str = Field(
         default="today",
-        description="Time frame for calendar events: 'today', 'tomorrow', 'this week', 'next week', or number of hours (e.g., '24')",
+        description="Time frame for calendar events: 'today', 'tomorrow', 'this week', 'next week', or number of hours (e.g., '24')",  # noqa: E501
     )
 
 

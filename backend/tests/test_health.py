@@ -1,8 +1,7 @@
 """Tests for the /health endpoint."""
 
-import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 
 def test_health_returns_ok_structure(test_client):

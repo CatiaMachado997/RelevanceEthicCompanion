@@ -13,8 +13,7 @@ Run this after completing SUPABASE_SETUP.md steps.
 """
 
 import sys
-import asyncio
-from typing import List, Dict
+from typing import List
 from datetime import datetime
 import uuid
 
@@ -52,24 +51,15 @@ class SupabaseVerifier:
         print("\n🔍 Checking pgvector extension...")
         try:
             # Query to check if vector extension exists
-            result = self.client.rpc(
+            self.client.rpc(
                 "pg_extension_exists", {"extension_name": "vector"}
             ).execute()
-
-            # Alternative: Try to use vector type
-            # This will fail if extension is not enabled
-            query = """
-                SELECT EXISTS (
-                    SELECT 1 FROM pg_extension WHERE extname = 'vector'
-                ) as extension_exists;
-            """
-
             print("   ✅ pgvector extension is enabled")
             return True
         except Exception as e:
             self.errors.append(f"pgvector extension not found: {str(e)}")
-            print(f"   ❌ pgvector extension not found")
-            print(f"      Enable it in Dashboard → Database → Extensions")
+            print("   ❌ pgvector extension not found")
+            print("      Enable it in Dashboard → Database → Extensions")
             return False
 
     def check_tables(self) -> bool:
@@ -92,7 +82,7 @@ class SupabaseVerifier:
                 # Try to select from table (limit 0 to avoid returning data)
                 self.client.table(table).select("*").limit(0).execute()
                 print(f"   ✅ Table '{table}' exists")
-            except Exception as e:
+            except Exception:
                 self.errors.append(f"Table '{table}' not found")
                 print(f"   ❌ Table '{table}' not found")
                 all_exist = False
@@ -115,10 +105,10 @@ class SupabaseVerifier:
         for table, expected_columns in schema_checks.items():
             try:
                 # Get first row (or empty) to check columns
-                result = self.client.table(table).select("*").limit(1).execute()
+                self.client.table(table).select("*").limit(1).execute()
 
                 # Check if we can query expected columns
-                column_check = (
+                (
                     self.client.table(table)
                     .select(",".join(expected_columns))
                     .limit(0)
@@ -148,7 +138,7 @@ class SupabaseVerifier:
                 "created_at": datetime.now().isoformat(),
             }
 
-            create_result = self.client.table("users").insert(user_data).execute()
+            self.client.table("users").insert(user_data).execute()
             print("   ✅ CREATE operation successful")
 
             # Read
@@ -159,7 +149,7 @@ class SupabaseVerifier:
             print("   ✅ READ operation successful")
 
             # Update
-            update_result = (
+            (
                 self.client.table("users")
                 .update({"full_name": "Updated Test User"})
                 .eq("id", test_user_id)
@@ -168,9 +158,7 @@ class SupabaseVerifier:
             print("   ✅ UPDATE operation successful")
 
             # Delete (cleanup)
-            delete_result = (
-                self.client.table("users").delete().eq("id", test_user_id).execute()
-            )
+            (self.client.table("users").delete().eq("id", test_user_id).execute())
             print("   ✅ DELETE operation successful")
 
             return True
@@ -182,7 +170,7 @@ class SupabaseVerifier:
             # Cleanup attempt
             try:
                 self.client.table("users").delete().eq("id", test_user_id).execute()
-            except:
+            except Exception:
                 pass
 
             return False
@@ -206,9 +194,7 @@ class SupabaseVerifier:
                 "metadata": {"test": True},
             }
 
-            insert_result = (
-                self.client.table("semantic_memory").insert(memory_data).execute()
-            )
+            (self.client.table("semantic_memory").insert(memory_data).execute())
             print("   ✅ Vector insert successful")
 
             # Query (basic select, actual similarity search requires SQL function)

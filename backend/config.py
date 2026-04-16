@@ -72,7 +72,7 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def DATABASE_URL(self) -> str:
-        return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"  # noqa: E501
 
     # Weaviate (M2 - Semantic Memory)
     WEAVIATE_URL: str = "http://localhost:8080"
