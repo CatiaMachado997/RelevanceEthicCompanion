@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { Shield, ArrowRight, Mail, CheckCircle } from 'lucide-react'
@@ -23,6 +23,12 @@ export default function LoginPage() {
   const [signedOut, setSignedOut] = useState(false)
   const { signIn } = useAuth()
 
+  const isMounted = useRef(true)
+  useEffect(() => {
+    isMounted.current = true
+    return () => { isMounted.current = false }
+  }, [])
+
   const handleOAuthSignIn = async (provider: 'google' | 'azure' | 'github') => {
     setOauthLoading(provider)
     setError(null)
@@ -32,10 +38,12 @@ export default function LoginPage() {
       options: { redirectTo },
     })
     if (error) {
-      setError(friendlyAuthError(error.message))
-      setOauthLoading(null)
+      if (isMounted.current) setError(friendlyAuthError(error.message))
+      if (isMounted.current) setOauthLoading(null)
+    } else {
+      // Reset after 10 s in case the redirect is blocked (pop-up blocker, etc.)
+      setTimeout(() => setOauthLoading(null), 10_000)
     }
-    // On success: browser redirects to provider — no further action needed here
   }
 
   useEffect(() => {
@@ -219,7 +227,7 @@ export default function LoginPage() {
                   disabled={!!oauthLoading}
                   className="w-full h-11 rounded-xl flex items-center gap-3 px-4 text-sm font-medium border transition-all disabled:opacity-50"
                   style={{ background: '#fff', borderColor: '#e0e0e0', color: '#111' }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#4a7c59' }}
+                  onMouseEnter={e => { if (!oauthLoading) e.currentTarget.style.borderColor = '#4a7c59' }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = '#e0e0e0' }}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
@@ -238,7 +246,7 @@ export default function LoginPage() {
                   disabled={!!oauthLoading}
                   className="w-full h-11 rounded-xl flex items-center gap-3 px-4 text-sm font-medium border transition-all disabled:opacity-50"
                   style={{ background: '#fff', borderColor: '#e0e0e0', color: '#111' }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#4a7c59' }}
+                  onMouseEnter={e => { if (!oauthLoading) e.currentTarget.style.borderColor = '#4a7c59' }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = '#e0e0e0' }}
                 >
                   <svg width="18" height="18" viewBox="0 0 21 21" aria-hidden="true">
@@ -257,7 +265,7 @@ export default function LoginPage() {
                   disabled={!!oauthLoading}
                   className="w-full h-11 rounded-xl flex items-center gap-3 px-4 text-sm font-medium border transition-all disabled:opacity-50"
                   style={{ background: '#fff', borderColor: '#e0e0e0', color: '#111' }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#4a7c59' }}
+                  onMouseEnter={e => { if (!oauthLoading) e.currentTarget.style.borderColor = '#4a7c59' }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = '#e0e0e0' }}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
