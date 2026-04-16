@@ -11,25 +11,29 @@ from datetime import datetime
 
 class User(BaseModel):
     """User model"""
+
     id: str
     email: EmailStr
     created_at: datetime
     updated_at: Optional[datetime] = None
     full_name: Optional[str] = None
     avatar_url: Optional[str] = None
-    
-    model_config = ConfigDict(json_schema_extra={
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": "user_123",
                 "email": "user@example.com",
                 "created_at": "2025-11-04T10:00:00Z",
-                "full_name": "Jane Doe"
+                "full_name": "Jane Doe",
             }
-        })
+        }
+    )
 
 
 class UserCreate(BaseModel):
     """Model for user creation"""
+
     email: EmailStr
     password: str = Field(..., min_length=8)
     full_name: Optional[str] = None
@@ -37,12 +41,14 @@ class UserCreate(BaseModel):
 
 class UserUpdate(BaseModel):
     """Model for user updates"""
+
     full_name: Optional[str] = None
     avatar_url: Optional[str] = None
 
 
 class UserProfile(BaseModel):
     """Extended user profile"""
+
     id: str
     email: EmailStr
     full_name: Optional[str] = None

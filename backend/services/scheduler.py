@@ -5,7 +5,6 @@ Manages periodic tasks like data source syncing.
 """
 
 import logging
-from typing import Optional
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
@@ -50,36 +49,36 @@ class BackgroundScheduler:
         self.scheduler.add_job(
             func=self._sync_all_calendars,
             trigger=IntervalTrigger(minutes=15),
-            id='sync_google_calendar',
-            name='Sync Google Calendar for all users',
+            id="sync_google_calendar",
+            name="Sync Google Calendar for all users",
             replace_existing=True,
-            max_instances=1  # Prevent overlap
+            max_instances=1,  # Prevent overlap
         )
 
         # Task 2: Clean up expired tokens daily at 3 AM
         self.scheduler.add_job(
             func=self._cleanup_expired_tokens,
             trigger=CronTrigger(hour=3, minute=0),
-            id='cleanup_tokens',
-            name='Clean up expired OAuth tokens',
-            replace_existing=True
+            id="cleanup_tokens",
+            name="Clean up expired OAuth tokens",
+            replace_existing=True,
         )
 
         # Task 3: Health check every hour
         self.scheduler.add_job(
             func=self._health_check,
             trigger=IntervalTrigger(hours=1),
-            id='health_check',
-            name='Scheduler health check',
-            replace_existing=True
+            id="health_check",
+            name="Scheduler health check",
+            replace_existing=True,
         )
 
         # Weekly digest — every Monday at 8 AM
         self.scheduler.add_job(
             func=self._generate_weekly_digest,
-            trigger=CronTrigger(day_of_week='mon', hour=8, minute=0),
-            id='weekly_digest',
-            name='Generate weekly AI digest for all users',
+            trigger=CronTrigger(day_of_week="mon", hour=8, minute=0),
+            id="weekly_digest",
+            name="Generate weekly AI digest for all users",
             replace_existing=True,
             max_instances=1,
         )
@@ -88,8 +87,8 @@ class BackgroundScheduler:
         self.scheduler.add_job(
             func=self._generate_pre_meeting_briefs,
             trigger=IntervalTrigger(minutes=15),
-            id='pre_meeting_briefs',
-            name='Generate pre-meeting briefs for upcoming events',
+            id="pre_meeting_briefs",
+            name="Generate pre-meeting briefs for upcoming events",
             replace_existing=True,
             max_instances=1,
         )
@@ -98,8 +97,8 @@ class BackgroundScheduler:
         self.scheduler.add_job(
             func=self._generate_daily_focus_plan,
             trigger=CronTrigger(hour=8, minute=0),
-            id='daily_focus_plan',
-            name='Generate daily focus plan for all users',
+            id="daily_focus_plan",
+            name="Generate daily focus plan for all users",
             replace_existing=True,
             max_instances=1,
         )
@@ -108,8 +107,8 @@ class BackgroundScheduler:
         self.scheduler.add_job(
             func=self._generate_deadline_warnings,
             trigger=CronTrigger(hour=8, minute=5),
-            id='deadline_warnings',
-            name='Warn users about tasks due within 24 hours',
+            id="deadline_warnings",
+            name="Warn users about tasks due within 24 hours",
             replace_existing=True,
             max_instances=1,
         )
@@ -117,9 +116,9 @@ class BackgroundScheduler:
         # Project status snapshot — every Friday at 5 PM
         self.scheduler.add_job(
             func=self._generate_project_status_snapshot,
-            trigger=CronTrigger(day_of_week='fri', hour=17, minute=0),
-            id='project_status_snapshot',
-            name='Generate weekly project status snapshot for all users',
+            trigger=CronTrigger(day_of_week="fri", hour=17, minute=0),
+            id="project_status_snapshot",
+            name="Generate weekly project status snapshot for all users",
             replace_existing=True,
             max_instances=1,
         )
@@ -127,9 +126,9 @@ class BackgroundScheduler:
         # Related-items clustering — every Sunday at 6 PM
         self.scheduler.add_job(
             func=self._generate_related_items_clusters,
-            trigger=CronTrigger(day_of_week='sun', hour=18, minute=0),
-            id='related_items_clusters',
-            name='Cluster related tasks/events/goals and surface connections',
+            trigger=CronTrigger(day_of_week="sun", hour=18, minute=0),
+            id="related_items_clusters",
+            name="Cluster related tasks/events/goals and surface connections",
             replace_existing=True,
             max_instances=1,
         )
@@ -177,16 +176,19 @@ class BackgroundScheduler:
             for user_id in users_to_sync:
                 try:
                     result = await self.data_ingestion.sync_data_source(
-                        user_id=user_id,
-                        source_type='google_calendar'
+                        user_id=user_id, source_type="google_calendar"
                     )
 
-                    if result['success']:
+                    if result["success"]:
                         synced_count += 1
-                        logger.debug(f"✅ Synced calendar for user {user_id}: {result['items_synced']} events")
+                        logger.debug(
+                            f"✅ Synced calendar for user {user_id}: {result['items_synced']} events"
+                        )
                     else:
                         failed_count += 1
-                        logger.warning(f"⚠️  Sync failed for user {user_id}: {result['message']}")
+                        logger.warning(
+                            f"⚠️  Sync failed for user {user_id}: {result['message']}"
+                        )
 
                 except Exception as e:
                     failed_count += 1
@@ -198,7 +200,9 @@ class BackgroundScheduler:
             )
 
         except Exception as e:
-            logger.error(f"❌ Critical error in scheduled calendar sync: {e}", exc_info=True)
+            logger.error(
+                f"❌ Critical error in scheduled calendar sync: {e}", exc_info=True
+            )
 
     async def _get_users_with_calendar(self) -> list:
         """Get list of user IDs with Google Calendar connected"""
@@ -293,8 +297,14 @@ class BackgroundScheduler:
                     if not goals and not values:
                         continue  # Skip users with no data
 
-                    goal_text = "\n".join(f"- {g.get('title', g) if isinstance(g, dict) else g.title}" for g in goals[:5])
-                    value_text = "\n".join(f"- {v.get('value', v) if isinstance(v, dict) else v.value}" for v in values[:3])
+                    goal_text = "\n".join(
+                        f"- {g.get('title', g) if isinstance(g, dict) else g.title}"
+                        for g in goals[:5]
+                    )
+                    value_text = "\n".join(
+                        f"- {v.get('value', v) if isinstance(v, dict) else v.value}"
+                        for v in values[:3]
+                    )
 
                     prompt = f"""Write a short weekly check-in message (2–3 sentences) for a user.
 Active goals:
@@ -325,7 +335,9 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                             )
 
                 except Exception as e:
-                    logger.warning(f"[Scheduler] Weekly digest failed for user {user_id}: {e}")
+                    logger.warning(
+                        f"[Scheduler] Weekly digest failed for user {user_id}: {e}"
+                    )
 
         except Exception as e:
             logger.error(f"[Scheduler] Weekly digest job failed: {e}")
@@ -344,11 +356,12 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
             from config import settings
 
             now = datetime.utcnow()
-            window_start = now
-            window_end = datetime(now.year, now.month, now.day, now.hour, now.minute) \
-                         .__class__(now.year, now.month, now.day, now.hour, now.minute)
+            window_end = datetime(
+                now.year, now.month, now.day, now.hour, now.minute
+            ).__class__(now.year, now.month, now.day, now.hour, now.minute)
             # Events starting between now and 60 minutes from now
             import datetime as dt_module
+
             window_end = now + dt_module.timedelta(minutes=60)
 
             with get_db_connection() as conn:
@@ -409,11 +422,13 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                         for g in goals[:3]
                     )
 
-                    minutes_until = int((event_start.replace(tzinfo=None) - now).total_seconds() / 60)
+                    minutes_until = int(
+                        (event_start.replace(tzinfo=None) - now).total_seconds() / 60
+                    )
                     location_note = f" at {event_location}" if event_location else ""
 
                     prompt = (
-                        f"A user has a meeting in {minutes_until} minutes: \"{event_title}\"{location_note}.\n"
+                        f'A user has a meeting in {minutes_until} minutes: "{event_title}"{location_note}.\n'
                         f"Active goals:\n{goal_text or 'None'}\n\n"
                         "Write a brief 2–3 sentence pre-meeting note. "
                         "Mention what to focus on and one useful question to consider. "
@@ -441,9 +456,13 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                         briefs_created += 1
 
                 except Exception as e:
-                    logger.warning(f"[Scheduler] Pre-meeting brief failed for user {user_id}: {e}")
+                    logger.warning(
+                        f"[Scheduler] Pre-meeting brief failed for user {user_id}: {e}"
+                    )
 
-            logger.info(f"[Scheduler] Pre-meeting briefs complete: {briefs_created} created.")
+            logger.info(
+                f"[Scheduler] Pre-meeting briefs complete: {briefs_created} created."
+            )
 
         except Exception as e:
             logger.error(f"[Scheduler] Pre-meeting brief job failed: {e}")
@@ -461,7 +480,6 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
             from langchain_core.messages import HumanMessage
             from langchain_groq import ChatGroq
             from config import settings
-            import datetime as dt_module
 
             today_str = datetime.utcnow().strftime("%Y-%m-%d")
 
@@ -470,7 +488,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                     cur.execute("SELECT id FROM users LIMIT 100")
                     users = cur.fetchall()
 
-            ctx = ContextManager()
+            ContextManager()
             snapshot_svc = ContextSnapshotService()
             llm = ChatGroq(
                 model="llama-3.1-8b-instant",
@@ -506,18 +524,23 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                     if not events and not tasks and not goals:
                         continue  # No data for this user
 
-                    events_text = "\n".join(
-                        f"- {e['title']} at {e['start_time'][:16] if e.get('start_time') else 'TBD'}"
-                        for e in events[:4]
-                    ) or "None"
-                    tasks_text = "\n".join(
-                        f"- {t['title']} (due {t['due_date'][:10] if t.get('due_date') else 'soon'}, priority {t.get('priority', 5)})"
-                        for t in tasks[:5]
-                    ) or "None"
-                    goals_text = "\n".join(
-                        f"- {g['title']}"
-                        for g in goals[:3]
-                    ) or "None"
+                    events_text = (
+                        "\n".join(
+                            f"- {e['title']} at {e['start_time'][:16] if e.get('start_time') else 'TBD'}"
+                            for e in events[:4]
+                        )
+                        or "None"
+                    )
+                    tasks_text = (
+                        "\n".join(
+                            f"- {t['title']} (due {t['due_date'][:10] if t.get('due_date') else 'soon'}, priority {t.get('priority', 5)})"  # noqa: E501
+                            for t in tasks[:5]
+                        )
+                        or "None"
+                    )
+                    goals_text = (
+                        "\n".join(f"- {g['title']}" for g in goals[:3]) or "None"
+                    )
                     pressure = snapshot.get("calendar_pressure", "light")
 
                     prompt = (
@@ -541,11 +564,16 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                                 type="info",
                                 title="Your focus for today",
                                 message=plan_text[:500],
-                                metadata={"subtype": "daily_focus", "source": "scheduler"},
+                                metadata={
+                                    "subtype": "daily_focus",
+                                    "source": "scheduler",
+                                },
                             )
 
                 except Exception as e:
-                    logger.warning(f"[Scheduler] Daily focus failed for user {user_id}: {e}")
+                    logger.warning(
+                        f"[Scheduler] Daily focus failed for user {user_id}: {e}"
+                    )
 
             logger.info("[Scheduler] Daily focus plans complete.")
 
@@ -631,7 +659,9 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                     )
                 warnings_created += 1
 
-            logger.info(f"[Scheduler] Deadline warnings complete: {warnings_created} created.")
+            logger.info(
+                f"[Scheduler] Deadline warnings complete: {warnings_created} created."
+            )
 
         except Exception as e:
             logger.error(f"[Scheduler] Deadline warnings job failed: {e}")
@@ -680,6 +710,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
 
             # Group by user
             from collections import defaultdict
+
             by_user: dict = defaultdict(list)
             for row in projects:
                 by_user[str(row["user_id"])].append(row)
@@ -712,7 +743,11 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                     project_lines = "\n".join(
                         f"- {p['title']}: {p['open_tasks']} open task(s), "
                         f"{p['done_tasks']} done"
-                        + (f", {p['overdue_tasks']} overdue" if p["overdue_tasks"] else "")
+                        + (
+                            f", {p['overdue_tasks']} overdue"
+                            if p["overdue_tasks"]
+                            else ""
+                        )
                         for p in user_projects[:5]
                     )
 
@@ -744,9 +779,13 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                         snapshots_created += 1
 
                 except Exception as e:
-                    logger.warning(f"[Scheduler] Project snapshot failed for user {user_id}: {e}")
+                    logger.warning(
+                        f"[Scheduler] Project snapshot failed for user {user_id}: {e}"
+                    )
 
-            logger.info(f"[Scheduler] Project status snapshots complete: {snapshots_created} created.")
+            logger.info(
+                f"[Scheduler] Project status snapshots complete: {snapshots_created} created."
+            )
 
         except Exception as e:
             logger.error(f"[Scheduler] Project status snapshot job failed: {e}")
@@ -759,18 +798,47 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
         """
         import re
         from collections import defaultdict
+
         logger.info("[Scheduler] Running related-items clustering…")
 
         # Common English stop-words we exclude from keyword matching
         STOP_WORDS = {
-            'the', 'and', 'for', 'with', 'this', 'that', 'from', 'have',
-            'will', 'been', 'are', 'our', 'your', 'their', 'about', 'some',
-            'into', 'more', 'when', 'than', 'then', 'they', 'what', 'also',
-            'just', 'been', 'like', 'each', 'make', 'over', 'such', 'after',
+            "the",
+            "and",
+            "for",
+            "with",
+            "this",
+            "that",
+            "from",
+            "have",
+            "will",
+            "been",
+            "are",
+            "our",
+            "your",
+            "their",
+            "about",
+            "some",
+            "into",
+            "more",
+            "when",
+            "than",
+            "then",
+            "they",
+            "what",
+            "also",
+            "just",
+            "been",
+            "like",
+            "each",
+            "make",
+            "over",
+            "such",
+            "after",
         }
 
         def keywords(text: str) -> set:
-            words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
+            words = re.findall(r"\b[a-zA-Z]{4,}\b", text.lower())
             return {w for w in words if w not in STOP_WORDS}
 
         try:
@@ -810,13 +878,13 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                     with get_db_connection() as conn:
                         with conn.cursor() as cur:
                             cur.execute(
-                                "SELECT title FROM tasks WHERE user_id = %s AND status NOT IN ('done','cancelled') LIMIT 30",
+                                "SELECT title FROM tasks WHERE user_id = %s AND status NOT IN ('done','cancelled') LIMIT 30",  # noqa: E501
                                 (user_id,),
                             )
                             tasks = [r["title"] for r in cur.fetchall()]
 
                             cur.execute(
-                                "SELECT title FROM events WHERE user_id = %s AND start_time >= %s AND start_time <= %s LIMIT 20",
+                                "SELECT title FROM events WHERE user_id = %s AND start_time >= %s AND start_time <= %s LIMIT 20",  # noqa: E501
                                 (user_id, now, in_7_days),
                             )
                             events = [r["title"] for r in cur.fetchall()]
@@ -844,7 +912,8 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
 
                     # Keep clusters with 2+ distinct item types
                     clusters = {
-                        kw: items for kw, items in kw_index.items()
+                        kw: items
+                        for kw, items in kw_index.items()
                         if len({i[0] for i in items}) >= 2
                     }
 
@@ -870,7 +939,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
 
                     message = (
                         "Items across your tasks, events, and goals share a common thread:\n"
-                        + "\n".join(f"• {l}" for l in lines)
+                        + "\n".join(f"• {line}" for line in lines)
                         + "\nConsider linking them or reviewing them together."
                     )
 
@@ -890,9 +959,13 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                     notifications_created += 1
 
                 except Exception as e:
-                    logger.warning(f"[Scheduler] Related-items clustering failed for user {user_id}: {e}")
+                    logger.warning(
+                        f"[Scheduler] Related-items clustering failed for user {user_id}: {e}"
+                    )
 
-            logger.info(f"[Scheduler] Related-items clustering complete: {notifications_created} notifications.")
+            logger.info(
+                f"[Scheduler] Related-items clustering complete: {notifications_created} notifications."
+            )
 
         except Exception as e:
             logger.error(f"[Scheduler] Related-items clustering job failed: {e}")
@@ -939,11 +1012,13 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                 {
                     "id": job.id,
                     "name": job.name,
-                    "next_run": job.next_run_time.isoformat() if job.next_run_time else None,
-                    "trigger": str(job.trigger)
+                    "next_run": (
+                        job.next_run_time.isoformat() if job.next_run_time else None
+                    ),
+                    "trigger": str(job.trigger),
                 }
                 for job in jobs
-            ]
+            ],
         }
 
 
@@ -963,11 +1038,10 @@ if __name__ == "__main__":
 
         # Initialize dependencies
         weaviate_client = get_weaviate_client()
-        embedding_service = EmbeddingService(os.getenv('GEMINI_API_KEY'))
+        embedding_service = EmbeddingService(os.getenv("GEMINI_API_KEY"))
 
         context_manager = ContextManager(
-            weaviate_client=weaviate_client,
-            embedding_service=embedding_service
+            weaviate_client=weaviate_client, embedding_service=embedding_service
         )
 
         data_ingestion = DataIngestionService(context_manager)
@@ -985,7 +1059,7 @@ if __name__ == "__main__":
         print(f"\n✅ Scheduler running: {status['running']}")
         print(f"   Registered jobs: {len(status['jobs'])}")
 
-        for job in status['jobs']:
+        for job in status["jobs"]:
             print(f"\n   - {job['name']}")
             print(f"     ID: {job['id']}")
             print(f"     Next run: {job['next_run']}")

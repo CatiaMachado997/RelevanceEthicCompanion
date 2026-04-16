@@ -51,6 +51,7 @@ def make_mock_esl():
 
 def make_app():
     from routes.settings import router as settings_router, get_esl
+
     app = FastAPI()
     app.include_router(settings_router)
     app.dependency_overrides[get_current_user_id] = lambda: TEST_USER_ID
@@ -126,6 +127,7 @@ def test_update_settings_vetoed_by_esl():
     )
 
     from routes.settings import get_esl
+
     app = make_app()
     app.dependency_overrides[get_esl] = lambda: mock_esl
 

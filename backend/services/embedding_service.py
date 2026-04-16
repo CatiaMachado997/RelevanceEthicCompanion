@@ -14,7 +14,6 @@ from google.genai import types
 from typing import List, Dict, Any, Optional
 import logging
 import hashlib
-import json
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
@@ -103,7 +102,9 @@ class EmbeddingService:
             # Store in cache
             self._store_in_cache(text, embedding)
 
-            logger.debug(f"✅ Generated embedding for text (len={len(text)}, dim={len(embedding)})")
+            logger.debug(
+                f"✅ Generated embedding for text (len={len(text)}, dim={len(embedding)})"
+            )
             return embedding
 
         except Exception as e:
@@ -111,9 +112,7 @@ class EmbeddingService:
             raise
 
     async def generate_embeddings_batch(
-        self,
-        texts: List[str],
-        batch_size: int = 100
+        self, texts: List[str], batch_size: int = 100
     ) -> List[List[float]]:
         """
         Generate embeddings for multiple texts efficiently
@@ -132,7 +131,7 @@ class EmbeddingService:
 
         # Split into batches (YOUR LOGIC)
         for i in range(0, len(texts), batch_size):
-            batch = texts[i:i + batch_size]
+            batch = texts[i : i + batch_size]
 
             try:
                 # Check cache first
@@ -160,7 +159,9 @@ class EmbeddingService:
                     new_embeddings = [emb.values for emb in result.embeddings]
 
                     # Store in cache and add to results
-                    for text, embedding, idx in zip(uncached_texts, new_embeddings, uncached_indices):
+                    for text, embedding, idx in zip(
+                        uncached_texts, new_embeddings, uncached_indices
+                    ):
                         self._store_in_cache(text, embedding)
                         batch_embeddings.append((idx, embedding))
 
@@ -168,7 +169,9 @@ class EmbeddingService:
                 batch_embeddings.sort(key=lambda x: x[0])
                 embeddings.extend([emb for _, emb in batch_embeddings])
 
-                logger.debug(f"✅ Generated batch {i // batch_size + 1}: {len(batch)} texts")
+                logger.debug(
+                    f"✅ Generated batch {i // batch_size + 1}: {len(batch)} texts"
+                )
 
             except Exception as e:
                 logger.error(f"❌ Failed to generate batch embeddings: {e}")
@@ -197,7 +200,9 @@ class EmbeddingService:
             )
 
             embedding = result.embeddings[0].values
-            logger.debug(f"✅ Generated query embedding (len={len(query)}, dim={len(embedding)})")
+            logger.debug(
+                f"✅ Generated query embedding (len={len(query)}, dim={len(embedding)})"
+            )
             return embedding
 
         except Exception as e:
@@ -213,5 +218,5 @@ class EmbeddingService:
         """Get cache statistics"""
         return {
             "size": len(self._cache),
-            "ttl_hours": self._cache_ttl.total_seconds() / 3600
+            "ttl_hours": self._cache_ttl.total_seconds() / 3600,
         }

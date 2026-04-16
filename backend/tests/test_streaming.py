@@ -1,4 +1,5 @@
 """Tests for true LangGraph streaming via astream_events()."""
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -33,8 +34,9 @@ async def test_stream_langgraph_yields_tokens():
     mock_graph = MagicMock()
     mock_graph.astream_events = fake_astream_events
 
-    with patch("orchestrator.graph.get_graph", return_value=mock_graph), \
-         patch("orchestrator.graph._post_stream_store", new_callable=AsyncMock):
+    with patch("orchestrator.graph.get_graph", return_value=mock_graph), patch(
+        "orchestrator.graph._post_stream_store", new_callable=AsyncMock
+    ):
         received = []
         async for event in stream_langgraph(
             user_id="test-user",
@@ -71,7 +73,9 @@ async def test_stream_langgraph_no_double_done():
     from orchestrator.graph import stream_langgraph
 
     done_count = 0
-    async for event in stream_langgraph(user_id="test-user", message="Count done events"):
+    async for event in stream_langgraph(
+        user_id="test-user", message="Count done events"
+    ):
         if event.get("event") == "done":
             done_count += 1
 
@@ -100,7 +104,9 @@ def test_response_formatter_node_no_fake_chunks():
 
     token_events = [e for e in events if e.get("event") == "token"]
     # No fake token chunks — actual tokens come via astream_events
-    assert len(token_events) == 0, f"response_formatter should not produce token events: {token_events}"
+    assert (
+        len(token_events) == 0
+    ), f"response_formatter should not produce token events: {token_events}"
 
     done_events = [e for e in events if e.get("event") == "done"]
     assert len(done_events) == 1

@@ -1,4 +1,5 @@
 """LangGraph orchestrator — full wired graph."""
+
 from typing import AsyncGenerator, Optional
 from langgraph.graph import StateGraph, END
 from orchestrator.state import AgentState
@@ -45,14 +46,23 @@ def build_graph():
 
     g.set_entry_point("context_builder")
     g.add_edge("context_builder", "intent_classifier")
-    g.add_conditional_edges("intent_classifier", _route_after_intent,
-                            {"deep_research": "deep_research", "tool_planner": "tool_planner"})
-    g.add_conditional_edges("tool_planner", _route_after_tools,
-                            {"tool_execution": "tool_execution", "esl_gateway": "esl_gateway"})
+    g.add_conditional_edges(
+        "intent_classifier",
+        _route_after_intent,
+        {"deep_research": "deep_research", "tool_planner": "tool_planner"},
+    )
+    g.add_conditional_edges(
+        "tool_planner",
+        _route_after_tools,
+        {"tool_execution": "tool_execution", "esl_gateway": "esl_gateway"},
+    )
     g.add_edge("tool_execution", "esl_gateway")
     g.add_edge("deep_research", "esl_gateway")
-    g.add_conditional_edges("esl_gateway", _route_after_esl,
-                            {"response_formatter": "response_formatter", "explain_veto": "explain_veto"})
+    g.add_conditional_edges(
+        "esl_gateway",
+        _route_after_esl,
+        {"response_formatter": "response_formatter", "explain_veto": "explain_veto"},
+    )
     g.add_edge("response_formatter", END)
     g.add_edge("explain_veto", END)
     return g.compile()
@@ -87,15 +97,27 @@ async def stream_langgraph(
       - Veto explanation tokens come from explain_veto_node output.
     """
     import logging
+
     logger = logging.getLogger(__name__)
 
     initial_state: AgentState = {
-        "user_id": user_id, "message": message, "conversation_id": conversation_id,
-        "model": model, "user_context": {}, "conversation_history": [],
+        "user_id": user_id,
+        "message": message,
+        "conversation_id": conversation_id,
+        "model": model,
+        "user_context": {},
+        "conversation_history": [],
         "active_sources": active_sources or [],
-        "intent": "", "tool_calls": [], "tool_results": [],
-        "esl_decision": None, "proposed_content": "", "response_text": "",
-        "response_events": [], "citations": [], "token_count": 0, "token_warning": None,
+        "intent": "",
+        "tool_calls": [],
+        "tool_results": [],
+        "esl_decision": None,
+        "proposed_content": "",
+        "response_text": "",
+        "response_events": [],
+        "citations": [],
+        "token_count": 0,
+        "token_warning": None,
     }
     graph = get_graph()
 
@@ -132,7 +154,11 @@ async def stream_langgraph(
                     yield {"event": "token", "token": content}
 
             # ── Tool use/result events + citations (emitted BEFORE tokens if tools ran) ──
-            elif kind == "on_chain_end" and node == "tool_execution" and not tool_events_yielded:
+            elif (
+                kind == "on_chain_end"
+                and node == "tool_execution"
+                and not tool_events_yielded
+            ):
                 tool_events_yielded = True
                 raw_output = event.get("data", {}).get("output")
                 output = raw_output if isinstance(raw_output, dict) else {}
@@ -186,7 +212,11 @@ async def stream_langgraph(
 
                 if not done_yielded:
                     done_yielded = True
-                    yield {"event": "done", "esl_decision": esl_data, "citations": citations}
+                    yield {
+                        "event": "done",
+                        "esl_decision": esl_data,
+                        "citations": citations,
+                    }
 
     except Exception as e:
         logger.error(f"stream_langgraph error: {e}", exc_info=True)
@@ -215,21 +245,30 @@ async def _post_stream_store(
 ) -> None:
     """Persist conversation turns to M1 + M2. Non-blocking — errors are logged."""
     import logging
+
     logger = logging.getLogger(__name__)
     try:
         from orchestrator.nodes.context import get_context_manager
+
         cm = get_context_manager()
         # Adapt to actual ContextManager API (check what store methods exist)
-        if hasattr(cm, 'store_conversation_turn'):
-            await cm.store_conversation_turn(user_id, "user", user_msg, conversation_id=conversation_id)
-            await cm.store_conversation_turn(user_id, "assistant", assistant_msg, conversation_id=conversation_id)
-        if hasattr(cm, 'store_semantic_memory'):
+        if hasattr(cm, "store_conversation_turn"):
+            await cm.store_conversation_turn(
+                user_id, "user", user_msg, conversation_id=conversation_id
+            )
+            await cm.store_conversation_turn(
+                user_id, "assistant", assistant_msg, conversation_id=conversation_id
+            )
+        if hasattr(cm, "store_semantic_memory"):
             try:
                 from models.context import SemanticMemoryEntry
+
                 for role, content in [("user", user_msg), ("assistant", assistant_msg)]:
                     entry = SemanticMemoryEntry(
-                        user_id=user_id, content=content,
-                        source="conversation", metadata={"role": role}
+                        user_id=user_id,
+                        content=content,
+                        source="conversation",
+                        metadata={"role": role},
                     )
                     await cm.store_semantic_memory(entry)
             except ImportError:

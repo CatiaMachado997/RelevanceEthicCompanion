@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Initialize Weaviate schemas"""
+
 import sys
-sys.path.insert(0, '/Users/catiamachado/RelevanceEthicCompanion/backend')
+
+sys.path.insert(0, "/Users/catiamachado/RelevanceEthicCompanion/backend")
 
 from utils.weaviate_client import get_weaviate_client
 

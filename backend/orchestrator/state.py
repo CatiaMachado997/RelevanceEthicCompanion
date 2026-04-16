@@ -1,4 +1,5 @@
 """AgentState — typed state dict carried through every LangGraph node."""
+
 from typing import TypedDict, Optional
 from esl.models import ESLDecision
 
@@ -11,26 +12,26 @@ class AgentState(TypedDict):
     model: str
 
     # Context
-    user_context: dict          # goals, values, focus_mode, recent_memory
+    user_context: dict  # goals, values, focus_mode, recent_memory
     conversation_history: list  # [{role, content}, ...]
 
     # Intent
-    intent: str                 # "chat" | "research_quick" | "plan" | "search" | "file_question"
+    intent: str  # "chat" | "research_quick" | "plan" | "search" | "file_question"
 
     # Source filtering — empty list means all sources enabled
-    active_sources: list        # e.g. ["calendar", "goals"] — empty = all
+    active_sources: list  # e.g. ["calendar", "goals"] — empty = all
 
     # Tool execution
-    tool_calls: list            # tool calls planned by ToolPlanner
-    tool_results: list          # results from ToolExecution
+    tool_calls: list  # tool calls planned by ToolPlanner
+    tool_results: list  # results from ToolExecution
 
     # ESL
     esl_decision: Optional[ESLDecision]
-    proposed_content: str       # the response text before ESL evaluation
+    proposed_content: str  # the response text before ESL evaluation
 
     # Output
-    response_text: str          # final response to stream to user
-    response_events: list       # list of SSE event dicts to yield
+    response_text: str  # final response to stream to user
+    response_events: list  # list of SSE event dicts to yield
 
     # Citations — sources consulted by tool calls
     citations: list  # [{"tool": str, "label": str, "icon": str}, ...]
@@ -43,4 +44,4 @@ class AgentState(TypedDict):
     pending_tool_confirmation: Optional[dict]  # {tool_id, action_name, preview, params}
 
     # Source items context from synced integrations
-    source_context: list           # [{source_type, source_item_type, title, body, item_at}]
+    source_context: list  # [{source_type, source_item_type, title, body, item_at}]

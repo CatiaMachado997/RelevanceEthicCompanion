@@ -1,4 +1,5 @@
 """Tests that rate limiting is active on auth endpoints."""
+
 from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
@@ -8,6 +9,7 @@ from fastapi.testclient import TestClient
 def client():
     with patch("utils.weaviate_client.get_weaviate_client", return_value=None):
         from main import app
+
         with TestClient(app, raise_server_exceptions=False) as c:
             yield c
 
@@ -15,9 +17,12 @@ def client():
 def test_auth_session_route_exists(client):
     """POST /api/auth/session route must exist and be reachable."""
     routes = [
-        r for r in client.app.routes
-        if hasattr(r, "path") and r.path == "/api/auth/session"
-        and hasattr(r, "methods") and "POST" in r.methods
+        r
+        for r in client.app.routes
+        if hasattr(r, "path")
+        and r.path == "/api/auth/session"
+        and hasattr(r, "methods")
+        and "POST" in r.methods
     ]
     assert len(routes) == 1, "POST /api/auth/session route must exist"
 

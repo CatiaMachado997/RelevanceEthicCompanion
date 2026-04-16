@@ -12,16 +12,25 @@ from utils.oauth_state import create_signed_state, validate_signed_state
 
 
 class FakeIngestion:
-    async def initiate_oauth(self, user_id: str, source_type: str, oauth_state: str = ""):
+    async def initiate_oauth(
+        self, user_id: str, source_type: str, oauth_state: str = ""
+    ):
         return f"https://oauth.example/{source_type}?state={oauth_state}"
 
     async def sync_data_source(self, user_id: str, source_type: str):
-        return {"success": True, "message": "ok", "items_synced": 1, "source_type": source_type}
+        return {
+            "success": True,
+            "message": "ok",
+            "items_synced": 1,
+            "source_type": source_type,
+        }
 
     async def disconnect_source(self, user_id: str, source_type: str):
         return True
 
-    async def handle_oauth_callback(self, source_type: str, authorization_code: str, user_id: str):
+    async def handle_oauth_callback(
+        self, source_type: str, authorization_code: str, user_id: str
+    ):
         return {"success": True, "message": "ok", "source_type": source_type}
 
 
@@ -76,7 +85,9 @@ def test_chat_history_read_route_requires_auth_when_read_enforced(client, monkey
     assert response.status_code == 401
 
 
-def test_chat_history_read_route_allows_dev_fallback_when_read_not_enforced(client, monkeypatch):
+def test_chat_history_read_route_allows_dev_fallback_when_read_not_enforced(
+    client, monkeypatch
+):
     monkeypatch.setattr(settings, "AUTH_ENFORCEMENT_ENABLED", False)
     monkeypatch.setattr(settings, "AUTH_ENFORCE_READ_ROUTES", False)
     monkeypatch.setattr(settings, "ENVIRONMENT", "development")
@@ -90,7 +101,10 @@ def test_data_source_sync_requires_auth(client):
 
 
 def test_values_write_route_requires_auth(client):
-    response = client.post("/api/values/", json={"type": "boundary", "value": "no_work_after_19h", "priority": 1})
+    response = client.post(
+        "/api/values/",
+        json={"type": "boundary", "value": "no_work_after_19h", "priority": 1},
+    )
     assert response.status_code == 401
 
 

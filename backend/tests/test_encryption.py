@@ -1,7 +1,6 @@
 """Tests for Fernet credential encryption."""
-import json
+
 import pytest
-from unittest.mock import patch
 from utils.encryption import encrypt_credentials, decrypt_credentials
 
 

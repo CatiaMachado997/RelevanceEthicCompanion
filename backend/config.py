@@ -14,18 +14,18 @@ _secrets_logger = _logging.getLogger(__name__)
 
 # Ordered list of (GCP secret name → env var name) pairs.
 _GCP_SECRETS: list[tuple[str, str]] = [
-    ("ethic-companion-secret-key",          "SECRET_KEY"),
-    ("ethic-companion-encryption-key",       "ENCRYPTION_KEY"),
-    ("ethic-companion-gemini-api-key",       "GEMINI_API_KEY"),
-    ("ethic-companion-groq-api-key",         "GROQ_API_KEY"),
-    ("ethic-companion-tavily-api-key",       "TAVILY_API_KEY"),
-    ("ethic-companion-composio-api-key",     "COMPOSIO_API_KEY"),
-    ("ethic-companion-google-oauth-secret",  "GOOGLE_OAUTH_CLIENT_SECRET"),
-    ("ethic-companion-slack-client-secret",  "SLACK_CLIENT_SECRET"),
+    ("ethic-companion-secret-key", "SECRET_KEY"),
+    ("ethic-companion-encryption-key", "ENCRYPTION_KEY"),
+    ("ethic-companion-gemini-api-key", "GEMINI_API_KEY"),
+    ("ethic-companion-groq-api-key", "GROQ_API_KEY"),
+    ("ethic-companion-tavily-api-key", "TAVILY_API_KEY"),
+    ("ethic-companion-composio-api-key", "COMPOSIO_API_KEY"),
+    ("ethic-companion-google-oauth-secret", "GOOGLE_OAUTH_CLIENT_SECRET"),
+    ("ethic-companion-slack-client-secret", "SLACK_CLIENT_SECRET"),
     ("ethic-companion-github-client-secret", "GITHUB_CLIENT_SECRET"),
     ("ethic-companion-notion-client-secret", "NOTION_CLIENT_SECRET"),
     # Store as JSON array: ["https://app.example.com"] or comma-separated for pydantic parsing
-    ("ethic-companion-allowed-origins",      "CORS_ORIGINS"),
+    ("ethic-companion-allowed-origins", "CORS_ORIGINS"),
 ]
 
 
@@ -42,6 +42,7 @@ def load_secrets_from_gcp(project_id: str, client=None) -> None:
         return
     if client is None:
         from google.cloud import secretmanager
+
         client = secretmanager.SecretManagerServiceClient()
     for secret_name, env_var in _GCP_SECRETS:
         resource = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
@@ -52,13 +53,15 @@ def load_secrets_from_gcp(project_id: str, client=None) -> None:
             _secrets_logger.debug("Loaded secret %s → %s", secret_name, env_var)
         except Exception as exc:
             _secrets_logger.warning(
-                "Could not load secret '%s' from GCP Secret Manager: %s", secret_name, exc
+                "Could not load secret '%s' from GCP Secret Manager: %s",
+                secret_name,
+                exc,
             )
 
 
 class Settings(BaseSettings):
     """Application Settings"""
-    
+
     # PostgreSQL (M1 - Structured Memory)
     POSTGRES_SERVER: str
     POSTGRES_PORT: int
@@ -69,7 +72,7 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def DATABASE_URL(self) -> str:
-        return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"  # noqa: E501
 
     # Weaviate (M2 - Semantic Memory)
     WEAVIATE_URL: str = "http://localhost:8080"
@@ -80,7 +83,7 @@ class Settings(BaseSettings):
     # APIs - V2 (new)
     GEMINI_API_KEY: str = ""
     TAVILY_API_KEY: str
-    
+
     # Google Cloud
     GOOGLE_CLOUD_PROJECT: str
     GOOGLE_APPLICATION_CREDENTIALS: str = ""
@@ -88,15 +91,21 @@ class Settings(BaseSettings):
     # Google OAuth (Phase 5: Calendar Integration)
     GOOGLE_OAUTH_CLIENT_ID: str = ""
     GOOGLE_OAUTH_CLIENT_SECRET: str = ""
-    GOOGLE_OAUTH_REDIRECT_URI: str = "http://localhost:8000/api/data-sources/oauth/google_calendar/callback"
-    GMAIL_OAUTH_REDIRECT_URI: str = "http://localhost:8000/api/data-sources/oauth/gmail/callback"
+    GOOGLE_OAUTH_REDIRECT_URI: str = (
+        "http://localhost:8000/api/data-sources/oauth/google_calendar/callback"
+    )
+    GMAIL_OAUTH_REDIRECT_URI: str = (
+        "http://localhost:8000/api/data-sources/oauth/gmail/callback"
+    )
 
     # Application
     ENVIRONMENT: str = "development"
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
     CORS_ORIGINS: List[str] = ["http://localhost:3000"]
-    AUTH_ENFORCEMENT_ENABLED: bool = True   # default secure; set False in local .env for dev
+    AUTH_ENFORCEMENT_ENABLED: bool = (
+        True  # default secure; set False in local .env for dev
+    )
     AUTH_ENFORCE_WRITE_ROUTES: bool = True
     AUTH_ENFORCE_READ_ROUTES: bool = False
 
@@ -117,7 +126,9 @@ class Settings(BaseSettings):
     # Slack OAuth (Phase X: Slack Integration)
     SLACK_CLIENT_ID: str = ""
     SLACK_CLIENT_SECRET: str = ""
-    SLACK_REDIRECT_URI: str = "http://localhost:8000/api/data-sources/oauth/slack/callback"
+    SLACK_REDIRECT_URI: str = (
+        "http://localhost:8000/api/data-sources/oauth/slack/callback"
+    )
 
     # GitHub OAuth (Tool Marketplace)
     GITHUB_CLIENT_ID: str = ""
@@ -143,7 +154,9 @@ class Settings(BaseSettings):
     LANGFUSE_HOST: str = "https://cloud.langfuse.com"
 
     # Feature flags
-    USE_LANGGRAPH: bool = True  # orchestrator_v2 removed in sprint-2a; LangGraph is the only orchestrator
+    USE_LANGGRAPH: bool = (
+        True  # orchestrator_v2 removed in sprint-2a; LangGraph is the only orchestrator
+    )
 
     # Dev mode: override mock user ID to match the real user who connected OAuth
     DEV_USER_ID: str = "00000000-0000-0000-0000-000000000000"
@@ -157,6 +170,8 @@ if os.environ.get("ENVIRONMENT") == "production":
     if _project:
         load_secrets_from_gcp(project_id=_project)
     else:
-        _secrets_logger.warning("GOOGLE_CLOUD_PROJECT not set; skipping GCP secret loading")
+        _secrets_logger.warning(
+            "GOOGLE_CLOUD_PROJECT not set; skipping GCP secret loading"
+        )
 
 settings = Settings()

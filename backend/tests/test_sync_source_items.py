@@ -1,4 +1,3 @@
-import pytest
 from services.connectors.google_calendar import GoogleCalendarConnector
 from services.connectors.gmail import GmailConnector
 from services import data_ingestion
@@ -68,7 +67,9 @@ def test_gmail_sync_writes_source_items():
 
 def test_sync_deduplication():
     """_store_normalized_item SQL upserts on (user_id, source_type, external_id) and updates item_at."""
-    source = inspect.getsource(data_ingestion.DataIngestionService._store_normalized_item)
+    source = inspect.getsource(
+        data_ingestion.DataIngestionService._store_normalized_item
+    )
     assert "ON CONFLICT (user_id, source_type, external_id)" in source
     assert "item_at = EXCLUDED.item_at" in source
 

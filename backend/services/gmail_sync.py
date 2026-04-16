@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class GmailSync:
     """Gmail integration with OAuth2 (read-only)"""
 
-    SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+    SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
     def __init__(self, redirect_uri: str = None):
         self.redirect_uri = redirect_uri or settings.GMAIL_OAUTH_REDIRECT_URI
@@ -29,43 +29,38 @@ class GmailSync:
                 "client_secret": settings.GOOGLE_OAUTH_CLIENT_SECRET,
                 "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                 "token_uri": "https://oauth2.googleapis.com/token",
-                "redirect_uris": [self.redirect_uri]
+                "redirect_uris": [self.redirect_uri],
             }
         }
 
-    def get_authorization_url(self, user_id: str, oauth_state: Optional[str] = None) -> str:
+    def get_authorization_url(
+        self, user_id: str, oauth_state: Optional[str] = None
+    ) -> str:
         flow = Flow.from_client_config(
-            self.client_config,
-            scopes=self.SCOPES,
-            redirect_uri=self.redirect_uri
+            self.client_config, scopes=self.SCOPES, redirect_uri=self.redirect_uri
         )
         auth_url, _ = flow.authorization_url(
-            access_type='offline',
-            include_granted_scopes='true',
+            access_type="offline",
+            include_granted_scopes="true",
             state=oauth_state or user_id,
-            prompt='consent'
+            prompt="consent",
         )
         return auth_url
 
     def exchange_code_for_tokens(self, code: str) -> Dict[str, Any]:
         flow = Flow.from_client_config(
-            self.client_config,
-            scopes=self.SCOPES,
-            redirect_uri=self.redirect_uri
+            self.client_config, scopes=self.SCOPES, redirect_uri=self.redirect_uri
         )
         flow.fetch_token(code=code)
         creds = flow.credentials
         return {
             "access_token": creds.token,
             "refresh_token": creds.refresh_token,
-            "expires_at": creds.expiry.isoformat() if creds.expiry else None
+            "expires_at": creds.expiry.isoformat() if creds.expiry else None,
         }
 
     def fetch_messages(
-        self,
-        access_token: str,
-        refresh_token: str,
-        max_results: int = 50
+        self, access_token: str, refresh_token: str, max_results: int = 50
     ) -> List[Dict[str, Any]]:
         """Fetch recent emails (subject + snippet only, no body)"""
         creds = Credentials(
@@ -74,36 +69,47 @@ class GmailSync:
             token_uri="https://oauth2.googleapis.com/token",
             client_id=settings.GOOGLE_OAUTH_CLIENT_ID,
             client_secret=settings.GOOGLE_OAUTH_CLIENT_SECRET,
-            scopes=self.SCOPES
+            scopes=self.SCOPES,
         )
         if creds.expired and creds.refresh_token:
             creds.refresh(Request())
 
-        service = build('gmail', 'v1', credentials=creds)
-        result = service.users().messages().list(
-            userId='me',
-            maxResults=max_results,
-            labelIds=['INBOX']
-        ).execute()
+        service = build("gmail", "v1", credentials=creds)
+        result = (
+            service.users()
+            .messages()
+            .list(userId="me", maxResults=max_results, labelIds=["INBOX"])
+            .execute()
+        )
 
         messages = []
-        for msg in result.get('messages', []):
-            detail = service.users().messages().get(
-                userId='me',
-                id=msg['id'],
-                format='metadata',
-                metadataHeaders=['Subject', 'From', 'Date']
-            ).execute()
+        for msg in result.get("messages", []):
+            detail = (
+                service.users()
+                .messages()
+                .get(
+                    userId="me",
+                    id=msg["id"],
+                    format="metadata",
+                    metadataHeaders=["Subject", "From", "Date"],
+                )
+                .execute()
+            )
 
-            headers = {h['name']: h['value'] for h in detail.get('payload', {}).get('headers', [])}
-            messages.append({
-                'id': msg['id'],
-                'thread_id': msg.get('threadId', ''),
-                'subject': headers.get('Subject', '(no subject)'),
-                'from': headers.get('From', ''),
-                'date': headers.get('Date', ''),
-                'snippet': detail.get('snippet', ''),
-                'label_ids': detail.get('labelIds', []),
-            })
+            headers = {
+                h["name"]: h["value"]
+                for h in detail.get("payload", {}).get("headers", [])
+            }
+            messages.append(
+                {
+                    "id": msg["id"],
+                    "thread_id": msg.get("threadId", ""),
+                    "subject": headers.get("Subject", "(no subject)"),
+                    "from": headers.get("From", ""),
+                    "date": headers.get("Date", ""),
+                    "snippet": detail.get("snippet", ""),
+                    "label_ids": detail.get("labelIds", []),
+                }
+            )
 
         return messages

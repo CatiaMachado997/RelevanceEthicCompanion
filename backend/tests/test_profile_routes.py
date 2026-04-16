@@ -24,6 +24,7 @@ def make_db_mock(fetchone_result=None, fetchall_result=None):
 
 def make_mock_esl():
     from esl.models import ESLDecision, ESLDecisionStatus
+
     mock_esl = MagicMock()
     mock_esl.evaluate_action = AsyncMock(
         return_value=ESLDecision(
@@ -37,6 +38,7 @@ def make_mock_esl():
 
 def make_app():
     from routes.profile import router as profile_router, get_esl
+
     app = FastAPI()
     app.include_router(profile_router)
     app.dependency_overrides[get_current_user_id] = lambda: TEST_USER_ID
@@ -83,7 +85,11 @@ def test_get_profile_user_not_found(client):
 
 def test_update_profile_saves_name_and_timezone(client):
     """PUT /api/profile/ → 200 with updated data."""
-    updated_row = {**SAMPLE_USER_ROW, "display_name": "New Name", "timezone": "America/New_York"}
+    updated_row = {
+        **SAMPLE_USER_ROW,
+        "display_name": "New Name",
+        "timezone": "America/New_York",
+    }
     mock_conn, _ = make_db_mock(fetchone_result=updated_row)
 
     with patch("routes.profile.get_db", return_value=mock_conn):

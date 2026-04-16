@@ -3,12 +3,12 @@ Tests for services/composio_tools.py
 
 Mocks _get_composio_client — never calls the real Composio API.
 """
+
 from __future__ import annotations
 
 import asyncio
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from services.composio_tools import (
     TOOL_ID_TO_COMPOSIO_TOOLKIT,
@@ -29,9 +29,7 @@ class TestGetComposioToolsForUser:
         """If COMPOSIO_API_KEY is not set, return [] and log a warning."""
         with patch("services.composio_tools.settings") as mock_settings:
             mock_settings.COMPOSIO_API_KEY = ""
-            result = asyncio.run(
-                get_composio_tools_for_user("user-123", {"github"})
-            )
+            result = asyncio.run(get_composio_tools_for_user("user-123", {"github"}))
         assert result == []
 
     def test_tags_tool_with_esl_metadata(self):
@@ -46,7 +44,9 @@ class TestGetComposioToolsForUser:
         mock_client = MagicMock()
         mock_client.create.return_value = mock_session
 
-        with patch("services.composio_tools._get_composio_client", return_value=mock_client):
+        with patch(
+            "services.composio_tools._get_composio_client", return_value=mock_client
+        ):
             with patch("services.composio_tools.settings") as mock_settings:
                 mock_settings.COMPOSIO_API_KEY = "test-key"
                 result = asyncio.run(
@@ -67,12 +67,12 @@ class TestGetComposioToolsForUser:
         mock_client = MagicMock()
         mock_client.create.return_value = mock_session
 
-        with patch("services.composio_tools._get_composio_client", return_value=mock_client):
+        with patch(
+            "services.composio_tools._get_composio_client", return_value=mock_client
+        ):
             with patch("services.composio_tools.settings") as mock_settings:
                 mock_settings.COMPOSIO_API_KEY = "test-key"
-                asyncio.run(
-                    get_composio_tools_for_user("user-xyz", {"notion"})
-                )
+                asyncio.run(get_composio_tools_for_user("user-xyz", {"notion"}))
 
         toolkits_passed = mock_client.create.call_args.kwargs["toolkits"]
         assert "github" not in toolkits_passed
@@ -83,7 +83,9 @@ class TestGetComposioToolsForUser:
         mock_client = MagicMock()
         mock_client.create.side_effect = RuntimeError("Composio network error")
 
-        with patch("services.composio_tools._get_composio_client", return_value=mock_client):
+        with patch(
+            "services.composio_tools._get_composio_client", return_value=mock_client
+        ):
             with patch("services.composio_tools.settings") as mock_settings:
                 mock_settings.COMPOSIO_API_KEY = "test-key"
                 result = asyncio.run(
@@ -109,7 +111,9 @@ class TestGetComposioToolsForUser:
         mock_client = MagicMock()
         mock_client.create.return_value = mock_session
 
-        with patch("services.composio_tools._get_composio_client", return_value=mock_client):
+        with patch(
+            "services.composio_tools._get_composio_client", return_value=mock_client
+        ):
             with patch("services.composio_tools.settings") as mock_settings:
                 mock_settings.COMPOSIO_API_KEY = "test-key"
                 result = asyncio.run(
@@ -134,7 +138,9 @@ class TestGetComposioToolsForUser:
         mock_client = MagicMock()
         mock_client.create.return_value = mock_session
 
-        with patch("services.composio_tools._get_composio_client", return_value=mock_client):
+        with patch(
+            "services.composio_tools._get_composio_client", return_value=mock_client
+        ):
             with patch("services.composio_tools.settings") as mock_settings:
                 mock_settings.COMPOSIO_API_KEY = "test-key"
                 result = asyncio.run(
@@ -167,7 +173,9 @@ class TestGetComposioToolsForUser:
         mock_client = MagicMock()
         mock_client.create.return_value = mock_session
 
-        with patch("services.composio_tools._get_composio_client", return_value=mock_client):
+        with patch(
+            "services.composio_tools._get_composio_client", return_value=mock_client
+        ):
             with patch("services.composio_tools.settings") as mock_settings:
                 mock_settings.COMPOSIO_API_KEY = "test-key"
                 asyncio.run(

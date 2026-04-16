@@ -12,6 +12,7 @@ from datetime import datetime
 
 class FeedbackType(str, Enum):
     """Types of feedback users can provide"""
+
     THUMBS_UP = "thumbs_up"
     THUMBS_DOWN = "thumbs_down"
     NOT_RELEVANT = "not_relevant"
@@ -21,6 +22,7 @@ class FeedbackType(str, Enum):
 
 class ItemType(str, Enum):
     """Types of items that can receive feedback"""
+
     CHAT_RESPONSE = "chat_response"
     SEARCH_RESULT = "search_result"
     CALENDAR_EVENT = "calendar_event"
@@ -30,6 +32,7 @@ class ItemType(str, Enum):
 
 class FeedbackSubmission(BaseModel):
     """User feedback submission"""
+
     item_id: str = Field(..., description="ID of the item being rated")
     item_type: ItemType = Field(..., description="Type of item")
     feedback_type: FeedbackType = Field(..., description="Type of feedback")
@@ -41,13 +44,14 @@ class FeedbackSubmission(BaseModel):
                 "item_id": "response-123",
                 "item_type": "chat_response",
                 "feedback_type": "thumbs_up",
-                "additional_notes": "Very helpful response!"
+                "additional_notes": "Very helpful response!",
             }
         }
 
 
 class FeedbackRecord(BaseModel):
     """Stored feedback record"""
+
     id: str
     user_id: str
     item_id: str
@@ -60,6 +64,7 @@ class FeedbackRecord(BaseModel):
 
 class FeedbackAnalytics(BaseModel):
     """Aggregated feedback analytics"""
+
     thumbs_up_count: int = 0
     thumbs_down_count: int = 0
     not_relevant_count: int = 0
@@ -79,6 +84,6 @@ class FeedbackAnalytics(BaseModel):
                 "inaccurate_count": 1,
                 "total_feedback": 54,
                 "satisfaction_rate": 83.3,
-                "days_analyzed": 30
+                "days_analyzed": 30,
             }
         }

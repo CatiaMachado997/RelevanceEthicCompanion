@@ -1,5 +1,6 @@
 # backend/routes/projects.py
 """Projects API routes — CRUD for the projects domain."""
+
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -11,7 +12,6 @@ from esl.models import ProposedAction, ActionType, UrgencyLevel, ESLDecisionStat
 from utils.db import get_db_connection
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 from services.context_manager import ContextManager
-from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,9 @@ class UpdateProjectRequest(BaseModel):
     goal_id: Optional[str] = None
 
 
-def get_user_projects(user_id: str, status: Optional[str] = None) -> List[Dict[str, Any]]:
+def get_user_projects(
+    user_id: str, status: Optional[str] = None
+) -> List[Dict[str, Any]]:
     """Query projects table for a user."""
     with get_db_connection() as conn:
         with conn.cursor() as cur:
@@ -134,7 +136,9 @@ async def create_project(
     )
     decision = await esl.evaluate_action(proposed_action, user_id)
     if decision.status == ESLDecisionStatus.VETOED:
-        raise HTTPException(status_code=403, detail=f"Blocked by ESL: {decision.reason}")
+        raise HTTPException(
+            status_code=403, detail=f"Blocked by ESL: {decision.reason}"
+        )
 
     try:
         with get_db_connection() as conn:
@@ -180,7 +184,9 @@ async def update_project(
     )
     decision = await esl.evaluate_action(proposed_action, user_id)
     if decision.status == ESLDecisionStatus.VETOED:
-        raise HTTPException(status_code=403, detail=f"Update blocked by ESL: {decision.reason}")
+        raise HTTPException(
+            status_code=403, detail=f"Update blocked by ESL: {decision.reason}"
+        )
 
     updates = request.model_dump(exclude_none=True)
     if not updates:
@@ -233,7 +239,9 @@ async def archive_project(
     )
     decision = await esl.evaluate_action(proposed_action, user_id)
     if decision.status == ESLDecisionStatus.VETOED:
-        raise HTTPException(status_code=403, detail=f"Archive blocked by ESL: {decision.reason}")
+        raise HTTPException(
+            status_code=403, detail=f"Archive blocked by ESL: {decision.reason}"
+        )
 
     try:
         with get_db_connection() as conn:

@@ -1,4 +1,5 @@
 """Health check helpers — non-fatal probes for DB and Weaviate."""
+
 import logging
 from utils.db import get_db_connection
 
@@ -20,6 +21,7 @@ def check_weaviate() -> dict:
     try:
         # Import here to avoid circular imports and to allow graceful failure
         from utils.weaviate_client import get_weaviate_client
+
         client = get_weaviate_client()
         if client is None:
             return {"status": "unavailable"}

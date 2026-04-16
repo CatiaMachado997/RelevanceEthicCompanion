@@ -1,4 +1,5 @@
 """User status endpoint — PUT/GET /api/status/ (not ESL-gated, user controls own mode)."""
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from typing import Optional, Literal
@@ -17,7 +18,9 @@ class StatusUpdate(BaseModel):
 
 
 @router.put("/")
-async def update_status(body: StatusUpdate, user_id: str = Depends(get_current_user_id)):
+async def update_status(
+    body: StatusUpdate, user_id: str = Depends(get_current_user_id)
+):
     """Update user status. Not ESL-gated — user directly controls their own mode."""
     with get_db() as conn:
         with conn.cursor() as cur:

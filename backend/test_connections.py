@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
 """Test connections to PostgreSQL and Weaviate"""
+
+import os
 import sys
 import psycopg2
 import requests
 
+
 def test_postgres():
-    """Test PostgreSQL connection"""
+    """Test PostgreSQL connection (uses POSTGRES_* env vars, falls back to local dev defaults)."""
     try:
         conn = psycopg2.connect(
-            host="localhost",
-            port=5432,
-            database="ethic-companion",
-            user="postgres",
-            password="postgres"
+            host=os.getenv("POSTGRES_SERVER", "localhost"),
+            port=int(os.getenv("POSTGRES_PORT", "5432")),
+            database=os.getenv("POSTGRES_DB", "ethic-companion"),
+            user=os.getenv("POSTGRES_USER", "postgres"),
+            password=os.getenv("POSTGRES_PASSWORD", ""),
         )
         cursor = conn.cursor()
         cursor.execute("SELECT version();")
@@ -25,6 +28,7 @@ def test_postgres():
     except Exception as e:
         print(f"❌ PostgreSQL connection failed: {e}")
         return False
+
 
 def test_weaviate():
     """Test Weaviate connection"""
@@ -41,6 +45,7 @@ def test_weaviate():
     except Exception as e:
         print(f"❌ Weaviate connection failed: {e}")
         return False
+
 
 if __name__ == "__main__":
     print("Testing database connections...\n")

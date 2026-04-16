@@ -8,6 +8,7 @@ the chat system prompt.
 
 No LLM calls. No Weaviate. Just fast SQL.
 """
+
 from datetime import datetime, timedelta, timezone
 from typing import Any
 import logging
@@ -60,7 +61,9 @@ class ContextSnapshotService:
                         "id": str(r["id"]),
                         "title": r["title"],
                         "status": r["status"],
-                        "due_date": r["due_date"].isoformat() if r["due_date"] else None,
+                        "due_date": (
+                            r["due_date"].isoformat() if r["due_date"] else None
+                        ),
                         "priority": r["priority"],
                         "project_title": r["project_title"],
                     }
@@ -127,16 +130,18 @@ class ContextSnapshotService:
                 snapshot["upcoming_events"] = [
                     {
                         "title": r["title"],
-                        "start_time": r["start_time"].isoformat() if r["start_time"] else None,
+                        "start_time": (
+                            r["start_time"].isoformat() if r["start_time"] else None
+                        ),
                         "location": r["location"],
                     }
                     for r in events
                 ]
                 event_count = len(events)
                 snapshot["calendar_pressure"] = (
-                    "heavy" if event_count >= 4
-                    else "moderate" if event_count >= 2
-                    else "light"
+                    "heavy"
+                    if event_count >= 4
+                    else "moderate" if event_count >= 2 else "light"
                 )
 
                 # Top active goals

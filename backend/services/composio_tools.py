@@ -14,6 +14,7 @@ Usage:
         connected_tool_ids={"github", "notion"},
     )
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -42,17 +43,17 @@ TOOL_ID_TO_COMPOSIO_TOOLKIT: dict[str, str] = {
 
 # Maps Composio action slug → (our_tool_id, our_action_name, risk_level)
 _ACTION_METADATA: dict[str, tuple[str, str, str]] = {
-    "GITHUB_LIST_REPOSITORY_ISSUES":            ("github",                "list_issues",   "low"),
-    "GITHUB_CREATE_AN_ISSUE":                   ("github",                "create_issue",  "medium"),
-    "GITHUB_CREATE_AN_ISSUE_COMMENT":           ("github",                "add_comment",   "medium"),
-    "NOTION_SEARCH":                            ("notion",                "search_pages",  "low"),
-    "NOTION_CREATE_PAGE":                       ("notion",                "create_page",   "medium"),
-    "GMAIL_CREATE_EMAIL_DRAFT":                 ("gmail_write",           "create_draft",  "low"),
-    "GMAIL_REPLY_TO_THREAD":                    ("gmail_write",           "send_reply",    "high"),
-    "GOOGLECALENDAR_CREATE_EVENT":              ("google_calendar_write", "create_event",  "low"),
-    "GOOGLECALENDAR_UPDATE_EVENT":              ("google_calendar_write", "update_event",  "medium"),
-    "SLACK_SENDS_A_MESSAGE_TO_A_SLACK_CHANNEL": ("slack",                 "send_message",  "high"),
-    "SLACK_FETCH_CONVERSATION_HISTORY":         ("slack",                 "read_channel",  "low"),
+    "GITHUB_LIST_REPOSITORY_ISSUES": ("github", "list_issues", "low"),
+    "GITHUB_CREATE_AN_ISSUE": ("github", "create_issue", "medium"),
+    "GITHUB_CREATE_AN_ISSUE_COMMENT": ("github", "add_comment", "medium"),
+    "NOTION_SEARCH": ("notion", "search_pages", "low"),
+    "NOTION_CREATE_PAGE": ("notion", "create_page", "medium"),
+    "GMAIL_CREATE_EMAIL_DRAFT": ("gmail_write", "create_draft", "low"),
+    "GMAIL_REPLY_TO_THREAD": ("gmail_write", "send_reply", "high"),
+    "GOOGLECALENDAR_CREATE_EVENT": ("google_calendar_write", "create_event", "low"),
+    "GOOGLECALENDAR_UPDATE_EVENT": ("google_calendar_write", "update_event", "medium"),
+    "SLACK_SENDS_A_MESSAGE_TO_A_SLACK_CHANNEL": ("slack", "send_message", "high"),
+    "SLACK_FETCH_CONVERSATION_HISTORY": ("slack", "read_channel", "low"),
 }
 
 # Which Composio action slugs belong to each toolkit slug
@@ -96,6 +97,7 @@ def _get_composio_client() -> Any:
             if _composio_client is None:  # double-checked locking
                 from composio import Composio
                 from composio_langchain import LangchainProvider
+
                 _composio_client = Composio(
                     provider=LangchainProvider(),
                     api_key=settings.COMPOSIO_API_KEY,
@@ -128,9 +130,7 @@ async def get_composio_tools_for_user(
 
     # 2. Guard: no API key configured.
     if not settings.COMPOSIO_API_KEY:
-        logger.warning(
-            "COMPOSIO_API_KEY is not set — skipping Composio tool loading."
-        )
+        logger.warning("COMPOSIO_API_KEY is not set — skipping Composio tool loading.")
         return []
 
     try:
@@ -166,9 +166,13 @@ async def get_composio_tools_for_user(
         )
 
         # 6. Retrieve the LangChain StructuredTool list (also synchronous).
-        raw_tools: list[Any] = await asyncio.to_thread(session.tools)  # session.tools() called in thread
+        raw_tools: list[Any] = await asyncio.to_thread(
+            session.tools
+        )  # session.tools() called in thread
         if not raw_tools:
-            logger.debug("Composio: session.tools() returned empty for user %s", user_id)
+            logger.debug(
+                "Composio: session.tools() returned empty for user %s", user_id
+            )
             return []
 
         # 7 & 8. Tag each tool with ESL metadata.
@@ -186,7 +190,8 @@ async def get_composio_tools_for_user(
             else:
                 # 9. Fallback for unknown action slugs.
                 logger.warning(
-                    "No _ACTION_METADATA entry for action %r — using fallback.", tool.name
+                    "No _ACTION_METADATA entry for action %r — using fallback.",
+                    tool.name,
                 )
                 tool_id_val = "composio"
                 action_name_val = tool.name

@@ -10,6 +10,7 @@ Usage:
     stored = encrypt_credentials({"access_token": "tok_abc"})
     recovered = decrypt_credentials(stored)
 """
+
 from __future__ import annotations
 
 import json

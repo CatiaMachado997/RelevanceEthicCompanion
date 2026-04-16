@@ -6,7 +6,7 @@ Each rule is testable and auditable
 """
 
 from typing import Optional, List, Dict
-from datetime import datetime, time
+from datetime import datetime
 from pydantic import BaseModel
 import re
 import hashlib
@@ -40,6 +40,7 @@ async def semantic_manipulation_check(content: str, llm) -> bool:
 
     try:
         from langchain_core.messages import HumanMessage
+
         prompt = (
             "Evaluate if this content uses psychological manipulation "
             "(FOMO, guilt, false urgency, social pressure, emotional coercion):\n\n"
@@ -56,6 +57,7 @@ async def semantic_manipulation_check(content: str, llm) -> bool:
 
 class RuleCheckResult(BaseModel):
     """Result of a rule check"""
+
     passed: bool
     reason: str
     violated_values: List[str] = []
@@ -65,77 +67,80 @@ class RuleCheckResult(BaseModel):
 class TimeBasedRules:
     """
     Time-based boundary checking
-    
+
     Enforces user-defined time boundaries like:
     - "No work after 7 PM"
     - "Quiet hours 10 PM - 7 AM"
     - "Focus mode 9 AM - 11 AM"
     """
-    
+
     def check_boundaries(
         self,
         action: ProposedAction,
         user_values: List[UserValue],
-        current_time: datetime
+        current_time: datetime,
     ) -> RuleCheckResult:
         """
         Check if action violates time-based boundaries
-        
+
         Args:
             action: Proposed action
             user_values: User's values and boundaries
             current_time: Current timestamp
-            
+
         Returns:
             RuleCheckResult with pass/fail and reason
         """
         current_hour = current_time.hour
-        
+
         for value in user_values:
             if not value.active or value.type != ValueType.BOUNDARY:
                 continue
-            
+
             # Check "no_work_after_Xh" patterns
             if "no_work_after" in value.value.lower():
-                match = re.search(r'after[_\s](\d+)', value.value)
+                match = re.search(r"after[_\s](\d+)", value.value)
                 if match:
                     cutoff_hour = int(match.group(1))
-                    if current_hour >= cutoff_hour and "work" in action.content_type.lower():
+                    if (
+                        current_hour >= cutoff_hour
+                        and "work" in action.content_type.lower()
+                    ):
                         # Suggest modification: queue for next morning
                         return RuleCheckResult(
                             passed=False,
                             reason=f"Violates user boundary: {value.value}",
                             violated_values=[value.id or value.value],
-                            suggested_modification=None  # Could suggest "queue_for_morning"
+                            suggested_modification=None,  # Could suggest "queue_for_morning"
                         )
-            
+
             # Check "quiet_hours" patterns
-            if "quiet_hours" in value.value.lower() or "do_not_disturb" in value.value.lower():
+            if (
+                "quiet_hours" in value.value.lower()
+                or "do_not_disturb" in value.value.lower()
+            ):
                 # Assume quiet hours are 22:00 - 07:00
                 if current_hour >= 22 or current_hour < 7:
                     return RuleCheckResult(
                         passed=False,
                         reason=f"Violates quiet hours: {value.value}",
-                        violated_values=[value.id or value.value]
+                        violated_values=[value.id or value.value],
                     )
-        
-        return RuleCheckResult(
-            passed=True,
-            reason="No time-based boundary violations"
-        )
+
+        return RuleCheckResult(passed=True, reason="No time-based boundary violations")
 
 
 class ManipulationDetector:
     """
     Detects psychological manipulation patterns
-    
+
     Blocks content that uses:
     - FOMO (Fear of Missing Out)
     - Artificial urgency
     - Guilt-tripping
     - Emotional manipulation
     """
-    
+
     # Manipulation pattern keywords
     FOMO_PATTERNS = [
         r"don't miss out",
@@ -144,23 +149,23 @@ class ManipulationDetector:
         r"you're missing",
         r"limited time",
         r"act now",
-        r"before it's gone"
+        r"before it's gone",
     ]
-    
+
     URGENCY_PATTERNS = [
         r"urgent(?!.*meeting)",  # "urgent" but not "urgent meeting"
         r"act immediately",
         r"right now",
-        r"can't wait"
+        r"can't wait",
     ]
-    
+
     GUILT_PATTERNS = [
         r"you should have",
         r"you forgot",
         r"you haven't",
-        r"disappointing"
+        r"disappointing",
     ]
-    
+
     def check_content(self, content: str) -> RuleCheckResult:
         """
         Check if content contains manipulation patterns.
@@ -196,30 +201,27 @@ class ManipulationDetector:
         if len(violations) >= 2:
             return RuleCheckResult(
                 passed=False,
-                reason=f"Detected multiple manipulation patterns: {'; '.join(violations)}"
+                reason=f"Detected multiple manipulation patterns: {'; '.join(violations)}",
             )
 
-        return RuleCheckResult(
-            passed=True,
-            reason="No manipulation patterns detected"
-        )
+        return RuleCheckResult(passed=True, reason="No manipulation patterns detected")
 
 
 class EngagementDetector:
     """
     Detects engagement-optimization intent vs. assistance intent
-    
+
     Rejects actions that optimize for metrics like:
     - Time in app
     - Click-through rate
     - Daily active usage
-    
+
     Approves actions that optimize for:
     - Goal completion
     - User well-being
     - Clarity and focus
     """
-    
+
     def check_intent(self, action: ProposedAction) -> RuleCheckResult:
         """
         Check if action intent is assistance vs. engagement.
@@ -239,7 +241,7 @@ class EngagementDetector:
             "time_in_app",
             "daily_active",
             "session_length",
-            "retention_boost"
+            "retention_boost",
         ]
 
         # Green flags: action optimized for assistance
@@ -247,84 +249,78 @@ class EngagementDetector:
             "goal_relevance",
             "user_request",
             "time_saving",
-            "clarity_improvement"
+            "clarity_improvement",
         ]
 
         engagement_count = sum(1 for m in engagement_metrics if m in metadata)
         engagement_score = engagement_count / len(engagement_metrics)
-        goal_relevance_score = 1.0 if any(m in metadata for m in assistance_metrics) else 0.0
+        goal_relevance_score = (
+            1.0 if any(m in metadata for m in assistance_metrics) else 0.0
+        )
 
         # Only flag if engagement signals are strong AND no positive assistance signals
         if engagement_score > 0.7 and goal_relevance_score < 0.3:
             return RuleCheckResult(
                 passed=False,
-                reason=f"Action strongly optimized for engagement metrics (score: {engagement_score:.1f}) without assistance intent"
+                reason=f"Action strongly optimized for engagement metrics (score: {engagement_score:.1f}) without assistance intent",  # noqa: E501
             )
 
         # High urgency without any assistance intent is suspicious
         if action.urgency.value == "critical" and goal_relevance_score < 0.3:
             return RuleCheckResult(
                 passed=False,
-                reason="High urgency without clear assistance intent (possible manipulation)"
+                reason="High urgency without clear assistance intent (possible manipulation)",
             )
 
         return RuleCheckResult(
-            passed=True,
-            reason="Action intent aligned with user assistance"
+            passed=True, reason="Action intent aligned with user assistance"
         )
 
 
 class TopicFilter:
     """
     Filters content by topic based on user preferences
-    
+
     Blocks topics user has explicitly requested to avoid:
     - Politics
     - Specific work projects
     - Certain categories
     """
-    
+
     def check_topic(
-        self,
-        action: ProposedAction,
-        user_values: List[UserValue]
+        self, action: ProposedAction, user_values: List[UserValue]
     ) -> RuleCheckResult:
         """
         Check if action topic violates user filters
-        
+
         Args:
             action: Proposed action
             user_values: User's topic filters
-            
+
         Returns:
             RuleCheckResult with pass/fail
         """
         content = (action.content or "").lower()
         content_type = action.content_type.lower()
-        
+
         for value in user_values:
             if not value.active or value.type != ValueType.TOPIC_FILTER:
                 continue
-            
+
             # Extract blocked topic
             blocked_topic = value.value.lower().replace("no_", "").replace("_", " ")
-            
+
             if blocked_topic in content or blocked_topic in content_type:
                 return RuleCheckResult(
                     passed=False,
                     reason=f"Content violates topic filter: {value.value}",
-                    violated_values=[value.id or value.value]
+                    violated_values=[value.id or value.value],
                 )
-        
-        return RuleCheckResult(
-            passed=True,
-            reason="No topic filter violations"
-        )
+
+        return RuleCheckResult(passed=True, reason="No topic filter violations")
 
     def check_topic_text(
-        self,
-        content: str,
-        user_values: List[UserValue]
+        self, content: str, user_values: List[UserValue]
     ) -> RuleCheckResult:
         """
         Check if raw text content violates user topic filters
@@ -352,10 +348,7 @@ class TopicFilter:
                 return RuleCheckResult(
                     passed=False,
                     reason=f"Content contains blocked topic: {blocked_topic}",
-                    violated_values=[value.id or value.value]
+                    violated_values=[value.id or value.value],
                 )
 
-        return RuleCheckResult(
-            passed=True,
-            reason="No topic filter violations"
-        )
+        return RuleCheckResult(passed=True, reason="No topic filter violations")

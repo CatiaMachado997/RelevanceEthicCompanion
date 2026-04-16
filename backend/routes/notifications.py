@@ -14,11 +14,16 @@ router = APIRouter(prefix="/api/notifications", tags=["Notifications"])
 def get_context_manager() -> ContextManager:
     return ContextManager()
 
-def get_esl(context_manager: ContextManager = Depends(get_context_manager)) -> EthicalSafeguardLayer:
+
+def get_esl(
+    context_manager: ContextManager = Depends(get_context_manager),
+) -> EthicalSafeguardLayer:
     return EthicalSafeguardLayer(context_manager)
 
 
-def create_notification(conn, user_id: str, type: str, title: str, message: str, metadata: dict = None):
+def create_notification(
+    conn, user_id: str, type: str, title: str, message: str, metadata: dict = None
+):
     """Insert a notification row. Call inside an existing open DB connection."""
     with conn.cursor() as cur:
         cur.execute(
@@ -63,7 +68,9 @@ async def list_notifications(
             "notifications": notifications,
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching notifications: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching notifications: {str(e)}"
+        )
 
 
 @router.get("/count", response_model=dict)
@@ -94,11 +101,13 @@ async def mark_all_read(
         content_type="notification_read",
         content="Marking all notifications as read",
         urgency=UrgencyLevel.LOW,
-        metadata={"user_id": str(user_id)}
+        metadata={"user_id": str(user_id)},
     )
     decision = await esl.evaluate_action(proposed, user_id)
     if decision.status == ESLDecisionStatus.VETOED:
-        raise HTTPException(status_code=403, detail=f"Action blocked by ESL: {decision.reason}")
+        raise HTTPException(
+            status_code=403, detail=f"Action blocked by ESL: {decision.reason}"
+        )
 
     try:
         with get_db() as conn:
@@ -109,7 +118,9 @@ async def mark_all_read(
                 )
         return {"status": "success", "message": "All notifications marked as read"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error updating notifications: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error updating notifications: {str(e)}"
+        )
 
 
 @router.patch("/{notification_id}/read", response_model=dict)
@@ -123,11 +134,13 @@ async def mark_one_read(
         content_type="notification_read",
         content=f"Marking notification {notification_id} as read",
         urgency=UrgencyLevel.LOW,
-        metadata={"notification_id": notification_id}
+        metadata={"notification_id": notification_id},
     )
     decision = await esl.evaluate_action(proposed, user_id)
     if decision.status == ESLDecisionStatus.VETOED:
-        raise HTTPException(status_code=403, detail=f"Action blocked by ESL: {decision.reason}")
+        raise HTTPException(
+            status_code=403, detail=f"Action blocked by ESL: {decision.reason}"
+        )
 
     try:
         with get_db() as conn:
@@ -145,4 +158,6 @@ async def mark_one_read(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error updating notification: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error updating notification: {str(e)}"
+        )

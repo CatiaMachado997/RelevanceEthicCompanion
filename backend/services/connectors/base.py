@@ -2,6 +2,7 @@
 """
 BaseConnector — abstract interface for all data source connectors.
 """
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -10,6 +11,7 @@ from typing import Any, Dict, List, Optional
 @dataclass
 class SourceItem:
     """Normalized representation of an item from any external source."""
+
     user_id: str
     source_type: str
     source_item_type: str
@@ -52,6 +54,8 @@ class BaseConnector(ABC):
         ...
 
     @abstractmethod
-    async def execute_action(self, action_name: str, params: dict, credentials: dict) -> str:
+    async def execute_action(
+        self, action_name: str, params: dict, credentials: dict
+    ) -> str:
         """Execute a write or read action by name. Return a human-readable result string."""
         ...

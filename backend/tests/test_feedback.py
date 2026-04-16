@@ -1,8 +1,9 @@
 """Tests for the feedback API endpoint."""
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 from routes.feedback import router as feedback_router, get_feedback_processor
 from utils.supabase_auth import get_current_user_id

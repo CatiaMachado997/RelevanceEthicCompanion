@@ -14,7 +14,7 @@ import logging
 import os
 
 # Allow oauthlib to accept when Google returns a superset of requested scopes
-os.environ.setdefault('OAUTHLIB_RELAX_TOKEN_SCOPE', '1')
+os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -42,29 +42,33 @@ async def lifespan(app: FastAPI):
     print("🎯 Mission: Trust over Engagement")
 
     from utils.db import open_pool, close_pool
+
     open_pool()
 
     # Auto-migrate: ensure extra columns exist in user_settings
     try:
         from utils.db import get_db_connection
+
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 for col, defn in [
-                    ("weight_goal_alignment",    "FLOAT DEFAULT 1.0"),
-                    ("weight_time_sensitivity",  "FLOAT DEFAULT 1.0"),
-                    ("weight_personal_values",   "FLOAT DEFAULT 1.0"),
+                    ("weight_goal_alignment", "FLOAT DEFAULT 1.0"),
+                    ("weight_time_sensitivity", "FLOAT DEFAULT 1.0"),
+                    ("weight_personal_values", "FLOAT DEFAULT 1.0"),
                     ("weight_context_relevance", "FLOAT DEFAULT 1.0"),
-                    ("timezone",                 "TEXT"),
-                    ("language",                 "TEXT"),
-                    ("status",                   "TEXT DEFAULT 'available'"),
-                    ("status_until",             "TIMESTAMPTZ"),
+                    ("timezone", "TEXT"),
+                    ("language", "TEXT"),
+                    ("status", "TEXT DEFAULT 'available'"),
+                    ("status_until", "TIMESTAMPTZ"),
                 ]:
                     cur.execute(
                         f"ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS {col} {defn}"
                     )
         logger.debug("user_settings columns verified")
     except Exception as e:
-        logger.warning(f"Could not verify user_settings columns (DB may be unavailable): {e}")
+        logger.warning(
+            f"Could not verify user_settings columns (DB may be unavailable): {e}"
+        )
 
     # Auto-migrate V4+ tables (idempotent — safe to run on every startup)
     try:
@@ -110,8 +114,12 @@ async def lifespan(app: FastAPI):
                       updated_at    TIMESTAMPTZ DEFAULT NOW()
                     )
                 """)
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id)")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_documents_status  ON documents(status)")
+                cur.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id)"
+                )
+                cur.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_documents_status  ON documents(status)"
+                )
                 # Sprint 4: Projects
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS projects (
@@ -126,8 +134,12 @@ async def lifespan(app: FastAPI):
                       updated_at  TIMESTAMPTZ DEFAULT NOW()
                     )
                 """)
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id)")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_projects_status  ON projects(status)")
+                cur.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id)"
+                )
+                cur.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_projects_status  ON projects(status)"
+                )
                 # Sprint 4: Tasks
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS tasks (
@@ -147,9 +159,15 @@ async def lifespan(app: FastAPI):
                       updated_at     TIMESTAMPTZ DEFAULT NOW()
                     )
                 """)
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_tasks_user_id    ON tasks(user_id)")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id)")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_tasks_status     ON tasks(status)")
+                cur.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_tasks_user_id    ON tasks(user_id)"
+                )
+                cur.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id)"
+                )
+                cur.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_tasks_status     ON tasks(status)"
+                )
         logger.debug("V4+ tables verified")
     except Exception as e:
         logger.warning(f"Could not verify V4+ tables: {e}")
@@ -177,8 +195,7 @@ async def lifespan(app: FastAPI):
         weaviate_client = get_weaviate_client()
         embedding_service = EmbeddingService(settings.GEMINI_API_KEY)
         context_manager = ContextManager(
-            weaviate_client=weaviate_client,
-            embedding_service=embedding_service
+            weaviate_client=weaviate_client, embedding_service=embedding_service
         )
         data_ingestion = DataIngestionService(context_manager)
 
@@ -189,7 +206,9 @@ async def lifespan(app: FastAPI):
         print("   - Calendar sync: Every 15 minutes")
     except Exception as e:
         logger.warning(f"⚠️  Background scheduler failed to start: {e}")
-        logger.warning("   Continuing without scheduled syncing (manual sync still works)")
+        logger.warning(
+            "   Continuing without scheduled syncing (manual sync still works)"
+        )
 
     yield
 
@@ -207,11 +226,13 @@ app = FastAPI(
     title="Ethic Companion API",
     description="AI Companion with Ethical Safeguards - Trust over Engagement",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 from utils.errors import register_error_handlers
+
 register_error_handlers(app)
+
 
 async def _rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
     """Rate limit handler that logs auth-endpoint violations to the audit log."""
@@ -219,6 +240,7 @@ async def _rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONR
         path = request.url.path
         if "/auth/" in path or "/tools/" in path:
             from utils.auth_audit import log_auth_event
+
             log_auth_event(
                 event="rate_limited",
                 ip_address=request.client.host if request.client else None,
@@ -228,6 +250,7 @@ async def _rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONR
     except Exception:
         pass
     return await _rate_limit_exceeded_handler(request, exc)
+
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)
@@ -251,12 +274,28 @@ async def root():
         "version": "1.0.0",
         "status": "operational",
         "mission": "Trust over Engagement",
-        "esl_status": "active"
+        "esl_status": "active",
     }
 
 
 # Import routers
-from routes import auth, values, chat, goals, transparency, relevance, data_sources, profile, notifications, feedback, search, documents, projects, tasks, context
+from routes import (
+    auth,
+    values,
+    chat,
+    goals,
+    transparency,
+    relevance,
+    data_sources,
+    profile,
+    notifications,
+    feedback,
+    search,
+    documents,
+    projects,
+    tasks,
+    context,
+)
 from routes import settings as settings_router
 from routes.insight import router as insight_router
 from routes.health import router as health_router
@@ -284,10 +323,12 @@ app.include_router(context.router)
 app.include_router(status_router)
 
 from routes import tool_marketplace
+
 app.include_router(tool_marketplace.router)
 
 # Sprint 2a: Expose all routes as MCP tools
 from fastapi_mcp import FastApiMCP
+
 mcp = FastApiMCP(app)
 mcp.mount_http()
 
@@ -297,5 +338,5 @@ if __name__ == "__main__":
         "main:app",
         host=settings.API_HOST,
         port=settings.API_PORT,
-        reload=settings.ENVIRONMENT == "development"
+        reload=settings.ENVIRONMENT == "development",
     )

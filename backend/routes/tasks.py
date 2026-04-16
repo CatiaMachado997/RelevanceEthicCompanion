@@ -1,5 +1,6 @@
 # backend/routes/tasks.py
 """Tasks API routes — CRUD + AI extraction."""
+
 import json
 import logging
 from typing import Any, Dict, List, Optional
@@ -79,7 +80,9 @@ def _serialize_task(row: dict) -> Dict[str, Any]:
     }
 
 
-def get_user_tasks(user_id: str, project_id: Optional[str] = None, status: Optional[str] = None) -> List[Dict[str, Any]]:
+def get_user_tasks(
+    user_id: str, project_id: Optional[str] = None, status: Optional[str] = None
+) -> List[Dict[str, Any]]:
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             query = "SELECT * FROM tasks WHERE user_id = %s"
@@ -116,7 +119,9 @@ async def extract_tasks(
     )
     decision = await esl.evaluate_action(proposed_action, user_id)
     if decision.status == ESLDecisionStatus.VETOED:
-        raise HTTPException(status_code=403, detail=f"Extraction blocked by ESL: {decision.reason}")
+        raise HTTPException(
+            status_code=403, detail=f"Extraction blocked by ESL: {decision.reason}"
+        )
 
     if not settings.GROQ_API_KEY:
         raise HTTPException(status_code=503, detail="AI extraction not configured")
@@ -165,7 +170,10 @@ async def get_task(
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT * FROM tasks WHERE id = %s AND user_id = %s", (task_id, user_id))
+                cur.execute(
+                    "SELECT * FROM tasks WHERE id = %s AND user_id = %s",
+                    (task_id, user_id),
+                )
                 row = cur.fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Task not found")
@@ -192,7 +200,9 @@ async def create_task(
     )
     decision = await esl.evaluate_action(proposed_action, user_id)
     if decision.status == ESLDecisionStatus.VETOED:
-        raise HTTPException(status_code=403, detail=f"Blocked by ESL: {decision.reason}")
+        raise HTTPException(
+            status_code=403, detail=f"Blocked by ESL: {decision.reason}"
+        )
 
     try:
         with get_db_connection() as conn:
@@ -206,8 +216,13 @@ async def create_task(
                     RETURNING *
                     """,
                     (
-                        user_id, request.project_id, request.title, request.description,
-                        request.priority, request.due_date, request.source_origin,
+                        user_id,
+                        request.project_id,
+                        request.title,
+                        request.description,
+                        request.priority,
+                        request.due_date,
+                        request.source_origin,
                         request.ai_confidence,
                     ),
                 )
@@ -234,7 +249,9 @@ async def update_task(
     )
     decision = await esl.evaluate_action(proposed_action, user_id)
     if decision.status == ESLDecisionStatus.VETOED:
-        raise HTTPException(status_code=403, detail=f"Update blocked by ESL: {decision.reason}")
+        raise HTTPException(
+            status_code=403, detail=f"Update blocked by ESL: {decision.reason}"
+        )
 
     updates = request.model_dump(exclude_none=True)
     if not updates:
@@ -276,7 +293,9 @@ async def delete_task(
     )
     decision = await esl.evaluate_action(proposed_action, user_id)
     if decision.status == ESLDecisionStatus.VETOED:
-        raise HTTPException(status_code=403, detail=f"Delete blocked by ESL: {decision.reason}")
+        raise HTTPException(
+            status_code=403, detail=f"Delete blocked by ESL: {decision.reason}"
+        )
 
     try:
         with get_db_connection() as conn:

@@ -23,7 +23,9 @@ class SlackSync:
 
     SCOPES = "channels:history,channels:read"
 
-    def get_authorization_url(self, user_id: str, oauth_state: Optional[str] = None) -> str:
+    def get_authorization_url(
+        self, user_id: str, oauth_state: Optional[str] = None
+    ) -> str:
         params = {
             "client_id": settings.SLACK_CLIENT_ID,
             "scope": self.SCOPES,
@@ -40,7 +42,7 @@ class SlackSync:
                 "client_secret": settings.SLACK_CLIENT_SECRET,
                 "code": code,
                 "redirect_uri": settings.SLACK_REDIRECT_URI,
-            }
+            },
         )
         response.raise_for_status()
         data = response.json()
@@ -50,14 +52,14 @@ class SlackSync:
             "access_token": data["access_token"],
             "refresh_token": None,
             "expires_at": None,
-            "team": data.get("team", {}).get("name", "")
+            "team": data.get("team", {}).get("name", ""),
         }
 
     def fetch_messages(
         self,
         access_token: str,
         max_channels: int = 5,
-        max_messages_per_channel: int = 20
+        max_messages_per_channel: int = 20,
     ) -> List[Dict[str, Any]]:
         """Fetch recent messages from public channels"""
         headers = {"Authorization": f"Bearer {access_token}"}
@@ -66,7 +68,11 @@ class SlackSync:
         r = httpx.get(
             SLACK_CHANNELS_URL,
             headers=headers,
-            params={"limit": max_channels, "exclude_archived": True, "types": "public_channel"}
+            params={
+                "limit": max_channels,
+                "exclude_archived": True,
+                "types": "public_channel",
+            },
         )
         r.raise_for_status()
         channels_data = r.json()
@@ -77,7 +83,7 @@ class SlackSync:
             hist = httpx.get(
                 SLACK_HISTORY_URL,
                 headers=headers,
-                params={"channel": channel["id"], "limit": max_messages_per_channel}
+                params={"channel": channel["id"], "limit": max_messages_per_channel},
             )
             hist.raise_for_status()
             hist_data = hist.json()
@@ -85,11 +91,13 @@ class SlackSync:
                 continue
             for msg in hist_data.get("messages", []):
                 if msg.get("type") == "message" and msg.get("text"):
-                    messages.append({
-                        "channel": channel["name"],
-                        "text": msg["text"],
-                        "ts": msg["ts"],
-                        "user": msg.get("user", ""),
-                    })
+                    messages.append(
+                        {
+                            "channel": channel["name"],
+                            "text": msg["text"],
+                            "ts": msg["ts"],
+                            "user": msg.get("user", ""),
+                        }
+                    )
 
         return messages

@@ -10,7 +10,6 @@ Every ESL decision MUST be logged for:
 
 from typing import List, Dict, Any, Optional, Callable
 from datetime import datetime, timedelta, UTC
-from contextlib import contextmanager
 import json
 import logging
 
@@ -61,7 +60,7 @@ class ESLAuditLogger:
         user_id: str,
         proposed_action: ProposedAction,
         decision: ESLDecision,
-        context_snapshot: Dict[str, Any]
+        context_snapshot: Dict[str, Any],
     ) -> None:
         """
         Log an ESL decision.
@@ -77,7 +76,7 @@ class ESLAuditLogger:
             proposed_action=proposed_action,
             decision=decision,
             context_snapshot=context_snapshot,
-            timestamp=datetime.now(UTC)
+            timestamp=datetime.now(UTC),
         )
 
         if self._use_database:
@@ -102,26 +101,27 @@ class ESLAuditLogger:
                         (
                             audit_log.user_id,
                             audit_log.timestamp,
-                            json.dumps(audit_log.proposed_action.model_dump(), default=str),
+                            json.dumps(
+                                audit_log.proposed_action.model_dump(), default=str
+                            ),
                             audit_log.decision.status.value,
                             audit_log.decision.reason,
                             audit_log.decision.violated_values,
                             audit_log.decision.applied_rules,
                             audit_log.decision.confidence,
-                            json.dumps(audit_log.context_snapshot, default=str)
-                        )
+                            json.dumps(audit_log.context_snapshot, default=str),
+                        ),
                     )
-            logger.debug("Audit log persisted to database for user %s", audit_log.user_id)
+            logger.debug(
+                "Audit log persisted to database for user %s", audit_log.user_id
+            )
         except Exception as e:
             logger.error("Failed to persist audit log to database: %s", e)
             # Fallback to in-memory storage
             self._in_memory_logs.append(audit_log)
 
     async def get_user_logs(
-        self,
-        user_id: str,
-        days: int = 7,
-        status_filter: Optional[str] = None
+        self, user_id: str, days: int = 7, status_filter: Optional[str] = None
     ) -> List[ESLAuditLog]:
         """
         Retrieve audit logs for a user.
@@ -140,7 +140,8 @@ class ESLAuditLogger:
         # In-memory retrieval
         cutoff_time = datetime.now(UTC) - timedelta(days=days)
         logs = [
-            log for log in self._in_memory_logs
+            log
+            for log in self._in_memory_logs
             if log.user_id == user_id and log.timestamp >= cutoff_time
         ]
 
@@ -150,10 +151,7 @@ class ESLAuditLogger:
         return logs
 
     async def _get_logs_from_database(
-        self,
-        user_id: str,
-        days: int,
-        status_filter: Optional[str]
+        self, user_id: str, days: int, status_filter: Optional[str]
     ) -> List[ESLAuditLog]:
         """Retrieve audit logs from PostgreSQL."""
         try:
@@ -183,27 +181,37 @@ class ESLAuditLogger:
                     logs = []
                     for row in rows:
                         # rows are dicts due to dict_row cursor factory
-                        proposed_action_data = row['proposed_action'] if isinstance(row['proposed_action'], dict) else json.loads(row['proposed_action'])
-                        context_snapshot = row['context_snapshot'] if isinstance(row['context_snapshot'], dict) else json.loads(row['context_snapshot'])
+                        proposed_action_data = (
+                            row["proposed_action"]
+                            if isinstance(row["proposed_action"], dict)
+                            else json.loads(row["proposed_action"])
+                        )
+                        context_snapshot = (
+                            row["context_snapshot"]
+                            if isinstance(row["context_snapshot"], dict)
+                            else json.loads(row["context_snapshot"])
+                        )
 
                         proposed_action = ProposedAction(**proposed_action_data)
                         decision = ESLDecision(
-                            status=row['decision_status'],
-                            reason=row['decision_reason'],
-                            violated_values=row['violated_values'] or [],
-                            applied_rules=row['applied_rules'] or [],
-                            confidence=row['confidence'],
-                            timestamp=row['timestamp']
+                            status=row["decision_status"],
+                            reason=row["decision_reason"],
+                            violated_values=row["violated_values"] or [],
+                            applied_rules=row["applied_rules"] or [],
+                            confidence=row["confidence"],
+                            timestamp=row["timestamp"],
                         )
 
-                        logs.append(ESLAuditLog(
-                            id=str(row['id']),
-                            user_id=str(row['user_id']),
-                            timestamp=row['timestamp'],
-                            proposed_action=proposed_action,
-                            decision=decision,
-                            context_snapshot=context_snapshot
-                        ))
+                        logs.append(
+                            ESLAuditLog(
+                                id=str(row["id"]),
+                                user_id=str(row["user_id"]),
+                                timestamp=row["timestamp"],
+                                proposed_action=proposed_action,
+                                decision=decision,
+                                context_snapshot=context_snapshot,
+                            )
+                        )
 
                     return logs
         except Exception as e:
@@ -212,15 +220,13 @@ class ESLAuditLogger:
             return await self._get_in_memory_logs(user_id, days, status_filter)
 
     async def _get_in_memory_logs(
-        self,
-        user_id: str,
-        days: int,
-        status_filter: Optional[str]
+        self, user_id: str, days: int, status_filter: Optional[str]
     ) -> List[ESLAuditLog]:
         """Fallback in-memory retrieval."""
         cutoff_time = datetime.now(UTC) - timedelta(days=days)
         logs = [
-            log for log in self._in_memory_logs
+            log
+            for log in self._in_memory_logs
             if log.user_id == user_id and log.timestamp >= cutoff_time
         ]
 
@@ -249,7 +255,7 @@ class ESLAuditLogger:
                 "veto_rate": 0.0,
                 "modification_rate": 0.0,
                 "most_common_violations": [],
-                "most_active_rules": []
+                "most_active_rules": [],
             }
 
         total = len(logs)
@@ -275,14 +281,10 @@ class ESLAuditLogger:
             "veto_rate": vetoed / total,
             "modification_rate": modified / total,
             "most_common_violations": sorted(
-                violation_counts.items(),
-                key=lambda x: x[1],
-                reverse=True
+                violation_counts.items(), key=lambda x: x[1], reverse=True
             )[:5],
             "most_active_rules": sorted(
-                rule_counts.items(),
-                key=lambda x: x[1],
-                reverse=True
+                rule_counts.items(), key=lambda x: x[1], reverse=True
             )[:5],
-            "period_days": days
+            "period_days": days,
         }

@@ -9,6 +9,7 @@ from services.connectors.slack import SlackConnector
 
 class ConcreteConnector(BaseConnector):
     """Minimal concrete subclass for testing the ABC."""
+
     source_type = "test_source"
 
     def get_authorization_url(self, user_id: str, state=None) -> str:
@@ -30,7 +31,9 @@ class ConcreteConnector(BaseConnector):
             body=raw.get("content"),
         )
 
-    async def execute_action(self, action_name: str, params: dict, credentials: dict) -> str:
+    async def execute_action(
+        self, action_name: str, params: dict, credentials: dict
+    ) -> str:
         return f"Action {action_name} not yet implemented for this connector"
 
 
@@ -43,7 +46,9 @@ def test_base_connector_interface():
 
 def test_normalize_to_source_item():
     conn = ConcreteConnector()
-    item = conn.normalize_to_source_item({"id": "x1", "title": "Hello", "content": "World"}, "user-1")
+    item = conn.normalize_to_source_item(
+        {"id": "x1", "title": "Hello", "content": "World"}, "user-1"
+    )
     assert item.external_id == "x1"
     assert item.title == "Hello"
     assert item.source_type == "test_source"
@@ -62,6 +67,7 @@ def test_source_item_has_required_fields():
 
 
 # --- GoogleCalendarConnector tests ---
+
 
 def test_google_calendar_connector_source_type():
     conn = GoogleCalendarConnector(redirect_uri="https://example.com/callback")
@@ -103,6 +109,7 @@ def test_google_calendar_normalize_all_day_event():
 
 # --- GmailConnector tests ---
 
+
 def test_gmail_connector_source_type():
     conn = GmailConnector(redirect_uri="https://example.com/callback")
     assert conn.source_type == "gmail"
@@ -134,6 +141,7 @@ def test_gmail_normalize_no_subject():
 
 
 # --- SlackConnector tests ---
+
 
 def test_slack_connector_source_type():
     conn = SlackConnector()
@@ -185,7 +193,9 @@ async def test_sync_writes_to_source_items():
         title="Standup",
     )
     mock_connector = MagicMock()
-    mock_connector.fetch_raw_items = AsyncMock(return_value=[{"id": "evt_1", "summary": "Standup", "start": {}, "end": {}}])
+    mock_connector.fetch_raw_items = AsyncMock(
+        return_value=[{"id": "evt_1", "summary": "Standup", "start": {}, "end": {}}]
+    )
     mock_connector.normalize_to_source_item.return_value = fake_item
 
     written_items = []
@@ -193,13 +203,19 @@ async def test_sync_writes_to_source_items():
     async def fake_store(item):
         written_items.append(item)
 
-    with patch("services.data_ingestion.get_connector", return_value=mock_connector), \
-         patch.object(service, "_get_valid_token", new_callable=AsyncMock,
-                      return_value="tok"), \
-         patch.object(service, "_store_normalized_item", side_effect=fake_store), \
-         patch.object(service, "_update_last_sync", new_callable=AsyncMock), \
-         patch.object(service, "_clear_sync_error", new_callable=AsyncMock), \
-         patch.object(service, "_get_recent_synced_items", new_callable=AsyncMock, return_value=[]):
+    with patch(
+        "services.data_ingestion.get_connector", return_value=mock_connector
+    ), patch.object(
+        service, "_get_valid_token", new_callable=AsyncMock, return_value="tok"
+    ), patch.object(
+        service, "_store_normalized_item", side_effect=fake_store
+    ), patch.object(
+        service, "_update_last_sync", new_callable=AsyncMock
+    ), patch.object(
+        service, "_clear_sync_error", new_callable=AsyncMock
+    ), patch.object(
+        service, "_get_recent_synced_items", new_callable=AsyncMock, return_value=[]
+    ):
         result = await service.sync_data_source("user-1", "google_calendar")
 
     assert result["success"] is True

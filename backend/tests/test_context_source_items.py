@@ -1,8 +1,8 @@
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 
-
 # ─── ContextManager tests ────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_context_builder_populates_source_context():
@@ -10,21 +10,29 @@ async def test_context_builder_populates_source_context():
     from orchestrator.nodes.context import context_builder_node
 
     fake_items = [
-        {"source_type": "google_calendar", "source_item_type": "calendar_event",
-         "title": "Standup", "body": "", "item_at": "2026-04-08T09:00:00+00:00"},
+        {
+            "source_type": "google_calendar",
+            "source_item_type": "calendar_event",
+            "title": "Standup",
+            "body": "",
+            "item_at": "2026-04-08T09:00:00+00:00",
+        },
     ]
 
     with patch("orchestrator.nodes.context.get_context_manager") as mock_gcm:
         cm = MagicMock()
-        cm.get_user_context = AsyncMock(return_value=MagicMock(
-            active_goals=[], user_values=[], focus_mode=False, additional_context={}
-        ))
+        cm.get_user_context = AsyncMock(
+            return_value=MagicMock(
+                active_goals=[], user_values=[], focus_mode=False, additional_context={}
+            )
+        )
         cm.get_conversation_history = AsyncMock(return_value=[])
         cm.get_recent_source_items = AsyncMock(return_value=fake_items)
         mock_gcm.return_value = cm
 
         state = {
-            "user_id": "u1", "conversation_id": None,
+            "user_id": "u1",
+            "conversation_id": None,
             "source_context": [],
         }
         result = await context_builder_node(state)
@@ -41,9 +49,11 @@ async def test_context_builder_empty_when_no_items():
 
     with patch("orchestrator.nodes.context.get_context_manager") as mock_gcm:
         cm = MagicMock()
-        cm.get_user_context = AsyncMock(return_value=MagicMock(
-            active_goals=[], user_values=[], focus_mode=False, additional_context={}
-        ))
+        cm.get_user_context = AsyncMock(
+            return_value=MagicMock(
+                active_goals=[], user_values=[], focus_mode=False, additional_context={}
+            )
+        )
         cm.get_conversation_history = AsyncMock(return_value=[])
         cm.get_recent_source_items = AsyncMock(return_value=[])
         mock_gcm.return_value = cm
@@ -63,10 +73,20 @@ def test_system_prompt_includes_context_section():
             "user_values": [],
             "snapshot": {},
             "source_context": [
-                {"source_type": "google_calendar", "source_item_type": "calendar_event",
-                 "title": "Team standup", "body": "", "item_at": "2026-04-08T09:00:00+00:00"},
-                {"source_type": "gmail", "source_item_type": "email",
-                 "title": "Hello world", "body": "From: alice", "item_at": "2026-04-07T10:00:00+00:00"},
+                {
+                    "source_type": "google_calendar",
+                    "source_item_type": "calendar_event",
+                    "title": "Team standup",
+                    "body": "",
+                    "item_at": "2026-04-08T09:00:00+00:00",
+                },
+                {
+                    "source_type": "gmail",
+                    "source_item_type": "email",
+                    "title": "Hello world",
+                    "body": "From: alice",
+                    "item_at": "2026-04-07T10:00:00+00:00",
+                },
             ],
         },
     }

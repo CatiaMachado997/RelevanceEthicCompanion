@@ -3,17 +3,19 @@ Unit tests for Phase 7 proactive scheduler jobs.
 
 Tests use mocking so no live DB, Groq, or scheduler is required.
 """
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, call
-from datetime import datetime, timedelta
 
+import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import datetime, timedelta
 
 # ─────────────────────────────────────────────
 # Helper: build a minimal BackgroundScheduler without starting APScheduler
 # ─────────────────────────────────────────────
 
+
 def make_scheduler():
     from services.scheduler import BackgroundScheduler
+
     data_ingestion = MagicMock()
     sched = BackgroundScheduler.__new__(BackgroundScheduler)
     sched.data_ingestion = data_ingestion
@@ -25,6 +27,7 @@ def make_scheduler():
 # ─────────────────────────────────────────────
 # _generate_deadline_warnings
 # ─────────────────────────────────────────────
+
 
 class TestDeadlineWarnings:
     @pytest.mark.asyncio
@@ -80,9 +83,12 @@ class TestDeadlineWarnings:
             ctx.__exit__ = MagicMock(return_value=False)
             return ctx
 
-        with patch("services.scheduler.get_db_connection", side_effect=db_side_effect), \
-             patch("services.scheduler.BackgroundScheduler._generate_deadline_warnings",
-                   wraps=sched._generate_deadline_warnings):
+        with patch(
+            "services.scheduler.get_db_connection", side_effect=db_side_effect
+        ), patch(
+            "services.scheduler.BackgroundScheduler._generate_deadline_warnings",
+            wraps=sched._generate_deadline_warnings,
+        ):
             # Just verify it doesn't raise
             await sched._generate_deadline_warnings()
 
@@ -122,9 +128,6 @@ class TestDeadlineWarnings:
             ctx.__exit__ = MagicMock(return_value=False)
             return ctx
 
-        insert_calls = []
-        original_create = None
-
         with patch("services.scheduler.get_db_connection", side_effect=db_side_effect):
             await sched._generate_deadline_warnings()
             # If dedup triggers, no INSERT should happen beyond the dedup SELECT
@@ -134,6 +137,7 @@ class TestDeadlineWarnings:
 # ─────────────────────────────────────────────
 # _generate_daily_focus_plan
 # ─────────────────────────────────────────────
+
 
 class TestDailyFocusPlan:
     @pytest.mark.asyncio
@@ -166,11 +170,16 @@ class TestDailyFocusPlan:
             ctx.__exit__ = MagicMock(return_value=False)
             return ctx
 
-        with patch("services.scheduler.get_db_connection", side_effect=db_side_effect), \
-             patch("services.context_snapshot.ContextSnapshotService.compute",
-                   return_value=empty_snapshot), \
-             patch("services.context_manager.ContextManager"), \
-             patch("langchain_groq.ChatGroq"):
+        with patch(
+            "services.scheduler.get_db_connection", side_effect=db_side_effect
+        ), patch(
+            "services.context_snapshot.ContextSnapshotService.compute",
+            return_value=empty_snapshot,
+        ), patch(
+            "services.context_manager.ContextManager"
+        ), patch(
+            "langchain_groq.ChatGroq"
+        ):
             # Should not raise, just skip the user
             await sched._generate_daily_focus_plan()
 
@@ -204,10 +213,14 @@ class TestDailyFocusPlan:
 
         llm_called = []
 
-        with patch("services.scheduler.get_db_connection", side_effect=db_side_effect), \
-             patch("services.context_manager.ContextManager"), \
-             patch("langchain_groq.ChatGroq") as mock_llm_cls:
-            mock_llm_cls.return_value.ainvoke = AsyncMock(side_effect=lambda _: llm_called.append(1))
+        with patch(
+            "services.scheduler.get_db_connection", side_effect=db_side_effect
+        ), patch("services.context_manager.ContextManager"), patch(
+            "langchain_groq.ChatGroq"
+        ) as mock_llm_cls:
+            mock_llm_cls.return_value.ainvoke = AsyncMock(
+                side_effect=lambda _: llm_called.append(1)
+            )
             await sched._generate_daily_focus_plan()
             assert len(llm_called) == 0  # LLM should not be called
 
@@ -219,6 +232,7 @@ class TestDailyFocusPlan:
 # ─────────────────────────────────────────────
 # _generate_project_status_snapshot
 # ─────────────────────────────────────────────
+
 
 class TestProjectStatusSnapshot:
     @pytest.mark.asyncio
@@ -239,16 +253,21 @@ class TestProjectStatusSnapshot:
             ctx.__exit__ = MagicMock(return_value=False)
             return ctx
 
-        with patch("services.scheduler.get_db_connection", side_effect=db_side_effect), \
-             patch("langchain_groq.ChatGroq"):
+        with patch(
+            "services.scheduler.get_db_connection", side_effect=db_side_effect
+        ), patch("langchain_groq.ChatGroq"):
             await sched._generate_project_status_snapshot()
 
     @pytest.mark.asyncio
     async def test_skips_user_already_snapshotted_this_week(self):
         sched = make_scheduler()
         project_row = {
-            "id": "proj-1", "user_id": "user-6",
-            "title": "Product Launch", "open_tasks": 3, "done_tasks": 7, "overdue_tasks": 0,
+            "id": "proj-1",
+            "user_id": "user-6",
+            "title": "Product Launch",
+            "open_tasks": 3,
+            "done_tasks": 7,
+            "overdue_tasks": 0,
         }
 
         call_count = {"n": 0}
@@ -275,9 +294,12 @@ class TestProjectStatusSnapshot:
 
         llm_called = []
 
-        with patch("services.scheduler.get_db_connection", side_effect=db_side_effect), \
-             patch("langchain_groq.ChatGroq") as mock_llm_cls:
-            mock_llm_cls.return_value.ainvoke = AsyncMock(side_effect=lambda _: llm_called.append(1))
+        with patch(
+            "services.scheduler.get_db_connection", side_effect=db_side_effect
+        ), patch("langchain_groq.ChatGroq") as mock_llm_cls:
+            mock_llm_cls.return_value.ainvoke = AsyncMock(
+                side_effect=lambda _: llm_called.append(1)
+            )
             await sched._generate_project_status_snapshot()
             assert len(llm_called) == 0
 
@@ -285,8 +307,12 @@ class TestProjectStatusSnapshot:
     async def test_generates_snapshot_when_no_prior_notification(self):
         sched = make_scheduler()
         project_row = {
-            "id": "proj-2", "user_id": "user-7",
-            "title": "Q3 Report", "open_tasks": 5, "done_tasks": 2, "overdue_tasks": 1,
+            "id": "proj-2",
+            "user_id": "user-7",
+            "title": "Q3 Report",
+            "open_tasks": 5,
+            "done_tasks": 2,
+            "overdue_tasks": 1,
         }
 
         call_count = {"n": 0}
@@ -312,10 +338,11 @@ class TestProjectStatusSnapshot:
             return ctx
 
         mock_response = MagicMock()
-        mock_response.content = "Q3 Report is progressing well with 2 tasks done. One task is overdue — prioritise it Monday morning."
+        mock_response.content = "Q3 Report is progressing well with 2 tasks done. One task is overdue — prioritise it Monday morning."  # noqa: E501
 
-        with patch("services.scheduler.get_db_connection", side_effect=db_side_effect), \
-             patch("langchain_groq.ChatGroq") as mock_llm_cls:
+        with patch(
+            "services.scheduler.get_db_connection", side_effect=db_side_effect
+        ), patch("langchain_groq.ChatGroq") as mock_llm_cls:
             mock_llm_cls.return_value.ainvoke = AsyncMock(return_value=mock_response)
             await sched._generate_project_status_snapshot()
             # LLM was called once for the one user
@@ -325,6 +352,7 @@ class TestProjectStatusSnapshot:
 # ─────────────────────────────────────────────
 # _generate_pre_meeting_briefs
 # ─────────────────────────────────────────────
+
 
 class TestPreMeetingBriefs:
     @pytest.mark.asyncio
@@ -345,9 +373,11 @@ class TestPreMeetingBriefs:
             ctx.__exit__ = MagicMock(return_value=False)
             return ctx
 
-        with patch("services.scheduler.get_db_connection", side_effect=db_side_effect), \
-             patch("services.context_manager.ContextManager"), \
-             patch("langchain_groq.ChatGroq"):
+        with patch(
+            "services.scheduler.get_db_connection", side_effect=db_side_effect
+        ), patch("services.context_manager.ContextManager"), patch(
+            "langchain_groq.ChatGroq"
+        ):
             await sched._generate_pre_meeting_briefs()
 
     @pytest.mark.asyncio
@@ -371,13 +401,15 @@ class TestPreMeetingBriefs:
 
             call_count["n"] += 1
             if call_count["n"] == 1:
-                cur.fetchall.return_value = [{
-                    "user_id": "user-uuid-5",
-                    "title": "Quarterly Review",
-                    "start_time": event_start,
-                    "location": "Room 3",
-                    "description": None,
-                }]
+                cur.fetchall.return_value = [
+                    {
+                        "user_id": "user-uuid-5",
+                        "title": "Quarterly Review",
+                        "start_time": event_start,
+                        "location": "Room 3",
+                        "description": None,
+                    }
+                ]
             else:
                 # Dedup hit — brief already exists
                 cur.fetchone.return_value = {"1": 1}
@@ -388,10 +420,14 @@ class TestPreMeetingBriefs:
 
         llm_called = []
 
-        with patch("services.scheduler.get_db_connection", side_effect=db_side_effect), \
-             patch("services.context_manager.ContextManager"), \
-             patch("langchain_groq.ChatGroq") as mock_llm_cls:
-            mock_llm_cls.return_value.ainvoke = AsyncMock(side_effect=lambda _: llm_called.append(1))
+        with patch(
+            "services.scheduler.get_db_connection", side_effect=db_side_effect
+        ), patch("services.context_manager.ContextManager"), patch(
+            "langchain_groq.ChatGroq"
+        ) as mock_llm_cls:
+            mock_llm_cls.return_value.ainvoke = AsyncMock(
+                side_effect=lambda _: llm_called.append(1)
+            )
             await sched._generate_pre_meeting_briefs()
             assert len(llm_called) == 0
 
@@ -399,6 +435,7 @@ class TestPreMeetingBriefs:
 # ─────────────────────────────────────────────
 # _generate_related_items_clusters
 # ─────────────────────────────────────────────
+
 
 class TestRelatedItemsClustering:
     @pytest.mark.asyncio
@@ -424,7 +461,10 @@ class TestRelatedItemsClustering:
                 cur.fetchone.return_value = None  # no dedup hit
             elif n == 3:
                 # tasks
-                cur.fetchall.return_value = [{"title": "Launch campaign"}, {"title": "Write report"}]
+                cur.fetchall.return_value = [
+                    {"title": "Launch campaign"},
+                    {"title": "Write report"},
+                ]
             elif n == 4:
                 cur.fetchall.return_value = []  # no events
             else:
@@ -468,12 +508,28 @@ class TestRelatedItemsClustering:
     def test_keywords_extracts_significant_words(self):
         """Unit test for the keyword extraction logic (tested via the scheduler module)."""
         import re
+
         STOP_WORDS = {
-            'the', 'and', 'for', 'with', 'this', 'that', 'from', 'have',
-            'will', 'been', 'are', 'our', 'your', 'their', 'about', 'some',
+            "the",
+            "and",
+            "for",
+            "with",
+            "this",
+            "that",
+            "from",
+            "have",
+            "will",
+            "been",
+            "are",
+            "our",
+            "your",
+            "their",
+            "about",
+            "some",
         }
+
         def keywords(text):
-            words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
+            words = re.findall(r"\b[a-zA-Z]{4,}\b", text.lower())
             return {w for w in words if w not in STOP_WORDS}
 
         result = keywords("Prepare for the Q3 product launch meeting")

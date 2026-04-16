@@ -1,4 +1,5 @@
 """Tests that the auth session cookie is set with correct security attributes."""
+
 import pytest
 from unittest.mock import patch
 from fastapi.testclient import TestClient
@@ -10,6 +11,7 @@ def client_with_secure_cookie(monkeypatch):
     with patch("utils.weaviate_client.get_weaviate_client", return_value=None):
         from main import app
         from config import settings
+
         monkeypatch.setattr(settings, "COOKIE_SECURE", True)
         with TestClient(app, raise_server_exceptions=False) as client:
             yield client
@@ -21,6 +23,7 @@ def client_with_insecure_cookie(monkeypatch):
     with patch("utils.weaviate_client.get_weaviate_client", return_value=None):
         from main import app
         from config import settings
+
         monkeypatch.setattr(settings, "COOKIE_SECURE", False)
         with TestClient(app, raise_server_exceptions=False) as client:
             yield client

@@ -23,7 +23,9 @@ def get_context_manager() -> ContextManager:
     return ContextManager()
 
 
-def get_esl(context_manager: ContextManager = Depends(get_context_manager)) -> EthicalSafeguardLayer:
+def get_esl(
+    context_manager: ContextManager = Depends(get_context_manager),
+) -> EthicalSafeguardLayer:
     return EthicalSafeguardLayer(context_manager)
 
 
@@ -93,18 +95,20 @@ async def update_profile(
         content_type="profile_update",
         content="Updating user profile",
         urgency=UrgencyLevel.LOW,
-        metadata={"user_id": str(user_id)}
+        metadata={"user_id": str(user_id)},
     )
     decision = await esl.evaluate_action(proposed_action, user_id)
     if decision.status == ESLDecisionStatus.VETOED:
         raise HTTPException(
-            status_code=403,
-            detail=f"Profile update blocked by ESL: {decision.reason}"
+            status_code=403, detail=f"Profile update blocked by ESL: {decision.reason}"
         )
 
     ALLOWED_UPDATE_FIELDS = {"display_name", "timezone"}
-    updates = {k: v for k, v in request.model_dump().items()
-               if v is not None and k in ALLOWED_UPDATE_FIELDS}
+    updates = {
+        k: v
+        for k, v in request.model_dump().items()
+        if v is not None and k in ALLOWED_UPDATE_FIELDS
+    }
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
 

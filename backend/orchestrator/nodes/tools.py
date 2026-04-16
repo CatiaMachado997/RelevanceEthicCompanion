@@ -1,4 +1,5 @@
 """ToolPlanner and ToolExecution — LLM-driven tool selection and execution."""
+
 import json
 import logging
 from datetime import datetime, UTC
@@ -63,13 +64,14 @@ async def _audit_tool_action(
     except Exception:
         pass  # audit failure must never break execution
 
+
 # Maps tool name → display metadata. None means the tool is a write tool (no citation shown).
 _TOOL_CITATION_META: dict = {
     "query_calendar": {"label": "Google Calendar", "icon": "calendar"},
-    "query_memory":   {"label": "Memory",          "icon": "memory"},
-    "get_user_goals": {"label": "Goals",            "icon": "target"},
-    "web_search":     {"label": "Web Search",       "icon": "globe"},
-    "create_note":    None,  # write tool — omit from citations
+    "query_memory": {"label": "Memory", "icon": "memory"},
+    "get_user_goals": {"label": "Goals", "icon": "target"},
+    "web_search": {"label": "Web Search", "icon": "globe"},
+    "create_note": None,  # write tool — omit from citations
 }
 
 
@@ -100,16 +102,22 @@ def _build_system_prompt(state: AgentState) -> str:
     snapshot = ctx.get("snapshot", {})
 
     # Format goals
-    goal_lines = "\n".join(
-        f"  - {g.get('title', g) if isinstance(g, dict) else str(g)}"
-        for g in goals[:5]
-    ) or "  (none)"
+    goal_lines = (
+        "\n".join(
+            f"  - {g.get('title', g) if isinstance(g, dict) else str(g)}"
+            for g in goals[:5]
+        )
+        or "  (none)"
+    )
 
     # Format values
-    value_lines = "\n".join(
-        f"  - {v.get('value', v) if isinstance(v, dict) else str(v)}"
-        for v in values[:5]
-    ) or "  (none)"
+    value_lines = (
+        "\n".join(
+            f"  - {v.get('value', v) if isinstance(v, dict) else str(v)}"
+            for v in values[:5]
+        )
+        or "  (none)"
+    )
 
     # Format snapshot sections (only when non-empty)
     snapshot_sections = []
@@ -198,7 +206,9 @@ async def tool_planner_node(state: AgentState) -> dict:
 
     cm = get_context_manager()
     user_id = state["user_id"]
-    tools = await create_langchain_tools(cm, user_id, active_sources=state.get("active_sources") or [])
+    tools = await create_langchain_tools(
+        cm, user_id, active_sources=state.get("active_sources") or []
+    )
     llm = ChatGroq(
         model=state.get("model", "llama-3.3-70b-versatile"),
         api_key=settings.GROQ_API_KEY,
@@ -229,7 +239,9 @@ async def tool_execution_node(state: AgentState) -> dict:
 
     cm = get_context_manager()
     user_id = state["user_id"]
-    tools = await create_langchain_tools(cm, user_id, active_sources=state.get("active_sources") or [])
+    tools = await create_langchain_tools(
+        cm, user_id, active_sources=state.get("active_sources") or []
+    )
     tool_map = {t.name: t for t in tools}
     llm = ChatGroq(
         model=state.get("model", "llama-3.3-70b-versatile"),
@@ -258,6 +270,7 @@ async def tool_execution_node(state: AgentState) -> dict:
         # Only gate marketplace tools (they have tool_id in metadata)
         if tool_id and action_name:
             from esl.tool_gate import ESLToolGate, GateResult
+
             gate = ESLToolGate()
             preview = f"{tool_name}: {json.dumps(tool_input)[:200]}"
             decision = await gate.check(
@@ -268,9 +281,16 @@ async def tool_execution_node(state: AgentState) -> dict:
                 preview=preview,
             )
             if decision.status == GateResult.VETOED:
-                results.append({"tool": tool_name, "result": "Action not permitted by user settings."})
+                results.append(
+                    {
+                        "tool": tool_name,
+                        "result": "Action not permitted by user settings.",
+                    }
+                )
                 events.append({"event": "tool_vetoed", "tool": tool_name})
-                await _audit_tool_action(user_id, tool_id, action_name, "VETOED", "User denied this action")
+                await _audit_tool_action(
+                    user_id, tool_id, action_name, "VETOED", "User denied this action"
+                )
                 continue
             if decision.status == GateResult.PENDING_CONFIRMATION:
                 pending_confirmation = {
@@ -281,8 +301,22 @@ async def tool_execution_node(state: AgentState) -> dict:
                     "params": tool_input,
                     "risk_level": risk_level,
                 }
-                events.append({"event": "tool_pending_confirmation", "tool": tool_name, "tool_id": tool_id, "tool_name": tool_name, "action_name": action_name, "preview": decision.preview})
-                results.append({"tool": tool_name, "result": f"Awaiting your confirmation: {decision.preview}"})
+                events.append(
+                    {
+                        "event": "tool_pending_confirmation",
+                        "tool": tool_name,
+                        "tool_id": tool_id,
+                        "tool_name": tool_name,
+                        "action_name": action_name,
+                        "preview": decision.preview,
+                    }
+                )
+                results.append(
+                    {
+                        "tool": tool_name,
+                        "result": f"Awaiting your confirmation: {decision.preview}",
+                    }
+                )
                 continue
 
         try:
@@ -290,7 +324,13 @@ async def tool_execution_node(state: AgentState) -> dict:
             results.append({"tool": tool_name, "result": str(result)})
             events.append({"event": "tool_result", "tool": tool_name})
             if tool_id and action_name:
-                await _audit_tool_action(user_id, tool_id, action_name, "APPROVED", "Marketplace tool executed")
+                await _audit_tool_action(
+                    user_id,
+                    tool_id,
+                    action_name,
+                    "APPROVED",
+                    "Marketplace tool executed",
+                )
         except Exception as e:
             results.append({"tool": tool_name, "result": f"Error: {e}"})
 

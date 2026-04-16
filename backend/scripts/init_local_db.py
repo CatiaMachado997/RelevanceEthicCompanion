@@ -28,7 +28,7 @@ def main():
     schema_path = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
         "database",
-        "schema_local.sql"
+        "schema_local.sql",
     )
 
     if not os.path.exists(schema_path):
@@ -36,7 +36,7 @@ def main():
         return 1
 
     # Read schema SQL
-    with open(schema_path, 'r') as f:
+    with open(schema_path, "r") as f:
         schema_sql = f.read()
 
     print(f"📄 Schema file: {schema_path}")

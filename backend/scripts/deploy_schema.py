@@ -13,8 +13,10 @@ import os
 
 
 def main():
-    schema_path = "/Users/catiamachado/RelevanceEthicCompanion/backend/database/schema.sql"
-    
+    schema_path = (
+        "/Users/catiamachado/RelevanceEthicCompanion/backend/database/schema.sql"
+    )
+
     print("=" * 70)
     print("SUPABASE SCHEMA DEPLOYMENT HELPER")
     print("=" * 70)
@@ -28,12 +30,12 @@ def main():
     print()
     print("=" * 70)
     print()
-    
+
     # Read and display schema
     if os.path.exists(schema_path):
-        with open(schema_path, 'r') as f:
+        with open(schema_path, "r") as f:
             schema_sql = f.read()
-        
+
         print("📄 SCHEMA SQL (copy everything below):")
         print("-" * 70)
         print(schema_sql)
@@ -54,7 +56,7 @@ def main():
         print(f"❌ Schema file not found at: {schema_path}")
         print("   Make sure you're running this from the backend directory")
         return 1
-    
+
     print("=" * 70)
     print("Next step: Run 'python scripts/verify_supabase.py' to test connection")
     print("=" * 70)

@@ -1,4 +1,5 @@
 """Tests that supabase_auth correctly requires ES256 tokens."""
+
 import time
 
 import pytest
@@ -79,12 +80,18 @@ def test_rs256_token_rejected(ec_keypair, monkeypatch):
         Encoding.PEM, PrivateFormat.TraditionalOpenSSL, NoEncryption()
     ).decode()
     rs256_token = jwt.encode(
-        {"sub": "evil", "aud": AUDIENCE, "iss": SUPABASE_ISSUER, "exp": int(time.time()) + 3600},
+        {
+            "sub": "evil",
+            "aud": AUDIENCE,
+            "iss": SUPABASE_ISSUER,
+            "exp": int(time.time()) + 3600,
+        },
         rsa_pem,
         algorithm="RS256",
     )
 
     from jose import JWTError
+
     with pytest.raises((JWTError, Exception)) as exc_info:
         auth_mod._decode_supabase_token(rs256_token)
     # Must be a JWT-related error, not a programming error
@@ -94,6 +101,7 @@ def test_rs256_token_rejected(ec_keypair, monkeypatch):
 def test_dev_fallback_disabled_when_enforcement_enabled(monkeypatch):
     """With AUTH_ENFORCEMENT_ENABLED=True, _is_dev_fallback_enabled() returns False."""
     import utils.supabase_auth as auth_mod
+
     monkeypatch.setattr(auth_mod.settings, "AUTH_ENFORCEMENT_ENABLED", True)
     monkeypatch.setattr(auth_mod.settings, "ENVIRONMENT", "production")
 

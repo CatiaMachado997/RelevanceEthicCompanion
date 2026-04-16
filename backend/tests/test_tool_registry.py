@@ -4,13 +4,14 @@ Tests for the refactored ToolRegistry.
 Old tests for _make_action_tool / _dispatch_action are removed — those
 functions no longer exist.  New tests verify the Composio + MCP routing.
 """
+
 import pytest
 from unittest.mock import patch, AsyncMock, MagicMock
-
 
 # ---------------------------------------------------------------------------
 # Helper factories
 # ---------------------------------------------------------------------------
+
 
 def _make_connection_row(tool_id, mcp_url=None):
     return {
@@ -42,6 +43,7 @@ def _mock_tool(name="mock_tool"):
 # TestToolRegistryWithComposio
 # ---------------------------------------------------------------------------
 
+
 class TestToolRegistryWithComposio:
 
     @pytest.mark.asyncio
@@ -54,11 +56,12 @@ class TestToolRegistryWithComposio:
 
         conn = _mock_db([_make_connection_row("github")])
 
-        with patch("services.tool_registry.get_db_connection", return_value=conn), \
-             patch(
-                 "services.tool_registry.get_composio_tools_for_user",
-                 new=AsyncMock(return_value=[fake_tool]),
-             ) as mock_composio:
+        with patch(
+            "services.tool_registry.get_db_connection", return_value=conn
+        ), patch(
+            "services.tool_registry.get_composio_tools_for_user",
+            new=AsyncMock(return_value=[fake_tool]),
+        ) as mock_composio:
 
             tools = await registry.get_tools_for_user("user-1")
 
@@ -73,15 +76,18 @@ class TestToolRegistryWithComposio:
         fake_tool = _mock_tool("mcp_custom_tool")
         registry = ToolRegistry()
 
-        conn = _mock_db([
-            _make_connection_row("mcp_custom", mcp_url="http://localhost:9000"),
-        ])
+        conn = _mock_db(
+            [
+                _make_connection_row("mcp_custom", mcp_url="http://localhost:9000"),
+            ]
+        )
 
-        with patch("services.tool_registry.get_db_connection", return_value=conn), \
-             patch(
-                 "services.tool_registry._load_mcp_tools",
-                 new=AsyncMock(return_value=[fake_tool]),
-             ) as mock_mcp:
+        with patch(
+            "services.tool_registry.get_db_connection", return_value=conn
+        ), patch(
+            "services.tool_registry._load_mcp_tools",
+            new=AsyncMock(return_value=[fake_tool]),
+        ) as mock_mcp:
 
             tools = await registry.get_tools_for_user("user-1")
 
@@ -109,20 +115,22 @@ class TestToolRegistryWithComposio:
         mcp_tool = _mock_tool("mcp_fallback_tool")
         registry = ToolRegistry()
 
-        conn = _mock_db([
-            _make_connection_row("github"),
-            _make_connection_row("mcp_custom", mcp_url="http://localhost:9000"),
-        ])
+        conn = _mock_db(
+            [
+                _make_connection_row("github"),
+                _make_connection_row("mcp_custom", mcp_url="http://localhost:9000"),
+            ]
+        )
 
-        with patch("services.tool_registry.get_db_connection", return_value=conn), \
-             patch(
-                 "services.tool_registry.get_composio_tools_for_user",
-                 new=AsyncMock(side_effect=RuntimeError("Composio down")),
-             ), \
-             patch(
-                 "services.tool_registry._load_mcp_tools",
-                 new=AsyncMock(return_value=[mcp_tool]),
-             ):
+        with patch(
+            "services.tool_registry.get_db_connection", return_value=conn
+        ), patch(
+            "services.tool_registry.get_composio_tools_for_user",
+            new=AsyncMock(side_effect=RuntimeError("Composio down")),
+        ), patch(
+            "services.tool_registry._load_mcp_tools",
+            new=AsyncMock(return_value=[mcp_tool]),
+        ):
 
             tools = await registry.get_tools_for_user("user-1")
 
@@ -135,7 +143,9 @@ class TestToolRegistryWithComposio:
         from services.tool_registry import ToolRegistry
 
         registry = ToolRegistry()
-        with patch("services.tool_registry.get_db_connection", side_effect=Exception("DB down")):
+        with patch(
+            "services.tool_registry.get_db_connection", side_effect=Exception("DB down")
+        ):
             tools = await registry.get_tools_for_user("user-1")
 
         assert tools == []
@@ -149,20 +159,22 @@ class TestToolRegistryWithComposio:
         mcp_tool = _mock_tool("mcp_custom_tool")
         registry = ToolRegistry()
 
-        conn = _mock_db([
-            _make_connection_row("notion"),
-            _make_connection_row("mcp_custom", mcp_url="http://localhost:9000"),
-        ])
+        conn = _mock_db(
+            [
+                _make_connection_row("notion"),
+                _make_connection_row("mcp_custom", mcp_url="http://localhost:9000"),
+            ]
+        )
 
-        with patch("services.tool_registry.get_db_connection", return_value=conn), \
-             patch(
-                 "services.tool_registry.get_composio_tools_for_user",
-                 new=AsyncMock(return_value=[composio_tool]),
-             ), \
-             patch(
-                 "services.tool_registry._load_mcp_tools",
-                 new=AsyncMock(return_value=[mcp_tool]),
-             ):
+        with patch(
+            "services.tool_registry.get_db_connection", return_value=conn
+        ), patch(
+            "services.tool_registry.get_composio_tools_for_user",
+            new=AsyncMock(return_value=[composio_tool]),
+        ), patch(
+            "services.tool_registry._load_mcp_tools",
+            new=AsyncMock(return_value=[mcp_tool]),
+        ):
 
             tools = await registry.get_tools_for_user("user-1")
 

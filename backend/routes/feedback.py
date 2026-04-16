@@ -1,11 +1,10 @@
 """Feedback API Routes"""
 
 from fastapi import APIRouter, HTTPException, Depends
-from typing import Optional
 
 from utils.supabase_auth import get_current_user_id
 from services.feedback_processor import FeedbackProcessor
-from models.feedback import FeedbackSubmission, FeedbackType, ItemType
+from models.feedback import FeedbackSubmission
 
 router = APIRouter(prefix="/api/feedback", tags=["Feedback"])
 
@@ -43,4 +42,6 @@ async def submit_feedback(
             )
         return {"status": "success", "data": result}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error submitting feedback: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error submitting feedback: {str(e)}"
+        )

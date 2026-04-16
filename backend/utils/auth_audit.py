@@ -4,6 +4,7 @@ Auth Audit Logger
 Records authentication events to auth_audit_log.
 All writes are fire-and-forget (background thread) — never blocks the request path.
 """
+
 from __future__ import annotations
 
 import json

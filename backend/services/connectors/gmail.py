@@ -1,5 +1,6 @@
 # backend/services/connectors/gmail.py
 """Gmail connector — wraps GmailSync, implements BaseConnector."""
+
 from datetime import timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, Dict, List, Optional
@@ -100,7 +101,9 @@ class GmailConnector(BaseConnector):
                     resp.raise_for_status()
                 return f"Draft created to {to}: {subject}"
             except httpx.HTTPStatusError as e:
-                return f"Gmail API error {e.response.status_code}: {e.response.text[:200]}"
+                return (
+                    f"Gmail API error {e.response.status_code}: {e.response.text[:200]}"
+                )
 
         if action_name == "send_reply":
             to = params.get("to", "")
@@ -127,6 +130,8 @@ class GmailConnector(BaseConnector):
                     resp.raise_for_status()
                 return f"Email sent to {to}"
             except httpx.HTTPStatusError as e:
-                return f"Gmail API error {e.response.status_code}: {e.response.text[:200]}"
+                return (
+                    f"Gmail API error {e.response.status_code}: {e.response.text[:200]}"
+                )
 
         return f"Unknown action: {action_name}"

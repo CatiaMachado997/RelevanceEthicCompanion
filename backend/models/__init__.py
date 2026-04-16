@@ -9,7 +9,7 @@ from .context import Goal, Event
 
 __all__ = [
     "User",
-    "UserCreate", 
+    "UserCreate",
     "UserUpdate",
     "Goal",
     "Event",

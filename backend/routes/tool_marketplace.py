@@ -1,4 +1,5 @@
 """Tool Marketplace API routes."""
+
 from __future__ import annotations
 
 import json
@@ -28,6 +29,7 @@ router = APIRouter(prefix="/api/tools", tags=["tool-marketplace"])
 
 # ─── Schemas ─────────────────────────────────────────────────────────────────
 
+
 class PermissionRequest(BaseModel):
     action_name: str
     trust_level: str  # 'ask' | 'allow' | 'deny'
@@ -47,6 +49,7 @@ class ComposioConnectRequest(BaseModel):
 
 
 # ─── Catalogue ────────────────────────────────────────────────────────────────
+
 
 @router.get("")
 async def get_catalogue(
@@ -90,6 +93,7 @@ async def get_connected_tools(
 # /{tool_id}/oauth/callback so that FastAPI's path matching prefers the
 # exact literal paths over the parameterised ones.
 
+
 @router.post("/composio/connect")
 async def composio_connect(
     body: ComposioConnectRequest,
@@ -117,12 +121,16 @@ async def composio_connect(
     )
 
     try:
-        client = Composio(provider=LangchainProvider(), api_key=settings.COMPOSIO_API_KEY)
+        client = Composio(
+            provider=LangchainProvider(), api_key=settings.COMPOSIO_API_KEY
+        )
         session = client.create(user_id=user_id, manage_connections=False)
         req = session.authorize(composio_toolkit_slug, callback_url=callback_url)
         return {"connect_url": req.redirect_url}
     except Exception as exc:
-        logger.error(f"Composio connect failed for {body.toolkit}: {exc}", exc_info=True)
+        logger.error(
+            f"Composio connect failed for {body.toolkit}: {exc}", exc_info=True
+        )
         raise HTTPException(status_code=502, detail=f"Composio error: {exc}")
 
 
@@ -163,6 +171,7 @@ async def composio_callback(
 
 # ─── Connect (initiate OAuth or save API key) ─────────────────────────────────
 
+
 @router.post("/{tool_id}/connect")
 async def connect_tool(
     tool_id: str,
@@ -187,7 +196,9 @@ async def connect_tool(
     auth_type = row["auth_type"]
     if auth_type == "apikey":
         if not body.api_key:
-            raise HTTPException(status_code=422, detail="api_key required for this tool")
+            raise HTTPException(
+                status_code=422, detail="api_key required for this tool"
+            )
         credentials = _encrypt_credentials({"api_key": body.api_key})
         _store_connection(user_id=user_id, tool_id=tool_id, credentials=credentials)
         return {"success": True}
@@ -201,6 +212,7 @@ async def connect_tool(
 
 
 # ─── OAuth connect flow ───────────────────────────────────────────────────────
+
 
 @router.get("/{tool_id}/oauth/callback")
 async def oauth_callback(
@@ -237,6 +249,7 @@ async def oauth_callback(
 
 # ─── Disconnect ───────────────────────────────────────────────────────────────
 
+
 @router.delete("/{tool_id}/disconnect")
 async def disconnect_tool(
     tool_id: str,
@@ -250,7 +263,9 @@ async def disconnect_tool(
                 (user_id, tool_id),
             )
             if cur.rowcount == 0:
-                raise HTTPException(status_code=404, detail=f"Tool connection not found: {tool_id}")
+                raise HTTPException(
+                    status_code=404, detail=f"Tool connection not found: {tool_id}"
+                )
             cur.execute(
                 "DELETE FROM tool_permissions WHERE user_id = %s AND tool_id = %s",
                 (user_id, tool_id),
@@ -260,6 +275,7 @@ async def disconnect_tool(
 
 # ─── Permissions (trust management) ──────────────────────────────────────────
 
+
 @router.post("/{tool_id}/permissions")
 async def set_permission(
     tool_id: str,
@@ -268,7 +284,9 @@ async def set_permission(
 ) -> dict:
     """Set trust level for a specific action on a tool."""
     if body.trust_level not in ("ask", "allow", "deny"):
-        raise HTTPException(status_code=422, detail="trust_level must be ask|allow|deny")
+        raise HTTPException(
+            status_code=422, detail="trust_level must be ask|allow|deny"
+        )
     gate = ESLToolGate()
     await gate.set_trust(
         user_id=user_id,
@@ -293,11 +311,14 @@ async def revoke_permission(
                 (user_id, tool_id, action_name),
             )
             if cur.rowcount == 0:
-                raise HTTPException(status_code=404, detail=f"Permission not found: {action_name}")
+                raise HTTPException(
+                    status_code=404, detail=f"Permission not found: {action_name}"
+                )
     return {"success": True}
 
 
 # ─── MCP ─────────────────────────────────────────────────────────────────────
+
 
 @router.post("/mcp")
 async def connect_mcp(
@@ -327,15 +348,19 @@ async def disconnect_mcp(
                 (connection_id, user_id),
             )
             if cur.rowcount == 0:
-                raise HTTPException(status_code=404, detail=f"MCP connection not found: {connection_id}")
+                raise HTTPException(
+                    status_code=404, detail=f"MCP connection not found: {connection_id}"
+                )
     return {"success": True}
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
+
 def _encrypt_credentials(credentials: dict) -> str:
     """Encrypt credentials with Fernet before storage."""
     from utils.encryption import encrypt_credentials
+
     return encrypt_credentials(credentials)
 
 
@@ -362,6 +387,7 @@ def _store_connection(
 def _build_oauth_state(user_id: str, tool_id: str) -> str:
     """Generate a signed OAuth state parameter."""
     from utils.oauth_state import create_signed_state
+
     return create_signed_state(user_id=user_id, source_type=f"tool_{tool_id}")
 
 
@@ -370,6 +396,7 @@ def _extract_user_from_state(state: Optional[str], tool_id: str) -> str:
     if not state:
         raise ValueError("Missing OAuth state")
     from utils.oauth_state import validate_signed_state
+
     return validate_signed_state(state=state, expected_source_type=f"tool_{tool_id}")
 
 
@@ -377,9 +404,11 @@ def _get_connector(tool_id: str):
     """Return the connector instance for a catalogue tool."""
     if tool_id == "google_calendar_write":
         from services.connectors.google_calendar import GoogleCalendarConnector
+
         return GoogleCalendarConnector()
     if tool_id == "gmail_write":
         from services.connectors.gmail import GmailConnector
+
         return GmailConnector()
     logger.warning(f"_get_connector: unknown tool_id '{tool_id}'")
     raise HTTPException(status_code=404, detail=f"Unknown tool: {tool_id}")
