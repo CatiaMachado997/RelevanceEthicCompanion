@@ -16,3 +16,4 @@ htmlcov/
 .mypy_cache/
 .DS_Store
 *.log
+test_connections.py

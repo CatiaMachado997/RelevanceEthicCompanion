@@ -1,21 +1,31 @@
 #!/usr/bin/env python3
-"""Test connections to PostgreSQL and Weaviate"""
+"""
+Example connection-test script.
 
+Copy to `test_connections.py` and run locally; do NOT commit a version
+with real credentials. See backend/.env.example for required env vars.
+
+Tests connections to PostgreSQL and Weaviate.
+"""
 import os
 import sys
 import psycopg2
 import requests
+
+DB_PASSWORD = os.environ.get("POSTGRES_PASSWORD")
+if not DB_PASSWORD:
+    raise RuntimeError("POSTGRES_PASSWORD env var required for test_connections.py")
 
 
 def test_postgres():
     """Test PostgreSQL connection (uses POSTGRES_* env vars, falls back to local dev defaults)."""
     try:
         conn = psycopg2.connect(
-            host=os.getenv("POSTGRES_SERVER", "localhost"),
-            port=int(os.getenv("POSTGRES_PORT", "5432")),
-            database=os.getenv("POSTGRES_DB", "ethic-companion"),
-            user=os.getenv("POSTGRES_USER", "postgres"),
-            password=os.getenv("POSTGRES_PASSWORD", ""),
+            host="localhost",
+            port=5432,
+            database="ethic-companion",
+            user="postgres",
+            password=DB_PASSWORD
         )
         cursor = conn.cursor()
         cursor.execute("SELECT version();")
