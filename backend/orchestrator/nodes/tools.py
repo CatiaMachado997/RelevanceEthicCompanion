@@ -3,6 +3,10 @@
 import json
 import logging
 from datetime import datetime, UTC
+from typing import List
+
+from pydantic import SecretStr
+
 from orchestrator.state import AgentState
 from orchestrator.nodes.context import get_context_manager
 from config import settings
@@ -211,11 +215,13 @@ async def tool_planner_node(state: AgentState) -> dict:
     )
     llm = ChatGroq(
         model=state.get("model", "llama-3.3-70b-versatile"),
-        api_key=settings.GROQ_API_KEY,
+        api_key=SecretStr(settings.GROQ_API_KEY),
     )
     llm_with_tools = llm.bind_tools(tools)
 
-    messages = [SystemMessage(content=_build_system_prompt(state))]
+    from langchain_core.messages import BaseMessage
+
+    messages: List[BaseMessage] = [SystemMessage(content=_build_system_prompt(state))]
     for h in state.get("conversation_history", []):
         messages.append(
             HumanMessage(content=h["content"])
@@ -245,7 +251,7 @@ async def tool_execution_node(state: AgentState) -> dict:
     tool_map = {t.name: t for t in tools}
     llm = ChatGroq(
         model=state.get("model", "llama-3.3-70b-versatile"),
-        api_key=settings.GROQ_API_KEY,
+        api_key=SecretStr(settings.GROQ_API_KEY),
     )
 
     results = []
@@ -341,7 +347,8 @@ async def tool_execution_node(state: AgentState) -> dict:
             "Provide a helpful, concise response based on these results."
         )
         response = await llm.ainvoke([HumanMessage(content=synthesis_prompt)])
-        proposed = response.content
+        raw = response.content
+        proposed = raw if isinstance(raw, str) else str(raw)
     else:
         proposed = state.get("proposed_content", "")
 

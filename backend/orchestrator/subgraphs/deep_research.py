@@ -2,6 +2,10 @@
 
 import asyncio
 import logging
+from typing import Any, List
+
+from pydantic import SecretStr
+
 from orchestrator.state import AgentState
 from config import settings
 
@@ -39,14 +43,16 @@ async def deep_research_node(state: AgentState) -> dict:
             logger.warning(f"Memory search failed: {e}")
             return []
 
-    web_results, memory_results = await asyncio.gather(
+    gathered = await asyncio.gather(
         _web_search(), _memory_search(), return_exceptions=True
     )
     # Normalize gather exceptions to empty lists
-    if isinstance(web_results, Exception):
-        web_results = []
-    if isinstance(memory_results, Exception):
-        memory_results = []
+    web_results: List[Any] = (
+        [] if isinstance(gathered[0], BaseException) else list(gathered[0])
+    )
+    memory_results: List[Any] = (
+        [] if isinstance(gathered[1], BaseException) else list(gathered[1])
+    )
 
     try:
         from langchain_groq import ChatGroq
@@ -54,7 +60,7 @@ async def deep_research_node(state: AgentState) -> dict:
 
         llm = ChatGroq(
             model=state.get("model", "llama-3.3-70b-versatile"),
-            api_key=settings.GROQ_API_KEY,
+            api_key=SecretStr(settings.GROQ_API_KEY),
         )
         synthesis_prompt = (
             f"Research query: {query}\n\n"

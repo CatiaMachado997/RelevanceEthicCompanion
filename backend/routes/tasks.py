@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from langchain_core.messages import HumanMessage
 from langchain_groq import ChatGroq
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
 from esl.engine import EthicalSafeguardLayer
 from esl.models import ProposedAction, ActionType, UrgencyLevel, ESLDecisionStatus
@@ -129,12 +129,18 @@ async def extract_tasks(
     try:
         llm = ChatGroq(
             model="llama-3.3-70b-versatile",
-            api_key=settings.GROQ_API_KEY,
+            api_key=SecretStr(settings.GROQ_API_KEY),
             temperature=0,
         )
         prompt = _EXTRACT_PROMPT.format(text=request.text)
         response = llm.invoke([HumanMessage(content=prompt)])
-        raw = response.content.strip()
+        raw_content = response.content
+        if isinstance(raw_content, list):
+            # ChatGroq may return list-of-parts for some models; join text parts.
+            raw_content = "".join(
+                p if isinstance(p, str) else str(p.get("text", "")) for p in raw_content
+            )
+        raw = raw_content.strip()
         # Strip markdown fences if present
         if raw.startswith("```"):
             raw = raw.split("```")[1]
@@ -227,6 +233,8 @@ async def create_task(
                     ),
                 )
                 row = cur.fetchone()
+        if row is None:
+            raise HTTPException(status_code=500, detail="Task insert returned no row")
         return _serialize_task(row)
     except Exception as e:
         logger.error(f"Failed to create task: {e}")

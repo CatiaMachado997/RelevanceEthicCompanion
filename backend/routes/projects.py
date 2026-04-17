@@ -152,6 +152,10 @@ async def create_project(
                     (user_id, request.title, request.description, request.goal_id),
                 )
                 row = cur.fetchone()
+        if row is None:
+            raise HTTPException(
+                status_code=500, detail="Project insert returned no row"
+            )
         return {
             "id": str(row["id"]),
             "user_id": str(row["user_id"]),

@@ -36,9 +36,12 @@ class SupabaseVerifier:
         """Test connection to Supabase"""
         print("🔌 Testing Supabase connection...")
         try:
-            self.client = create_client(
-                settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY
-            )
+            # SUPABASE_SERVICE_KEY is read from env at runtime (not a
+            # declared Settings field).
+            import os
+
+            service_key = os.environ.get("SUPABASE_SERVICE_KEY", "")
+            self.client = create_client(settings.SUPABASE_URL, service_key)
             print(f"   ✅ Connected to {settings.SUPABASE_URL}")
             return True
         except Exception as e:

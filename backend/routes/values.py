@@ -8,7 +8,7 @@ Philosophy: User empowerment first. No hidden defaults, no dark patterns.
 """
 
 from fastapi import APIRouter, HTTPException, Depends
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 from services.context_manager import ContextManager
@@ -36,7 +36,7 @@ class CreateValueRequest(BaseModel):
     priority: int = Field(
         default=5, ge=1, le=10, description="Priority (1=highest, 10=lowest)"
     )
-    metadata: Optional[dict] = Field(default_factory=dict)
+    metadata: dict = Field(default_factory=lambda: {})
 
 
 class UpdateValueRequest(BaseModel):
@@ -276,7 +276,7 @@ async def update_value(
 
         with get_db() as conn:
             with conn.cursor() as cur:
-                update_data = {}
+                update_data: Dict[str, Any] = {}
                 if request.value is not None:
                     update_data["value"] = request.value
                 if request.priority is not None:

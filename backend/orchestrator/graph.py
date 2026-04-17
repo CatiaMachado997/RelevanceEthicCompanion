@@ -118,6 +118,8 @@ async def stream_langgraph(
         "citations": [],
         "token_count": 0,
         "token_warning": None,
+        "pending_tool_confirmation": None,
+        "source_context": [],
     }
     graph = get_graph()
 

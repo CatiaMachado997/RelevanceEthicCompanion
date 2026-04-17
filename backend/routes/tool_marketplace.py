@@ -405,10 +405,10 @@ def _get_connector(tool_id: str):
     if tool_id == "google_calendar_write":
         from services.connectors.google_calendar import GoogleCalendarConnector
 
-        return GoogleCalendarConnector()
+        return GoogleCalendarConnector(redirect_uri=settings.GOOGLE_OAUTH_REDIRECT_URI)
     if tool_id == "gmail_write":
         from services.connectors.gmail import GmailConnector
 
-        return GmailConnector()
+        return GmailConnector(redirect_uri=settings.GMAIL_OAUTH_REDIRECT_URI)
     logger.warning(f"_get_connector: unknown tool_id '{tool_id}'")
     raise HTTPException(status_code=404, detail=f"Unknown tool: {tool_id}")

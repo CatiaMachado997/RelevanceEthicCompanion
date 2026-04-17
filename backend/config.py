@@ -6,8 +6,8 @@ Loads environment variables and application settings
 import os
 import logging as _logging
 
-from pydantic import computed_field, ConfigDict
-from pydantic_settings import BaseSettings
+from pydantic import computed_field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List, Optional
 
 _secrets_logger = _logging.getLogger(__name__)
@@ -69,7 +69,9 @@ class Settings(BaseSettings):
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
 
-    @computed_field
+    # mypy doesn't support decorators stacked on @property; pydantic's
+    # @computed_field requires this ordering at runtime.
+    @computed_field  # type: ignore[misc]
     @property
     def DATABASE_URL(self) -> str:
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"  # noqa: E501
@@ -161,7 +163,7 @@ class Settings(BaseSettings):
     # Dev mode: override mock user ID to match the real user who connected OAuth
     DEV_USER_ID: str = "00000000-0000-0000-0000-000000000000"
 
-    model_config = ConfigDict(env_file=".env", case_sensitive=True)
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 
 
 # Load GCP secrets before instantiating Settings so pydantic picks them up from env.
@@ -174,4 +176,5 @@ if os.environ.get("ENVIRONMENT") == "production":
             "GOOGLE_CLOUD_PROJECT not set; skipping GCP secret loading"
         )
 
-settings = Settings()
+# Required fields are loaded from environment by pydantic-settings at runtime.
+settings = Settings()  # type: ignore[call-arg]

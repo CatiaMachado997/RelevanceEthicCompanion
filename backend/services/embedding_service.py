@@ -97,7 +97,9 @@ class EmbeddingService:
                 config=types.EmbedContentConfig(task_type="retrieval_document"),
             )
 
-            embedding = result.embeddings[0].values
+            if not result.embeddings or result.embeddings[0].values is None:
+                raise ValueError("Gemini returned no embedding")
+            embedding: List[float] = list(result.embeddings[0].values)
 
             # Store in cache
             self._store_in_cache(text, embedding)
@@ -156,7 +158,12 @@ class EmbeddingService:
                     )
 
                     # New SDK always returns a list of ContentEmbedding objects
-                    new_embeddings = [emb.values for emb in result.embeddings]
+                    if not result.embeddings:
+                        raise ValueError("Gemini returned no embeddings")
+                    new_embeddings: List[List[float]] = [
+                        list(emb.values) if emb.values is not None else []
+                        for emb in result.embeddings
+                    ]
 
                     # Store in cache and add to results
                     for text, embedding, idx in zip(
@@ -199,11 +206,13 @@ class EmbeddingService:
                 config=types.EmbedContentConfig(task_type="retrieval_query"),
             )
 
-            embedding = result.embeddings[0].values
+            if not result.embeddings or result.embeddings[0].values is None:
+                raise ValueError("Gemini returned no embedding")
+            embedding_q: List[float] = list(result.embeddings[0].values)
             logger.debug(
-                f"✅ Generated query embedding (len={len(query)}, dim={len(embedding)})"
+                f"✅ Generated query embedding (len={len(query)}, dim={len(embedding_q)})"
             )
-            return embedding
+            return embedding_q
 
         except Exception as e:
             logger.error(f"❌ Failed to generate query embedding: {e}")

@@ -6,7 +6,7 @@ Falls back gracefully if the server is unreachable or mcp package not installed.
 from __future__ import annotations
 
 import logging
-from typing import Any, ClassVar, Optional
+from typing import Any, Optional
 
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
@@ -62,7 +62,7 @@ def _wrap_mcp_tool(mcp_tool: Any, server_url: str) -> BaseTool:
         {
             "__annotations__": {"params": dict},
             "params": Field(
-                default_factory=dict, description="Parameters for the MCP tool"
+                default_factory=lambda: {}, description="Parameters for the MCP tool"
             ),
         },
     )
@@ -71,7 +71,7 @@ def _wrap_mcp_tool(mcp_tool: Any, server_url: str) -> BaseTool:
         name: str = tool_name
         description: str = tool_description
         args_schema: type[BaseModel] = InputCls
-        metadata: ClassVar[dict] = {
+        metadata: Optional[dict] = {
             "tool_id": "mcp_custom",
             "action_name": mcp_tool.name,
             "risk_level": "medium",

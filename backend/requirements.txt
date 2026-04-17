@@ -3,6 +3,8 @@ fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 pydantic>=2.10.0
 pydantic-settings>=2.6.0
+# Required by pydantic EmailStr (used in auth/user models).
+email-validator>=2.2.0
 
 # Database & Storage
 # psycopg3 for Python 3.13 compatibility
@@ -64,6 +66,9 @@ slowapi==0.1.9
 black==26.3.1  # fixes GHSA / CVE-2024-21503 (arbitrary file writes via --python-cell-magics)
 flake8==7.0.0
 mypy==1.8.0
+
+# Type stubs
+types-requests>=2.31.0
 
 # Sprint 2a
 langgraph>=0.2.0

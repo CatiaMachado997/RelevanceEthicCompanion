@@ -129,6 +129,8 @@ class ContextManager:
                 )
 
                 result = cur.fetchone()
+                if result is None:
+                    raise RuntimeError("Insert user_values returned no row")
                 user_value.id = str(result[0])
                 user_value.created_at = result[1]
 
@@ -209,7 +211,7 @@ class ContextManager:
         user_id: str,
         role: Literal["user", "assistant"],
         content: str,
-        conversation_id: str = None,
+        conversation_id: Optional[str] = None,
     ) -> None:
         """Store a single conversation turn in PostgreSQL for reliable ordered retrieval."""
         if role not in ("user", "assistant"):
@@ -236,7 +238,7 @@ class ContextManager:
         logger.debug(f"Stored conversation turn ({role}) for user {user_id}")
 
     async def get_conversation_history(
-        self, user_id: str, limit: int = 20, conversation_id: str = None
+        self, user_id: str, limit: int = 20, conversation_id: Optional[str] = None
     ) -> List[Dict[str, str]]:
         """
         Retrieve the last N conversation turns in chronological order.
@@ -346,6 +348,8 @@ class ContextManager:
                 )
 
                 result = cur.fetchone()
+                if result is None:
+                    raise RuntimeError("Insert goals returned no row")
                 goal.id = str(result[0])
                 goal.created_at = result[1]
 
@@ -438,6 +442,8 @@ class ContextManager:
                     )
 
                 result = cur.fetchone()
+                if result is None:
+                    raise RuntimeError("Insert events returned no row")
                 event.id = str(result[0])
                 event.created_at = result[1]
 
@@ -524,6 +530,11 @@ class ContextManager:
             if not timestamp_str.endswith("Z") and "+" not in timestamp_str:
                 timestamp_str += "Z"  # Add UTC marker if missing
 
+            if entry.embedding is None:
+                raise RuntimeError(
+                    "Cannot store semantic memory without an embedding "
+                    "(embedding_service unavailable)"
+                )
             uuid_str = self.weaviate.store_memory(
                 collection="ConversationMemory",
                 content={
