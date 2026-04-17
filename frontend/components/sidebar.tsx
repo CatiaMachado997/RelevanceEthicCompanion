@@ -213,14 +213,19 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
     }
   }
 
-  const handleDeleteFolder = async (id: string) => {
-    const folder = folders.find(f => f.id === id)
+  const handleDeleteFolder = async (folder: Folder) => {
+    const convCount = conversations.filter(c => c.folder_id === folder.id).length
+    const msg = convCount > 0
+      ? `Delete "${folder.name}"? Its ${convCount} conversation${convCount === 1 ? '' : 's'} will be unfoldered (not deleted).`
+      : `Delete "${folder.name}"?`
+    if (!window.confirm(msg)) return
+
     try {
-      await api.folders.delete(id)
-      setFolders(prev => prev.filter(f => f.id !== id))
+      await api.folders.delete(folder.id)
+      setFolders(prev => prev.filter(f => f.id !== folder.id))
       // Orphaned conversations fall back to ungrouped — update local state
-      setConversations(prev => prev.map(c => c.folder_id === id ? { ...c, folder_id: null } : c))
-      toast.success("Folder deleted", folder?.name)
+      setConversations(prev => prev.map(c => c.folder_id === folder.id ? { ...c, folder_id: null } : c))
+      toast.success("Folder deleted", folder.name)
     } catch (e) {
       console.error('delete folder failed', e)
       toast.error("Couldn't delete folder", e instanceof Error ? e.message : undefined)
@@ -467,7 +472,7 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
                         <Pencil size={10} style={{ color: 'var(--ec-text-subtle)' }} />
                       </button>
                       <button
-                        onClick={e => { e.stopPropagation(); handleDeleteFolder(folder.id) }}
+                        onClick={e => { e.stopPropagation(); handleDeleteFolder(folder) }}
                         className="p-0.5 rounded hover:bg-[rgba(0,0,0,0.08)]"
                         title="Delete folder"
                       >
