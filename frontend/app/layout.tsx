@@ -3,6 +3,7 @@ import { GeistSans } from "geist/font/sans";
 import "./globals.css";
 import { Fraunces } from "next/font/google";
 import { ThemeProvider } from "next-themes";
+import { Toaster } from "sonner";
 
 const fraunces = Fraunces({
   subsets: ["latin"],
@@ -25,6 +26,16 @@ export default function RootLayout({
       <body className="antialiased bg-background text-foreground">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           {children}
+          <Toaster
+            position="bottom-right"
+            toastOptions={{
+              style: {
+                background: "var(--ec-card-bg)",
+                color: "var(--ec-text)",
+                border: "1px solid var(--ec-card-border)",
+              },
+            }}
+          />
         </ThemeProvider>
       </body>
     </html>
