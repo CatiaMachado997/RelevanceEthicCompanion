@@ -1181,6 +1181,22 @@ export const foldersApi = {
     ),
 }
 
+// ==================== Dashboard API ====================
+
+export interface DashboardOverview {
+  goals_active: number
+  tasks_open: number
+  projects_active: number
+  values_count: number
+  documents_count: number
+  esl_decisions_7d: number
+  notifications_unread: number
+}
+
+export const dashboardApi = {
+  overview: () => apiRequest<DashboardOverview>('/api/dashboard/overview'),
+}
+
 export const api = {
   values: valuesApi,
   chat: chatApi,
@@ -1200,6 +1216,7 @@ export const api = {
   context: contextApi,
   folders: foldersApi,
   profile: profileApi,
+  dashboard: dashboardApi,
 };
 
 export default api;

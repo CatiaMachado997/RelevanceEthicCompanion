@@ -16,7 +16,7 @@ import {
   Target, CheckSquare, FolderOpen, Heart, FileText, Eye, Bell,
   ArrowRight, PanelRight,
 } from "lucide-react"
-import { api } from "@/lib/api"
+import { api, type DashboardOverview } from "@/lib/api"
 
 
 interface ToolCard {
@@ -32,48 +32,12 @@ interface ToolCard {
 
 
 export function ToolsLauncher() {
-  const [goalsCount, setGoalsCount] = useState<number | null>(null)
-  const [tasksCount, setTasksCount] = useState<number | null>(null)
-  const [projectsCount, setProjectsCount] = useState<number | null>(null)
-  const [valuesCount, setValuesCount] = useState<number | null>(null)
-  const [documentsCount, setDocumentsCount] = useState<number | null>(null)
-  const [transparencyCount, setTransparencyCount] = useState<number | null>(null)
-  const [unreadNotifs, setUnreadNotifs] = useState<number | null>(null)
+  const [overview, setOverview] = useState<DashboardOverview | null>(null)
 
   useEffect(() => {
-    // Fire all in parallel; each one handles its own failure quietly
-    // (dashboard is resilient — missing counts just show as "—").
-    api.goals.list('active')
-      .then(r => setGoalsCount(r.total_count ?? r.goals?.length ?? 0))
-      .catch(() => setGoalsCount(0))
-
-    api.tasks.list({ status: 'open' }).then((tasks) => {
-      // tasksApi.list returns Task[] directly
-      const arr = Array.isArray(tasks) ? tasks : []
-      setTasksCount(arr.length)
-    }).catch(() => setTasksCount(0))
-
-    api.projects.list('active').then((projects) => {
-      const arr = Array.isArray(projects) ? projects : []
-      setProjectsCount(arr.length)
-    }).catch(() => setProjectsCount(0))
-
-    api.values.list()
-      .then(r => setValuesCount(r.total_count ?? (Array.isArray(r.values) ? r.values.length : 0)))
-      .catch(() => setValuesCount(0))
-
-    api.documents.list().then((docs) => {
-      const arr = Array.isArray(docs) ? docs : []
-      setDocumentsCount(arr.length)
-    }).catch(() => setDocumentsCount(0))
-
-    api.transparency.report()
-      .then((r: { total_decisions?: number }) => setTransparencyCount(r?.total_decisions ?? 0))
-      .catch(() => setTransparencyCount(0))
-
-    api.notifications.count()
-      .then(r => setUnreadNotifs(r?.unread_count ?? 0))
-      .catch(() => setUnreadNotifs(0))
+    api.dashboard.overview()
+      .then(setOverview)
+      .catch(() => {})
   }, [])
 
   const tools: ToolCard[] = [
@@ -82,7 +46,7 @@ export function ToolsLauncher() {
       title: "Goals",
       subtitle: "Long-term direction",
       icon: <Target size={16} />,
-      count: goalsCount,
+      count: overview?.goals_active ?? null,
       unit: "active",
       accent: "rgba(74,124,89,0.10)",
       panelName: "goals",
@@ -92,7 +56,7 @@ export function ToolsLauncher() {
       title: "Tasks",
       subtitle: "This week's work",
       icon: <CheckSquare size={16} />,
-      count: tasksCount,
+      count: overview?.tasks_open ?? null,
       unit: "open",
       accent: "rgba(74,124,89,0.10)",
       panelName: "tasks",
@@ -102,7 +66,7 @@ export function ToolsLauncher() {
       title: "Projects",
       subtitle: "Grouped initiatives",
       icon: <FolderOpen size={16} />,
-      count: projectsCount,
+      count: overview?.projects_active ?? null,
       unit: "active",
       accent: "rgba(155,122,61,0.10)",
       panelName: "projects",
@@ -112,7 +76,7 @@ export function ToolsLauncher() {
       title: "Values",
       subtitle: "Your boundaries",
       icon: <Heart size={16} />,
-      count: valuesCount,
+      count: overview?.values_count ?? null,
       unit: "defined",
       accent: "rgba(155,122,61,0.10)",
       panelName: "values",
@@ -122,7 +86,7 @@ export function ToolsLauncher() {
       title: "Documents",
       subtitle: "Uploaded files",
       icon: <FileText size={16} />,
-      count: documentsCount,
+      count: overview?.documents_count ?? null,
       unit: "files",
       accent: "rgba(74,124,89,0.10)",
       panelName: "documents",
@@ -132,7 +96,7 @@ export function ToolsLauncher() {
       title: "Transparency",
       subtitle: "ESL audit log",
       icon: <Eye size={16} />,
-      count: transparencyCount,
+      count: overview?.esl_decisions_7d ?? null,
       unit: "decisions",
       accent: "rgba(74,124,89,0.10)",
       panelName: "transparency",
@@ -142,9 +106,9 @@ export function ToolsLauncher() {
       title: "Notifications",
       subtitle: "Activity alerts",
       icon: <Bell size={16} />,
-      count: unreadNotifs,
-      unit: unreadNotifs === 1 ? "unread" : "unread",
-      accent: unreadNotifs && unreadNotifs > 0 ? "rgba(176,74,58,0.10)" : "rgba(74,124,89,0.10)",
+      count: overview?.notifications_unread ?? null,
+      unit: "unread",
+      accent: (overview?.notifications_unread ?? 0) > 0 ? "rgba(176,74,58,0.10)" : "rgba(74,124,89,0.10)",
       panelName: "notifications",
     },
   ]

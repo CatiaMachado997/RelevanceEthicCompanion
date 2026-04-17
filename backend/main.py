@@ -305,6 +305,7 @@ from routes import (
     tasks,
     context,
     folders,
+    dashboard,
 )
 from routes import settings as settings_router
 from routes.insight import router as insight_router
@@ -331,6 +332,7 @@ app.include_router(projects.router)
 app.include_router(tasks.router)
 app.include_router(context.router)
 app.include_router(folders.router)
+app.include_router(dashboard.router)
 app.include_router(status_router)
 
 from routes import tool_marketplace
