@@ -15,6 +15,7 @@ import { useTheme } from "next-themes"
 import { useEffect, useState, useCallback } from "react"
 import { api } from "@/lib/api"
 import type { Folder } from "@/lib/api"
+import { toast } from "@/lib/toast"
 import { UserStatus } from "@/components/UserStatus"
 
 interface Conversation {
@@ -86,13 +87,6 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null)
   const [editFolderName, setEditFolderName] = useState('')
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null) // null = ungrouped target; string = folder id
-  const [folderError, setFolderError] = useState<string | null>(null)
-
-  const showFolderError = useCallback((msg: string) => {
-    setFolderError(msg)
-    setTimeout(() => setFolderError(null), 4000)
-  }, [])
-
   // Power-user "More" disclosure
   const [moreOpen, setMoreOpen] = useState(false)
   // Auto-open if the user is on one of the hidden pages
@@ -194,11 +188,12 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
       const folder = await api.folders.create(name)
       setFolders(prev => [...prev, folder])
       setExpandedFolders(prev => new Set(prev).add(folder.id))
+      toast.success("Folder created", name)
       setCreatingFolder(false)
       setNewFolderName('')
     } catch (e) {
       console.error('create folder failed', e)
-      showFolderError(e instanceof Error ? e.message : 'Could not create folder')
+      toast.error("Couldn't create folder", e instanceof Error ? e.message : undefined)
       // Keep the input open so the user can retry
     }
   }
@@ -209,23 +204,26 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
     try {
       const updated = await api.folders.update(id, { name })
       setFolders(prev => prev.map(f => f.id === id ? updated : f))
+      toast.success("Folder renamed", name)
       setEditingFolderId(null)
       setEditFolderName('')
     } catch (e) {
       console.error('rename folder failed', e)
-      showFolderError(e instanceof Error ? e.message : 'Could not rename folder')
+      toast.error("Couldn't rename folder", e instanceof Error ? e.message : undefined)
     }
   }
 
   const handleDeleteFolder = async (id: string) => {
+    const folder = folders.find(f => f.id === id)
     try {
       await api.folders.delete(id)
       setFolders(prev => prev.filter(f => f.id !== id))
       // Orphaned conversations fall back to ungrouped — update local state
       setConversations(prev => prev.map(c => c.folder_id === id ? { ...c, folder_id: null } : c))
+      toast.success("Folder deleted", folder?.name)
     } catch (e) {
       console.error('delete folder failed', e)
-      showFolderError(e instanceof Error ? e.message : 'Could not delete folder')
+      toast.error("Couldn't delete folder", e instanceof Error ? e.message : undefined)
     }
   }
 
@@ -399,13 +397,7 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
             </div>
           )}
 
-          {folderError && (
-            <p className="text-[10px] px-1 py-1 leading-tight" style={{ color: '#B04A3A' }} role="alert">
-              {folderError}
-            </p>
-          )}
-
-          {folders.length === 0 && !creatingFolder && !folderError && (
+          {folders.length === 0 && !creatingFolder && (
             <p className="text-[10px] px-1 italic" style={{ color: 'var(--ec-text-subtle)', opacity: 0.6 }}>
               No folders yet
             </p>
