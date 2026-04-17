@@ -15,6 +15,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from typing import Optional
 
+from psycopg.errors import UniqueViolation
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 from utils.db import get_db_connection
 
@@ -90,12 +91,18 @@ async def create_folder(
             else:
                 next_pos = body.position
 
-            cur.execute("""
-                INSERT INTO folders (user_id, name, color, position)
-                VALUES (%s, %s, %s, %s)
-                RETURNING id, name, color, position, created_at, updated_at
-            """, (user_id, body.name.strip(), body.color, next_pos))
-            row = cur.fetchone()
+            try:
+                cur.execute("""
+                    INSERT INTO folders (user_id, name, color, position)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id, name, color, position, created_at, updated_at
+                """, (user_id, body.name.strip(), body.color, next_pos))
+                row = cur.fetchone()
+            except UniqueViolation:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"A folder named '{body.name.strip()}' already exists",
+                )
     return _serialize_folder(row)
 
 
@@ -127,15 +134,21 @@ async def update_folder(
 
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                f"""
-                UPDATE folders SET {", ".join(updates)}
-                WHERE id = %s AND user_id = %s
-                RETURNING id, name, color, position, created_at, updated_at
-                """,
-                params,
-            )
-            row = cur.fetchone()
+            try:
+                cur.execute(
+                    f"""
+                    UPDATE folders SET {", ".join(updates)}
+                    WHERE id = %s AND user_id = %s
+                    RETURNING id, name, color, position, created_at, updated_at
+                    """,
+                    params,
+                )
+                row = cur.fetchone()
+            except UniqueViolation:
+                raise HTTPException(
+                    status_code=409,
+                    detail="A folder with that name already exists",
+                )
     if not row:
         raise HTTPException(status_code=404, detail="Folder not found")
     return _serialize_folder(row)

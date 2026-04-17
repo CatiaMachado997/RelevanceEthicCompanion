@@ -100,6 +100,33 @@ def test_create_folder_success(client):
     assert r.json()["position"] == 0
 
 
+def test_create_folder_duplicate_name_returns_409(client):
+    """Creating a folder with the same name as an existing one should 409."""
+    mock_cursor = MagicMock()
+    mock_cursor.fetchone.side_effect = [{"next_pos": 0}, SAMPLE_FOLDER_ROW]
+    mock_conn = MagicMock()
+    mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+    mock_conn.__exit__ = MagicMock(return_value=False)
+    mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+    mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+    # Arrange: simulate psycopg's UniqueViolation on INSERT. The MAX query
+    # completes normally; the INSERT raises.
+    from psycopg.errors import UniqueViolation
+
+    def execute_side_effect(sql, params=None):
+        if "INSERT INTO folders" in sql:
+            raise UniqueViolation("duplicate key value violates unique constraint")
+        return None
+    mock_cursor.execute.side_effect = execute_side_effect
+
+    with patch("routes.folders.get_db_connection", return_value=mock_conn):
+        r = client.post("/api/folders", json={"name": "Work"})
+
+    assert r.status_code == 409
+    assert "already exists" in r.json()["detail"].lower()
+
+
 def test_create_folder_rejects_empty_name(client):
     r = client.post("/api/folders", json={"name": ""})
     assert r.status_code == 422  # Pydantic validation
@@ -134,6 +161,30 @@ def test_update_folder_requires_a_field(client):
     r = client.patch("/api/folders/folder-001", json={})
     assert r.status_code == 400
     assert "No fields to update" in r.json()["detail"]
+
+
+def test_update_folder_duplicate_name_returns_409(client):
+    """PATCH that renames a folder to an existing name returns 409."""
+    mock_cursor = MagicMock()
+    mock_conn = MagicMock()
+    mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+    mock_conn.__exit__ = MagicMock(return_value=False)
+    mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+    mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+    from psycopg.errors import UniqueViolation
+
+    def execute_side_effect(sql, params=None):
+        if "UPDATE folders" in sql:
+            raise UniqueViolation("duplicate key value violates unique constraint")
+        return None
+    mock_cursor.execute.side_effect = execute_side_effect
+
+    with patch("routes.folders.get_db_connection", return_value=mock_conn):
+        r = client.patch("/api/folders/folder-001", json={"name": "Work"})
+
+    assert r.status_code == 409
+    assert "already exists" in r.json()["detail"].lower()
 
 
 # ─── DELETE /api/folders/{id} ──────────────────────────────────────────
