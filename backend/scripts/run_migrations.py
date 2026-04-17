@@ -61,13 +61,17 @@ def run_migrations(migrations_dir: str | None = None) -> None:
         sql = Path(filepath).read_text(encoding="utf-8")
 
         logger.info("  applying: %s", filename)
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(sql)
-                cur.execute(
-                    "INSERT INTO schema_migrations (filename) VALUES (%s)",
-                    (filename,),
-                )
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql)
+                    cur.execute(
+                        "INSERT INTO schema_migrations (filename) VALUES (%s)",
+                        (filename,),
+                    )
+        except Exception:
+            logger.exception("  failed while applying: %s", filename)
+            raise
         logger.info("  done: %s", filename)
 
     logger.info("Migrations complete.")
@@ -80,6 +84,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     try:
         run_migrations(migrations_dir=args.migrations_dir)
-    except Exception as exc:
-        logger.error("Migration failed: %s", exc)
+    except Exception:
+        # The inner per-file handler already logged filename + full traceback.
         sys.exit(1)
