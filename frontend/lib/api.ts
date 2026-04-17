@@ -391,7 +391,7 @@ export const chatApi = {
    */
   conversations: {
     list: () =>
-      apiRequest<{ conversations: Array<{ id: string; title: string; created_at: string; updated_at: string }> }>('/api/chat/conversations'),
+      apiRequest<{ conversations: Array<{ id: string; title: string; folder_id: string | null; created_at: string; updated_at: string }> }>('/api/chat/conversations'),
     create: () =>
       apiRequest<{ id: string; title: string; created_at: string; updated_at: string }>('/api/chat/conversations', { method: 'POST' }),
     rename: (id: string, title: string) =>
@@ -1120,6 +1120,65 @@ export const toolMarketplaceApi = {
     }),
 }
 
+// ==================== Profile API ====================
+
+export interface UserProfile {
+  id: string
+  email: string
+  display_name: string | null
+  timezone: string | null
+  stats?: {
+    values_count: number
+    goals_count: number
+    approval_rate: number
+  }
+}
+
+export const profileApi = {
+  get: async (): Promise<UserProfile> => {
+    const res = await apiRequest<{ status: string; data: UserProfile }>('/api/profile/')
+    return res.data
+  },
+  update: (patch: Partial<Pick<UserProfile, 'display_name' | 'timezone'>>) =>
+    apiRequest<{ status: string; data: UserProfile }>('/api/profile/', {
+      method: 'PUT',
+      body: JSON.stringify(patch),
+    }),
+}
+
+// ==================== Folders API ====================
+
+export interface Folder {
+  id: string
+  name: string
+  color: string | null
+  position: number
+  created_at: string
+  updated_at: string
+}
+
+export const foldersApi = {
+  list: () =>
+    apiRequest<{ folders: Folder[] }>('/api/folders'),
+  create: (name: string, color?: string | null) =>
+    apiRequest<Folder>('/api/folders', {
+      method: 'POST',
+      body: JSON.stringify({ name, color: color ?? null }),
+    }),
+  update: (id: string, patch: { name?: string; color?: string | null; position?: number }) =>
+    apiRequest<Folder>(`/api/folders/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+  delete: (id: string) =>
+    apiRequest<{ success: boolean }>(`/api/folders/${id}`, { method: 'DELETE' }),
+  moveConversation: (conversationId: string, folderId: string | null) =>
+    apiRequest<{ id: string; folder_id: string | null }>(
+      `/api/folders/conversations/${conversationId}`,
+      { method: 'PATCH', body: JSON.stringify({ folder_id: folderId }) },
+    ),
+}
+
 export const api = {
   values: valuesApi,
   chat: chatApi,
@@ -1137,6 +1196,8 @@ export const api = {
   projects: projectsApi,
   tasks: tasksApi,
   context: contextApi,
+  folders: foldersApi,
+  profile: profileApi,
 };
 
 export default api;

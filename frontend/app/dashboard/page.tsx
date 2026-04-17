@@ -10,6 +10,8 @@ import {
 } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
+import { ToolsLauncher } from '@/components/tools-launcher'
+import { DashboardHero, RecentConversations } from '@/components/dashboard-hero'
 
 interface ESLLog {
   id?: string
@@ -92,6 +94,15 @@ export default function DashboardPage() {
   return (
     <ErrorBoundary>
     <div className="p-6 max-w-4xl mx-auto space-y-8">
+
+      {/* ── Hero: greeting + quick actions ─────────────────────── */}
+      <DashboardHero />
+
+      {/* ── Tools launcher ─────────────────────────────────────── */}
+      <ToolsLauncher />
+
+      {/* ── Recent conversations ───────────────────────────────── */}
+      <RecentConversations />
 
       {/* ── Today section ──────────────────────────────────────── */}
       <div>

@@ -284,8 +284,8 @@ export default function TransparencyPage() {
           {report && stats && (
             <motion.div variants={itemVariants}>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="rounded-2xl p-5" style={{ background: '#ffffff', border: '1px solid #e5e5e5' }}>
-                  <p className="text-sm font-medium mb-3" style={{ color: '#1a1a1a' }}>Decision Breakdown</p>
+                <div className="rounded-2xl p-5" style={{ background: 'var(--ec-card-bg)', border: '1px solid #e5e5e5' }}>
+                  <p className="text-sm font-medium mb-3" style={{ color: 'var(--ec-text)' }}>Decision Breakdown</p>
                   <ResponsiveContainer width="100%" height={200}>
                     <PieChart>
                       <Pie data={donutData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} dataKey="value">
@@ -297,8 +297,8 @@ export default function TransparencyPage() {
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="rounded-2xl p-5" style={{ background: '#ffffff', border: '1px solid #e5e5e5' }}>
-                  <p className="text-sm font-medium mb-3" style={{ color: '#1a1a1a' }}>Decisions Over Time</p>
+                <div className="rounded-2xl p-5" style={{ background: 'var(--ec-card-bg)', border: '1px solid #e5e5e5' }}>
+                  <p className="text-sm font-medium mb-3" style={{ color: 'var(--ec-text)' }}>Decisions Over Time</p>
                   <ResponsiveContainer width="100%" height={200}>
                     <LineChart data={timeData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
@@ -310,8 +310,8 @@ export default function TransparencyPage() {
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="rounded-2xl p-5" style={{ background: '#ffffff', border: '1px solid #e5e5e5' }}>
-                  <p className="text-sm font-medium mb-3" style={{ color: '#1a1a1a' }}>Most Protected Values</p>
+                <div className="rounded-2xl p-5" style={{ background: 'var(--ec-card-bg)', border: '1px solid #e5e5e5' }}>
+                  <p className="text-sm font-medium mb-3" style={{ color: 'var(--ec-text)' }}>Most Protected Values</p>
                   <ResponsiveContainer width="100%" height={200}>
                     <BarChart data={stats.most_protected_values}>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />

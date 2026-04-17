@@ -97,11 +97,11 @@ export default function NotificationsPage() {
         action={
           unreadCount > 0 ? (
             <div className="flex items-center gap-3">
-              <Badge variant="outline" className="bg-[#1a1a1a]/10 text-[#1a1a1a] border-[#1a1a1a]/20 rounded-full">
+              <Badge variant="outline" className="bg-[var(--ec-text)]/10 text-[var(--ec-text)] border-[var(--ec-text)]/20 rounded-full">
                 {unreadCount} unread
               </Badge>
               <button
-                className="px-4 py-1.5 rounded-full text-sm font-medium border border-[#e0e0e0] text-[#6b6b6b] hover:bg-[#f5f5f5] transition-colors disabled:opacity-50"
+                className="px-4 py-1.5 rounded-full text-sm font-medium border border-[var(--ec-border)] text-[var(--ec-text-muted)] hover:bg-[var(--ec-page-bg)] transition-colors disabled:opacity-50"
                 disabled={markingAll}
                 onClick={handleMarkAllRead}
               >
@@ -135,25 +135,25 @@ export default function NotificationsPage() {
           {displayedNotifications.map((notification) => {
             const Icon = iconForType(notification.type)
             const href = getNotificationHref(notification.type)
-            const cardClass = `border-[#e0e0e0] rounded-2xl transition-all hover:shadow-md cursor-pointer ${!notification.read ? 'bg-[#f5f5f5]' : ''}`
+            const cardClass = `border-[var(--ec-border)] rounded-2xl transition-all hover:shadow-md cursor-pointer ${!notification.read ? 'bg-[var(--ec-page-bg)]' : ''}`
             const handleClick = () => !notification.read && handleMarkRead(notification.id)
             const inner = (
               <CardHeader className="pb-3">
                 <div className="flex items-start gap-4">
-                  <div className={`mt-1 ${notification.read ? 'text-[#6b6b6b]' : 'text-[#1a1a1a]'}`}>
+                  <div className={`mt-1 ${notification.read ? 'text-[var(--ec-text-muted)]' : 'text-[var(--ec-text)]'}`}>
                     <Icon className="h-4 w-4" />
                   </div>
                   <div className="flex-1 space-y-1">
                     <div className="flex items-center gap-2">
-                      <CardTitle className="text-base text-[#1a1a1a]">
+                      <CardTitle className="text-base text-[var(--ec-text)]">
                         {notification.title}
                       </CardTitle>
                       {!notification.read && (
-                        <div className="h-2 w-2 rounded-full bg-[#1a1a1a]" />
+                        <div className="h-2 w-2 rounded-full bg-[var(--ec-text)]" />
                       )}
                     </div>
-                    <p className="text-sm text-[#6b6b6b]">{notification.message}</p>
-                    <p className="text-xs text-[#9e9e9e]">{timeAgo(notification.created_at)}</p>
+                    <p className="text-sm text-[var(--ec-text-muted)]">{notification.message}</p>
+                    <p className="text-xs text-[var(--ec-text-subtle)]">{timeAgo(notification.created_at)}</p>
                   </div>
                 </div>
               </CardHeader>
@@ -175,10 +175,10 @@ export default function NotificationsPage() {
       )}
 
       {!loading && displayedNotifications.length === 0 && (
-        <Card className="border-[#e0e0e0] rounded-2xl p-12 text-center">
-          <Bell className="h-10 w-10 mx-auto text-[#9e9e9e]" />
-          <h3 className="font-semibold mt-4 text-lg text-[#1a1a1a]">All caught up!</h3>
-          <p className="text-[#6b6b6b] mt-2">You have no notifications</p>
+        <Card className="border-[var(--ec-border)] rounded-2xl p-12 text-center">
+          <Bell className="h-10 w-10 mx-auto text-[var(--ec-text-subtle)]" />
+          <h3 className="font-semibold mt-4 text-lg text-[var(--ec-text)]">All caught up!</h3>
+          <p className="text-[var(--ec-text-muted)] mt-2">You have no notifications</p>
         </Card>
       )}
     </div>

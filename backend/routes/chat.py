@@ -199,7 +199,7 @@ async def list_conversations(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT id, title, created_at, updated_at
+                SELECT id, title, folder_id, created_at, updated_at
                 FROM conversations
                 WHERE user_id = %s
                 ORDER BY updated_at DESC
@@ -213,6 +213,7 @@ async def list_conversations(
             {
                 "id": str(r["id"]),
                 "title": r["title"],
+                "folder_id": str(r["folder_id"]) if r.get("folder_id") else None,
                 "created_at": r["created_at"].isoformat(),
                 "updated_at": r["updated_at"].isoformat(),
             }

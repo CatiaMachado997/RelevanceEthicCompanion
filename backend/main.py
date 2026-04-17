@@ -47,9 +47,9 @@ async def lifespan(app: FastAPI):
 
     try:
         run_migrations()
-        logger.info("✅ Database migrations up to date")
+        logger.info("Database migrations up to date")
     except Exception:
-        logger.exception("❌ Migration failed on startup; refusing to serve traffic")
+        logger.exception("Migration failed on startup; refusing to serve traffic")
         raise
 
     # Auto-migrate: ensure extra columns exist in user_settings

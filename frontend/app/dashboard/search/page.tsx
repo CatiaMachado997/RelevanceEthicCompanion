@@ -104,7 +104,7 @@ export default function SearchPage() {
 
         {/* Search Input */}
         <div className="relative">
-          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9e9e9e]" />
+          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--ec-text-subtle)]" />
           <input
             type="text"
             value={query}
@@ -113,14 +113,14 @@ export default function SearchPage() {
               if (e.key === "Enter") handleSearch(query)
             }}
             placeholder="Search your memories..."
-            className="h-11 w-full rounded-xl border border-[rgba(0,0,0,0.12)] bg-white pl-10 pr-10 text-sm text-[#0a0a0a] placeholder:text-[#9e9e9e] focus:border-[#0a0a0a] focus:outline-none focus:ring-1 focus:ring-[#0a0a0a]"
+            className="h-11 w-full rounded-xl border border-[rgba(0,0,0,0.12)] bg-white pl-10 pr-10 text-sm text-[var(--ec-text)] placeholder:text-[var(--ec-text-subtle)] focus:border-[#0a0a0a] focus:outline-none focus:ring-1 focus:ring-[#0a0a0a]"
           />
           {query && (
             <button
               onClick={handleClear}
-              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-0.5 hover:bg-[#f5f5f5]"
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-0.5 hover:bg-[var(--ec-page-bg)]"
             >
-              <X className="h-4 w-4 text-[#9e9e9e]" />
+              <X className="h-4 w-4 text-[var(--ec-text-subtle)]" />
             </button>
           )}
         </div>
@@ -154,13 +154,13 @@ export default function SearchPage() {
             {[1, 2, 3].map((i) => (
               <div
                 key={i}
-                className="h-20 animate-pulse rounded-2xl border border-[rgba(0,0,0,0.08)] bg-[#f5f5f5]"
+                className="h-20 animate-pulse rounded-2xl border border-[rgba(0,0,0,0.08)] bg-[var(--ec-page-bg)]"
               />
             ))}
           </div>
         ) : filteredResults.length > 0 ? (
           <div className="space-y-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">
+            <p className="text-xs font-medium uppercase tracking-wide text-[var(--ec-text-subtle)]">
               {filteredResults.length} result{filteredResults.length !== 1 ? "s" : ""}
             </p>
             <div className="space-y-2">
@@ -170,23 +170,23 @@ export default function SearchPage() {
                   className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-shadow hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)]"
                 >
                   <div className="flex items-start gap-3">
-                    <div className="mt-0.5 text-[#6b6b6b]">
+                    <div className="mt-0.5 text-[var(--ec-text-muted)]">
                       {getIcon(result.type)}
                     </div>
                     <div className="flex-1 space-y-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center rounded-full bg-[#f5f5f5] px-2.5 py-0.5 text-xs font-medium text-[#0a0a0a]">
+                        <span className="inline-flex items-center rounded-full bg-[var(--ec-page-bg)] px-2.5 py-0.5 text-xs font-medium text-[var(--ec-text)]">
                           {getTypeLabel(result.type)}
                         </span>
-                        <span className="text-xs text-[#9e9e9e]">
+                        <span className="text-xs text-[var(--ec-text-subtle)]">
                           {Math.round(result.score * 100)}% match
                         </span>
                       </div>
-                      <p className="text-sm text-[#0a0a0a] line-clamp-3">
+                      <p className="text-sm text-[var(--ec-text)] line-clamp-3">
                         {result.content}
                       </p>
                       {typeof result.metadata?.timestamp === 'string' && (
-                        <div className="flex items-center gap-1 text-xs text-[#9e9e9e]">
+                        <div className="flex items-center gap-1 text-xs text-[var(--ec-text-subtle)]">
                           <Clock className="h-3 w-3" />
                           {new Date(result.metadata.timestamp).toLocaleDateString()}
                         </div>
@@ -199,9 +199,9 @@ export default function SearchPage() {
           </div>
         ) : query && !loading ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <Search className="mb-3 h-8 w-8 text-[#9e9e9e]" />
-            <p className="text-sm font-medium text-[#0a0a0a]">No results found</p>
-            <p className="text-xs text-[#9e9e9e]">
+            <Search className="mb-3 h-8 w-8 text-[var(--ec-text-subtle)]" />
+            <p className="text-sm font-medium text-[var(--ec-text)]">No results found</p>
+            <p className="text-xs text-[var(--ec-text-subtle)]">
               Try a different query — memories are stored after chat conversations
             </p>
           </div>
@@ -210,7 +210,7 @@ export default function SearchPage() {
         {/* Recent Searches */}
         {!query && recentSearches.length > 0 && (
           <div className="space-y-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">
+            <p className="text-xs font-medium uppercase tracking-wide text-[var(--ec-text-subtle)]">
               Recent Searches
             </p>
             <div className="space-y-2">
@@ -220,8 +220,8 @@ export default function SearchPage() {
                   onClick={() => handleRecentClick(search)}
                   className="flex w-full items-center gap-3 rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white p-3 text-left shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-shadow hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)]"
                 >
-                  <Clock className="h-4 w-4 text-[#9e9e9e]" />
-                  <span className="text-sm text-[#0a0a0a]">{search}</span>
+                  <Clock className="h-4 w-4 text-[var(--ec-text-subtle)]" />
+                  <span className="text-sm text-[var(--ec-text)]">{search}</span>
                 </button>
               ))}
             </div>
@@ -231,13 +231,13 @@ export default function SearchPage() {
         {/* Empty State */}
         {!query && recentSearches.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="mb-4 rounded-full bg-[#f5f5f5] p-4">
-              <Search className="h-8 w-8 text-[#9e9e9e]" />
+            <div className="mb-4 rounded-full bg-[var(--ec-page-bg)] p-4">
+              <Search className="h-8 w-8 text-[var(--ec-text-subtle)]" />
             </div>
-            <h3 className="mb-1 text-sm font-medium text-[#0a0a0a]">
+            <h3 className="mb-1 text-sm font-medium text-[var(--ec-text)]">
               Semantic search
             </h3>
-            <p className="text-xs text-[#6b6b6b]">
+            <p className="text-xs text-[var(--ec-text-muted)]">
               Search your AI conversation memories by meaning, not just keywords
             </p>
           </div>

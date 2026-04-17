@@ -55,13 +55,13 @@ export default function AuthCallbackPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#fafafa' }}>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#f2f2f2' }}>
         <div className="text-center space-y-4 max-w-sm px-6">
           <p className="text-sm" style={{ color: '#b04a3a' }}>{error}</p>
           <button
             onClick={() => router.push('/login')}
             className="text-xs underline underline-offset-2"
-            style={{ color: '#6b6b6b' }}
+            style={{ color: '#555555' }}
           >
             Back to sign in
           </button>
@@ -71,12 +71,12 @@ export default function AuthCallbackPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: '#fafafa' }}>
+    <div className="min-h-screen flex items-center justify-center" style={{ background: '#f2f2f2' }}>
       <div className="flex flex-col items-center gap-4">
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center animate-pulse" style={{ background: '#1a1a1a' }}>
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center animate-pulse" style={{ background: '#111111' }}>
           <Shield size={18} color="white" />
         </div>
-        <p className="text-sm" style={{ color: '#6b6b6b' }}>Signing you in…</p>
+        <p className="text-sm" style={{ color: '#555555' }}>Signing you in…</p>
       </div>
     </div>
   )

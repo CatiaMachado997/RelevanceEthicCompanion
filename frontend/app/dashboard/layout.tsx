@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { SidebarNav } from '@/components/sidebar'
+import { CommandPalette } from '@/components/command-palette'
+import { SlidePanelHost } from '@/components/slide-panel'
 import { supabase } from '@/lib/supabase'
 import { configureApiAuth } from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter, usePathname } from 'next/navigation'
-import { Menu, X } from 'lucide-react'
+import { Menu, X, Search } from 'lucide-react'
 
 // Configure auth at module level so it's ready before any child component
 // calls an API in its own useEffect (children's effects run before parent's).
@@ -64,6 +66,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: 'var(--ec-page-bg)' }}>
 
+      {/* Global ⌘K palette */}
+      <CommandPalette />
+
+      {/* Global slide-over panel host (goals / tasks / …) */}
+      <SlidePanelHost />
+
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
@@ -113,6 +121,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--ec-text-subtle)' }}>{meta.subtitle}</p>
             )}
           </div>
+
+          {/* ⌘K trigger */}
+          <button
+            onClick={() => window.dispatchEvent(new Event('ec:open-palette'))}
+            aria-label="Open command palette"
+            className="flex items-center gap-2 h-9 px-3 rounded-lg text-xs transition-colors hover:bg-[#f0f0f0]"
+            style={{
+              background: 'var(--ec-surface-2)',
+              color: 'var(--ec-text-muted)',
+              border: '1px solid var(--ec-card-border)',
+            }}
+          >
+            <Search size={13} />
+            <span className="hidden sm:inline">Search…</span>
+            <kbd
+              className="hidden sm:inline px-1 py-0.5 text-[10px] font-medium rounded"
+              style={{ background: 'var(--ec-card-bg)', color: 'var(--ec-text-subtle)' }}
+            >
+              ⌘K
+            </kbd>
+          </button>
 
           {/* ESL shield badge */}
           <div

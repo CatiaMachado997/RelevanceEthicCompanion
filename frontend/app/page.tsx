@@ -6,48 +6,49 @@ import Link from 'next/link'
 export default function LandingPage() {
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-center p-6 text-center"
-      style={{ background: '#fafafa' }}
+      className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 text-center"
+      style={{ background: '#f2f2f2' }}
     >
-      {/* Logo */}
-      <div
-        className="w-14 h-14 rounded-2xl flex items-center justify-center mb-8"
-        style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)' }}
-      >
-        <Shield size={24} color="white" />
+      {/* Logo — matches login page */}
+      <div className="flex items-center gap-2.5 mb-10">
+        <div
+          className="w-10 h-10 rounded-xl flex items-center justify-center"
+          style={{ background: '#111111' }}
+        >
+          <Shield size={18} color="white" />
+        </div>
+        <span className="text-lg font-semibold tracking-tight" style={{ color: '#111111' }}>
+          Ethic Companion
+        </span>
       </div>
-
-      {/* Wordmark */}
-      <p className="text-xs font-medium uppercase tracking-[0.2em] mb-4" style={{ color: '#9e9e9e' }}>
-        Ethic Companion
-      </p>
 
       {/* Tagline */}
       <h1
-        className="text-3xl sm:text-4xl mb-4 max-w-sm leading-tight"
-        style={{ color: '#1a1a1a', fontWeight: 400, fontFamily: 'var(--font-fraunces)' }}
+        className="text-3xl sm:text-4xl leading-tight mb-2 max-w-md"
+        style={{ color: '#111111', fontWeight: 400, fontFamily: 'var(--font-fraunces)' }}
       >
-        Your AI work companion that respects your boundaries.
+        Your AI work companion
       </h1>
-
-      {/* Description */}
-      <p className="text-sm leading-relaxed max-w-xs mb-10" style={{ color: '#6b6b6b' }}>
-        Ethic Companion helps you make decisions, manage work, and stay focused — without dark patterns or engagement traps. Powered by an Ethical Safeguard Layer that puts your values first.
+      <p
+        className="text-lg sm:text-xl leading-snug mb-10 max-w-md"
+        style={{ color: '#555555', fontFamily: 'var(--font-fraunces)', fontWeight: 300 }}
+      >
+        that respects your boundaries.
       </p>
 
       {/* CTA */}
       <Link
         href="/login"
-        className="inline-flex items-center gap-2 w-full sm:w-auto justify-center h-12 px-8 rounded-2xl text-sm font-medium transition-all hover:opacity-90 active:scale-[0.98]"
-        style={{ background: '#1a1a1a', color: '#ffffff' }}
+        className="inline-flex items-center gap-2 h-11 px-8 rounded-lg text-sm font-medium transition-all hover:opacity-90 active:scale-[0.98]"
+        style={{ background: '#4a7c59', color: '#ffffff' }}
       >
         Sign in
         <ArrowRight size={15} />
       </Link>
 
       {/* Trust note */}
-      <p className="mt-6 text-xs" style={{ color: '#c4bcc8' }}>
-        No password needed — we use magic links.
+      <p className="mt-5 text-xs max-w-xs" style={{ color: '#777777' }}>
+        No passwords needed — we use integrations and magic links.
       </p>
     </div>
   )
