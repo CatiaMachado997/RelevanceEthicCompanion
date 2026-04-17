@@ -366,11 +366,8 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
   useEffect(() => {
     if (!conversationId) { setConversationTitle(''); return }
     // Fetch the conversation's title so we can show/edit it on the chat page.
-    api.chat.conversations.list()
-      .then(r => {
-        const c = r.conversations.find(x => x.id === conversationId)
-        if (c) setConversationTitle(c.title)
-      })
+    api.chat.conversations.get(conversationId)
+      .then(c => setConversationTitle(c.title))
       .catch(() => {})
   }, [conversationId])
 

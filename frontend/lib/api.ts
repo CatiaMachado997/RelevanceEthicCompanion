@@ -392,6 +392,8 @@ export const chatApi = {
   conversations: {
     list: () =>
       apiRequest<{ conversations: Array<{ id: string; title: string; folder_id: string | null; created_at: string; updated_at: string }> }>('/api/chat/conversations'),
+    get: (id: string) =>
+      apiRequest<{ id: string; title: string; folder_id: string | null; created_at: string; updated_at: string }>(`/api/chat/conversations/${id}`),
     create: () =>
       apiRequest<{ id: string; title: string; created_at: string; updated_at: string }>('/api/chat/conversations', { method: 'POST' }),
     rename: (id: string, title: string) =>
