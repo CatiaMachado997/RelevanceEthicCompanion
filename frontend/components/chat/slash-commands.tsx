@@ -23,6 +23,7 @@ import {
   Plus, FolderPlus, X, Sparkles,
 } from "lucide-react"
 import { api } from "@/lib/api"
+import { toast } from "@/lib/toast"
 import { parseNaturalDate } from "./parse-natural-date"
 
 
@@ -128,12 +129,13 @@ const COMMANDS: Command[] = [
           priority: 1,
           ...(iso ? { due_date: iso } : {}),
         })
-        // Open the tasks panel so the user sees the new task land.
+        toast.success("Task added", title)
         window.dispatchEvent(new CustomEvent("ec:open-panel", {
           detail: { name: "tasks", title: "Your tasks" },
         }))
       } catch (e) {
         console.error("create task failed", e)
+        toast.error("Couldn't create task", e instanceof Error ? e.message : undefined)
       }
     },
   },
@@ -155,11 +157,13 @@ const COMMANDS: Command[] = [
           priority: 1,
           ...(iso ? { target_date: iso } : {}),
         })
+        toast.success("Goal added", title)
         window.dispatchEvent(new CustomEvent("ec:open-panel", {
           detail: { name: "goals", title: "Your goals" },
         }))
       } catch (e) {
         console.error("create goal failed", e)
+        toast.error("Couldn't create goal", e instanceof Error ? e.message : undefined)
       }
     },
   },
@@ -175,9 +179,11 @@ const COMMANDS: Command[] = [
       if (!name) return
       try {
         await api.folders.create(name)
+        toast.success("Folder created", name)
         window.dispatchEvent(new Event("ec:conversation-created"))
       } catch (e) {
         console.error("create folder failed", e)
+        toast.error("Couldn't create folder", e instanceof Error ? e.message : undefined)
       }
     },
   },
