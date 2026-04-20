@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import patch
 from httpx import AsyncClient, ASGITransport
 from main import app
+from utils.supabase_auth import get_current_user_id
 
 
 @pytest.mark.asyncio
@@ -20,9 +21,12 @@ async def test_put_status_unauthenticated():
 
 @pytest.mark.asyncio
 async def test_put_status_invalid_value():
-    with patch("utils.supabase_auth.get_current_user_id", return_value="user-1"):
+    app.dependency_overrides[get_current_user_id] = lambda: "user-1"
+    try:
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             r = await client.put("/api/status/", json={"status": "invalid_status"})
+    finally:
+        app.dependency_overrides.pop(get_current_user_id, None)
     assert r.status_code == 422

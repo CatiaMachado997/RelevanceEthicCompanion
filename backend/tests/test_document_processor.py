@@ -75,12 +75,15 @@ from fastapi.testclient import TestClient
 def test_documents_list_endpoint():
     """GET /api/documents/ should return a list (may be empty)."""
     from main import app
+    from utils.supabase_auth import get_current_read_user_id
 
     client = TestClient(app)
-    with patch(
-        "routes.documents.get_current_read_user_id", return_value="user-1"
-    ), patch("routes.documents.get_user_documents", return_value=[]):
-        response = client.get("/api/documents/")
+    app.dependency_overrides[get_current_read_user_id] = lambda: "user-1"
+    try:
+        with patch("routes.documents.get_user_documents", return_value=[]):
+            response = client.get("/api/documents/")
+    finally:
+        app.dependency_overrides.pop(get_current_read_user_id, None)
     assert response.status_code == 200
     assert isinstance(response.json(), list)
 
@@ -88,14 +91,17 @@ def test_documents_list_endpoint():
 def test_documents_upload_unsupported_type():
     """Upload of unsupported file type should return 400."""
     from main import app
+    from utils.supabase_auth import get_current_user_id
     import io
 
     client = TestClient(app)
-    with patch("routes.documents.get_current_user_id", return_value="user-1"), patch(
-        "routes.documents.get_document_processor", return_value=MagicMock()
-    ):
-        response = client.post(
-            "/api/documents/upload",
-            files={"file": ("test.png", io.BytesIO(b"fake"), "image/png")},
-        )
+    app.dependency_overrides[get_current_user_id] = lambda: "user-1"
+    try:
+        with patch("routes.documents.get_document_processor", return_value=MagicMock()):
+            response = client.post(
+                "/api/documents/upload",
+                files={"file": ("test.png", io.BytesIO(b"fake"), "image/png")},
+            )
+    finally:
+        app.dependency_overrides.pop(get_current_user_id, None)
     assert response.status_code == 400

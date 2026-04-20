@@ -44,7 +44,14 @@ class GoogleCalendarSync:
                           Defaults to settings.GOOGLE_OAUTH_REDIRECT_URI.
         """
         self.redirect_uri = redirect_uri or settings.GOOGLE_OAUTH_REDIRECT_URI
-        self.client_config = self._load_client_config()
+        # Lazy: OAuth creds aren't needed to normalize already-fetched events.
+        self._client_config_cache: Optional[Dict[str, Any]] = None
+
+    @property
+    def client_config(self) -> Dict[str, Any]:
+        if self._client_config_cache is None:
+            self._client_config_cache = self._load_client_config()
+        return self._client_config_cache
 
     def _load_client_config(self) -> Dict[str, Any]:
         """Load OAuth client configuration from environment or file"""

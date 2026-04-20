@@ -1,8 +1,11 @@
 """Tests that critical DB tables exist and have expected columns."""
 
+import pytest
+
 from utils.db import get_db_connection
 
 
+@pytest.mark.integration
 def test_source_items_table_exists():
     """source_items table must exist with required columns."""
     with get_db_connection() as conn:
