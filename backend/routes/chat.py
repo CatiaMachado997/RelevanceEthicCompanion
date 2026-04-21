@@ -199,7 +199,7 @@ async def list_conversations(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT id, title, created_at, updated_at
+                SELECT id, title, folder_id, created_at, updated_at
                 FROM conversations
                 WHERE user_id = %s
                 ORDER BY updated_at DESC
@@ -213,11 +213,37 @@ async def list_conversations(
             {
                 "id": str(r["id"]),
                 "title": r["title"],
+                "folder_id": str(r["folder_id"]) if r.get("folder_id") else None,
                 "created_at": r["created_at"].isoformat(),
                 "updated_at": r["updated_at"].isoformat(),
             }
             for r in rows
         ]
+    }
+
+
+@router.get("/conversations/{conversation_id}")
+async def get_conversation(
+    conversation_id: str,
+    user_id: str = Depends(get_current_read_user_id),
+) -> dict:
+    """Fetch a single conversation's metadata (no messages)."""
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, title, folder_id, created_at, updated_at
+                FROM conversations
+                WHERE id = %s AND user_id = %s
+            """, (conversation_id, user_id))
+            row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return {
+        "id": str(row["id"]),
+        "title": row["title"],
+        "folder_id": str(row["folder_id"]) if row.get("folder_id") else None,
+        "created_at": row["created_at"].isoformat(),
+        "updated_at": row["updated_at"].isoformat(),
     }
 
 

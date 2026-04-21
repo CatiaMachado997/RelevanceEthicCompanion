@@ -26,7 +26,7 @@ const TYPE_DOT_COLORS: Record<string, string> = {
 }
 
 const CARD_BASE = {
-  background: '#ffffff',
+  background: 'var(--ec-card-bg)',
   border: '1px solid rgba(0,0,0,0.08)',
   boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
 }
@@ -85,7 +85,7 @@ function SortableValueCard({ value, onEdit, onDelete }: SortableCardProps) {
               {...listeners}
               className="shrink-0 opacity-0 group-hover:opacity-40 transition-opacity cursor-grab"
             >
-              <GripVertical size={14} style={{ color: '#9e9e9e' }} />
+              <GripVertical size={14} style={{ color: 'var(--ec-text-subtle)' }} />
             </div>
             <TypeBadge type={value.type} />
           </div>
@@ -95,7 +95,7 @@ function SortableValueCard({ value, onEdit, onDelete }: SortableCardProps) {
               className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-black/5"
               aria-label="Edit value"
             >
-              <Pencil size={13} style={{ color: '#6b6b6b' }} />
+              <Pencil size={13} style={{ color: 'var(--ec-text-muted)' }} />
             </button>
             <button
               onClick={() => onDelete(value.id)}
@@ -106,8 +106,8 @@ function SortableValueCard({ value, onEdit, onDelete }: SortableCardProps) {
             </button>
           </div>
         </div>
-        <p className="mt-3 text-sm font-medium" style={{ color: '#1a1a1a' }}>{value.value}</p>
-        <p className="mt-1 text-xs" style={{ color: '#9e9e9e' }}>
+        <p className="mt-3 text-sm font-medium" style={{ color: 'var(--ec-text)' }}>{value.value}</p>
+        <p className="mt-1 text-xs" style={{ color: 'var(--ec-text-subtle)' }}>
           Priority {value.priority}
         </p>
       </div>
@@ -253,8 +253,8 @@ export default function ValuesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold" style={{ color: '#1a1a1a' }}>Your Values</h2>
-          <p className="text-sm mt-0.5" style={{ color: '#6b6b6b' }}>
+          <h2 className="text-base font-semibold" style={{ color: 'var(--ec-text)' }}>Your Values</h2>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--ec-text-muted)' }}>
             Define the boundaries ESL protects for you.
           </p>
         </div>
@@ -304,9 +304,9 @@ export default function ValuesPage() {
           ) : (
             <div
               className="rounded-2xl p-10 text-center"
-              style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}
+              style={{ background: 'var(--ec-card-bg)', border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}
             >
-              <p className="text-sm" style={{ color: '#9e9e9e' }}>
+              <p className="text-sm" style={{ color: 'var(--ec-text-subtle)' }}>
                 No values match this filter.
               </p>
             </div>
@@ -336,27 +336,27 @@ export default function ValuesPage() {
             className="flex-1 bg-black/20 backdrop-blur-sm"
             onClick={() => setSheetOpen(false)}
           />
-          <div className="w-[400px] flex flex-col h-full shadow-2xl" style={{ background: '#f9f9f9' }}>
+          <div className="w-[400px] flex flex-col h-full shadow-2xl" style={{ background: 'var(--ec-surface)' }}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-black/5">
-              <h3 className="text-sm font-semibold" style={{ color: '#0a0a0a' }}>
+              <h3 className="text-sm font-semibold" style={{ color: 'var(--ec-text)' }}>
                 {editingValue ? 'Edit Value' : 'Add Value'}
               </h3>
               <button onClick={() => setSheetOpen(false)} aria-label="Close sheet">
-                <X size={18} style={{ color: '#6b6b6b' }} />
+                <X size={18} style={{ color: 'var(--ec-text-muted)' }} />
               </button>
             </div>
 
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
               {!editingValue && (
                 <div>
-                  <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#6b6b6b' }}>
+                  <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: 'var(--ec-text-muted)' }}>
                     Type
                   </label>
                   <select
                     value={formType}
                     onChange={e => setFormType(e.target.value as ValueType)}
                     className="w-full rounded-xl px-3 py-2 text-sm outline-none"
-                    style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.10)', color: '#0a0a0a' }}
+                    style={{ background: 'var(--ec-card-bg)', border: '1px solid rgba(0,0,0,0.10)', color: 'var(--ec-text)' }}
                   >
                     {(Object.keys(TYPE_LABELS) as ValueType[]).map(t => (
                       <option key={t} value={t}>{TYPE_LABELS[t]}</option>
@@ -366,7 +366,7 @@ export default function ValuesPage() {
               )}
 
               <div>
-                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#6b6b6b' }}>
+                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: 'var(--ec-text-muted)' }}>
                   Value
                 </label>
                 <textarea
@@ -375,12 +375,12 @@ export default function ValuesPage() {
                   placeholder="e.g. no_work_after_19h"
                   rows={3}
                   className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-none"
-                  style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.10)', color: '#0a0a0a' }}
+                  style={{ background: 'var(--ec-card-bg)', border: '1px solid rgba(0,0,0,0.10)', color: 'var(--ec-text)' }}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#6b6b6b' }}>
+                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: 'var(--ec-text-muted)' }}>
                   Priority (1 = highest)
                 </label>
                 <input
@@ -390,7 +390,7 @@ export default function ValuesPage() {
                   value={formPriority}
                   onChange={e => setFormPriority(Number(e.target.value))}
                   className="w-full rounded-xl px-3 py-2 text-sm outline-none"
-                  style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.10)', color: '#0a0a0a' }}
+                  style={{ background: 'var(--ec-card-bg)', border: '1px solid rgba(0,0,0,0.10)', color: 'var(--ec-text)' }}
                 />
               </div>
             </div>
@@ -399,7 +399,7 @@ export default function ValuesPage() {
               <button
                 onClick={() => setSheetOpen(false)}
                 className="flex-1 py-2 rounded-full text-sm font-medium"
-                style={{ background: 'rgba(0,0,0,0.05)', color: '#6b6b6b' }}
+                style={{ background: 'rgba(0,0,0,0.05)', color: 'var(--ec-text-muted)' }}
               >
                 Cancel
               </button>

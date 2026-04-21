@@ -16,3 +16,9 @@ htmlcov/
 .mypy_cache/
 .DS_Store
 *.log
+test_connections.py
+test_context_manager_v2.py
+test_infrastructure.py
+test_oauth_standalone.py
+test_v2_full_pipeline.py
+test_weaviate_fixes.py

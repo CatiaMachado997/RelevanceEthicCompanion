@@ -85,87 +85,26 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex" style={{ background: '#f2f2f2' }}>
-
-      {/* Left panel — brand / atmospheric */}
-      <div
-        className="hidden lg:flex flex-col justify-between w-[480px] shrink-0 p-12 relative overflow-hidden"
-        style={{ background: '#111111' }}
-      >
-        {/* Noise texture overlay */}
-        <div className="absolute inset-0 opacity-[0.04]" style={{
-          backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'noise\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23noise)\'/%3E%3C/svg%3E")',
-          backgroundRepeat: 'repeat',
-        }} />
-
-        {/* Glowing orb */}
-        <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full opacity-15" style={{
-          background: 'radial-gradient(circle, #4a7c59 0%, transparent 70%)',
-        }} />
-        <div className="absolute bottom-0 right-0 w-64 h-64 rounded-full opacity-10" style={{
-          background: 'radial-gradient(circle, #4a7c59 0%, transparent 70%)',
-        }} />
+    <div className="min-h-screen flex items-center justify-center p-4 sm:p-6" style={{ background: '#f2f2f2' }}>
+      <div className="w-full max-w-[420px]">
 
         {/* Logo */}
-        <div className="relative z-10 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)' }}>
-            <Shield size={16} color="white" />
+        <div className="flex items-center gap-2.5 mb-5 justify-center">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#111111' }}>
+            <Shield size={18} color="white" />
           </div>
-          <span className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.7)' }}>Ethic Companion</span>
+          <span className="text-lg font-semibold tracking-tight" style={{ color: '#111111' }}>Ethic Companion</span>
         </div>
 
-        {/* Hero copy */}
-        <div className="relative z-10 space-y-6">
-          <div>
-            <h2
-              className="text-4xl leading-tight mb-4"
-              style={{ fontFamily: 'var(--font-fraunces)', color: '#ffffff', fontWeight: 300 }}
-            >
-              AI that works<br />
-              <em>for you.</em><br />
-              Not against you.
-            </h2>
-            <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.45)' }}>
-              Every decision reviewed. Every boundary respected.<br />
-              Your values, encoded.
-            </p>
-          </div>
-
-          {/* Feature list */}
-          <div className="space-y-3">
-            {[
-              'Ethical safeguard on every action',
-              'Your values encoded, not assumed',
-              'Zero engagement manipulation',
-            ].map((item) => (
-              <div key={item} className="flex items-center gap-3">
-                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: '#4a7c59' }} />
-                <span className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>{item}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Bottom quote */}
-        <div className="relative z-10">
-          <p className="text-xs italic" style={{ color: 'rgba(255,255,255,0.25)' }}>
-            &ldquo;Trust over engagement, always.&rdquo;
-          </p>
-        </div>
-      </div>
-
-      {/* Right panel — form */}
-      <div className="flex-1 flex items-center justify-center p-8">
-        <div className="w-full max-w-[400px]">
-
-          {/* Mobile logo */}
-          <div className="flex items-center gap-2 mb-10 lg:hidden">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#111111' }}>
-              <Shield size={14} color="white" />
-            </div>
-            <span className="text-sm font-medium" style={{ color: '#1a1a1a' }}>Ethic Companion</span>
-          </div>
-
+        {/* Card */}
+        <div
+          className="rounded-2xl p-6 sm:p-8"
+          style={{
+            background: '#ffffff',
+            border: '1px solid #e8e8e8',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.04)',
+          }}
+        >
           {sent ? (
             <div className="space-y-6">
               <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: '#f0f0f0', border: '1px solid #e0e0e0' }}>
@@ -198,7 +137,7 @@ export default function LoginPage() {
               </button>
             </div>
           ) : (
-            <div className="space-y-8">
+            <div className="space-y-5">
               {signedOut && (
                 <div
                   className="rounded-lg px-4 py-3 text-sm flex items-center gap-2"
@@ -210,22 +149,26 @@ export default function LoginPage() {
               )}
 
               <div>
-                <h1 className="text-3xl mb-2" style={{ fontFamily: 'var(--font-fraunces)', color: '#111111', fontWeight: 400 }}>
-                  Welcome back
+                <h1 className="text-3xl mb-1.5 leading-tight" style={{ fontFamily: 'var(--font-fraunces)', color: '#111111', fontWeight: 400 }}>
+                  Your Personal Assistant
                 </h1>
-                <p className="text-sm" style={{ color: '#666666' }}>
-                  Enter your email to receive a sign-in link.
+                <p className="text-base" style={{ color: '#444444' }}>
+                  Hi There!
                 </p>
               </div>
 
+              <div className="text-xs font-semibold tracking-wider uppercase" style={{ color: '#555555' }}>
+                Login
+              </div>
+
               {/* OAuth provider buttons */}
-              <div className="flex flex-col gap-2 mb-6">
+              <div className="flex flex-col gap-2">
                 {/* Google */}
                 <button
                   type="button"
                   onClick={() => handleOAuthSignIn('google')}
                   disabled={!!oauthLoading}
-                  className="w-full h-11 rounded-xl flex items-center gap-3 px-4 text-sm font-medium border transition-all disabled:opacity-50"
+                  className="w-full h-10 rounded-lg flex items-center gap-3 px-4 text-sm font-medium border transition-all disabled:opacity-50"
                   style={{ background: '#fff', borderColor: '#e0e0e0', color: '#111' }}
                   onMouseEnter={e => { if (!oauthLoading) e.currentTarget.style.borderColor = '#4a7c59' }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = '#e0e0e0' }}
@@ -244,7 +187,7 @@ export default function LoginPage() {
                   type="button"
                   onClick={() => handleOAuthSignIn('azure')}
                   disabled={!!oauthLoading}
-                  className="w-full h-11 rounded-xl flex items-center gap-3 px-4 text-sm font-medium border transition-all disabled:opacity-50"
+                  className="w-full h-10 rounded-lg flex items-center gap-3 px-4 text-sm font-medium border transition-all disabled:opacity-50"
                   style={{ background: '#fff', borderColor: '#e0e0e0', color: '#111' }}
                   onMouseEnter={e => { if (!oauthLoading) e.currentTarget.style.borderColor = '#4a7c59' }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = '#e0e0e0' }}
@@ -263,7 +206,7 @@ export default function LoginPage() {
                   type="button"
                   onClick={() => handleOAuthSignIn('github')}
                   disabled={!!oauthLoading}
-                  className="w-full h-11 rounded-xl flex items-center gap-3 px-4 text-sm font-medium border transition-all disabled:opacity-50"
+                  className="w-full h-10 rounded-lg flex items-center gap-3 px-4 text-sm font-medium border transition-all disabled:opacity-50"
                   style={{ background: '#fff', borderColor: '#e0e0e0', color: '#111' }}
                   onMouseEnter={e => { if (!oauthLoading) e.currentTarget.style.borderColor = '#4a7c59' }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = '#e0e0e0' }}
@@ -276,15 +219,15 @@ export default function LoginPage() {
               </div>
 
               {/* Divider */}
-              <div className="flex items-center gap-3 mb-6">
-                <div className="flex-1 h-px" style={{ background: '#e0e0e0' }} />
-                <span className="text-xs" style={{ color: '#9e9e9e' }}>or continue with email</span>
-                <div className="flex-1 h-px" style={{ background: '#e0e0e0' }} />
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px" style={{ background: '#d4d4d4' }} />
+                <span className="text-xs text-center leading-tight" style={{ color: '#555555' }}>Don&apos;t have a provider above?<br className="sm:hidden" /> Use your e-mail to Login</span>
+                <div className="flex-1 h-px" style={{ background: '#d4d4d4' }} />
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-3">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium tracking-widest uppercase" style={{ color: '#9e9e9e' }}>
+                  <label className="text-xs font-semibold tracking-wider uppercase" style={{ color: '#555555' }}>
                     Email address
                   </label>
                   <input
@@ -294,7 +237,7 @@ export default function LoginPage() {
                     onChange={(e) => setEmail(e.target.value)}
                     required
                     disabled={isSubmitting}
-                    className="w-full h-12 rounded-xl px-4 text-sm transition-all outline-none disabled:opacity-50"
+                    className="w-full h-11 rounded-lg px-4 text-sm transition-all outline-none disabled:opacity-50"
                     style={{
                       background: '#ffffff',
                       border: '1px solid #e0e0e0',
@@ -314,7 +257,7 @@ export default function LoginPage() {
                 <button
                   type="submit"
                   disabled={isSubmitting || !email}
-                  className="w-full h-12 rounded-xl flex items-center justify-center gap-2 text-sm font-medium transition-all disabled:opacity-40"
+                  className="w-full h-11 rounded-lg flex items-center justify-center gap-2 text-sm font-medium transition-all disabled:opacity-40"
                   style={{ background: '#4a7c59', color: '#ffffff' }}
                   onMouseEnter={(e) => { if (!isSubmitting) e.currentTarget.style.background = '#3d6b4a' }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = '#4a7c59' }}
@@ -333,8 +276,8 @@ export default function LoginPage() {
                 </button>
               </form>
 
-              <p className="text-xs text-center" style={{ color: '#9e9e9e' }}>
-                No account yet? Just enter your email — we&apos;ll create one.
+              <p className="text-sm text-center" style={{ color: '#555555' }}>
+                Don&apos;t have an account? Sign in, we&apos;ll help you create one.
               </p>
             </div>
           )}

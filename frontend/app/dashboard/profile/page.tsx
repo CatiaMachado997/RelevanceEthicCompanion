@@ -141,10 +141,10 @@ export default function ProfilePage() {
           {initials}
         </div>
         <div className="min-w-0">
-          <p className="text-base font-semibold truncate" style={{ color: '#0a0a0a' }}>
+          <p className="text-base font-semibold truncate" style={{ color: 'var(--ec-text)' }}>
             {displayName || user?.email?.split('@')[0] || 'User'}
           </p>
-          <p className="text-sm truncate" style={{ color: '#9e9e9e' }}>{user?.email}</p>
+          <p className="text-sm truncate" style={{ color: 'var(--ec-text-subtle)' }}>{user?.email}</p>
           <div
             className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded-full text-xs font-medium"
             style={{ background: 'rgba(74,124,89,0.10)', color: '#4A7C59', border: '1px solid rgba(74,124,89,0.20)' }}
@@ -159,11 +159,11 @@ export default function ProfilePage() {
       <div className="rounded-2xl p-5" style={CARD_STYLE}>
         <div className="flex items-center gap-2 mb-4">
           <User size={15} style={{ color: '#000000' }} />
-          <h3 className="text-sm font-semibold" style={{ color: '#0a0a0a' }}>Personal Information</h3>
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--ec-text)' }}>Personal Information</h3>
         </div>
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-medium mb-1.5" style={{ color: '#6b6b6b' }}>Display Name</label>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--ec-text-muted)' }}>Display Name</label>
             <input
               type="text"
               value={displayName}
@@ -171,36 +171,36 @@ export default function ProfilePage() {
               placeholder="Your name"
               className="w-full px-3 py-2 rounded-xl text-sm outline-none transition-all"
               style={{
-                background: '#f9f9f9',
+                background: 'var(--ec-surface)',
                 border: '1px solid rgba(0,0,0,0.10)',
-                color: '#0a0a0a',
+                color: 'var(--ec-text)',
               }}
             />
           </div>
           <div>
-            <label className="block text-xs font-medium mb-1.5" style={{ color: '#6b6b6b' }}>Email</label>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--ec-text-muted)' }}>Email</label>
             <input
               type="email"
               value={user?.email ?? ''}
               disabled
               className="w-full px-3 py-2 rounded-xl text-sm"
               style={{
-                background: '#f5f5f5',
+                background: 'var(--ec-page-bg)',
                 border: '1px solid rgba(0,0,0,0.06)',
-                color: '#9e9e9e',
+                color: 'var(--ec-text-subtle)',
                 cursor: 'not-allowed',
               }}
             />
-            <p className="text-xs mt-1" style={{ color: '#b0b0b0' }}>Email cannot be changed here</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--ec-text-subtle)' }}>Email cannot be changed here</p>
           </div>
           <div>
-            <label className="block text-xs font-medium mb-1.5" style={{ color: '#6b6b6b' }}>Timezone</label>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--ec-text-muted)' }}>Timezone</label>
             <select
               value={timezone}
               onChange={e => setTimezone(e.target.value)}
               className="w-full px-3 py-2 rounded-xl text-sm outline-none transition-all"
               style={{
-                background: '#f9f9f9',
+                background: 'var(--ec-surface)',
                 border: '1px solid rgba(0,0,0,0.10)',
                 color: timezone ? '#0a0a0a' : '#9e9e9e',
               }}
@@ -283,7 +283,7 @@ export default function ProfilePage() {
             <button
               onClick={handleCancel}
               className="px-4 py-2 rounded-xl text-sm font-medium transition-colors hover:bg-[#f0f0f0]"
-              style={{ background: '#f5f5f5', color: '#6b6b6b' }}
+              style={{ background: 'var(--ec-page-bg)', color: 'var(--ec-text-muted)' }}
             >
               Cancel
             </button>
@@ -295,23 +295,23 @@ export default function ProfilePage() {
       <div className="rounded-2xl p-5" style={CARD_STYLE}>
         <div className="flex items-center gap-2 mb-4">
           <BarChart3 size={15} style={{ color: '#000000' }} />
-          <h3 className="text-sm font-semibold" style={{ color: '#0a0a0a' }}>Account Statistics</h3>
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--ec-text)' }}>Account Statistics</h3>
         </div>
         <div className="grid grid-cols-3 gap-3">
           {stats.map(({ label, value }) => (
             <div
               key={label}
               className="text-center py-4 rounded-xl"
-              style={{ background: '#f9f9f9' }}
+              style={{ background: 'var(--ec-surface)' }}
             >
               {loading ? (
                 <Skeleton className="h-7 w-12 mx-auto mb-1" />
               ) : (
-                <p className="text-2xl font-bold" style={{ color: '#0a0a0a' }}>
+                <p className="text-2xl font-bold" style={{ color: 'var(--ec-text)' }}>
                   {value ?? '—'}
                 </p>
               )}
-              <p className="text-xs mt-1" style={{ color: '#9e9e9e' }}>{label}</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--ec-text-subtle)' }}>{label}</p>
             </div>
           ))}
         </div>

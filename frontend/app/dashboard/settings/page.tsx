@@ -456,6 +456,27 @@ export default function SettingsPage() {
             </span>
           </div>
         </div>
+
+        {/* Relevance Tuning save */}
+        <div className="flex items-center gap-3 mt-5 pt-4 border-t" style={{ borderColor: '#eeeeee' }}>
+          <button
+            onClick={handleSave}
+            disabled={saving || !dirty}
+            className="px-4 py-2 rounded-xl text-sm font-medium transition-opacity disabled:opacity-40"
+            style={{ background: '#4a7c59', color: '#ffffff' }}
+          >
+            {saving ? 'Saving…' : 'Save tuning'}
+          </button>
+          {saveSuccess && (
+            <span className="text-xs" style={{ color: '#4A7C59' }}>Saved</span>
+          )}
+          {saveError && (
+            <span className="text-xs" style={{ color: '#B04A3A' }}>{saveError}</span>
+          )}
+          {!dirty && !saveSuccess && !saveError && (
+            <span className="text-xs" style={{ color: '#9e9e9e' }}>No changes</span>
+          )}
+        </div>
       </div>
 
       {/* Save bar */}

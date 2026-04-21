@@ -149,14 +149,14 @@ export default function GoalsPage() {
     return (
       <div
         className="flex items-center gap-4 px-5 py-4 rounded-2xl transition-shadow duration-150 hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)]"
-        style={{ border: '1px solid rgba(0,0,0,0.08)', background: '#ffffff' }}
+        style={{ border: '1px solid rgba(0,0,0,0.08)', background: 'var(--ec-card-bg)' }}
       >
         <span className="w-2 h-2 rounded-full shrink-0" style={{ background: dotColor }} />
         <div className="flex-1 min-w-0">
           <p
             className="text-sm font-medium truncate"
             style={{
-              color: '#0a0a0a',
+              color: 'var(--ec-text)',
               textDecoration: isCompleted ? 'line-through' : 'none',
               opacity: isCompleted ? 0.5 : 1,
             }}
@@ -164,24 +164,24 @@ export default function GoalsPage() {
             {goal.title}
           </p>
           {goal.description && (
-            <p className="text-xs mt-0.5 truncate" style={{ color: '#9e9e9e' }}>{goal.description}</p>
+            <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--ec-text-subtle)' }}>{goal.description}</p>
           )}
           {goal.progress !== undefined && goal.progress > 0 && (
             <div className="mt-2">
-              <div className="flex justify-between text-xs mb-1" style={{ color: '#9e9e9e' }}>
+              <div className="flex justify-between text-xs mb-1" style={{ color: 'var(--ec-text-subtle)' }}>
                 <span>Progress</span><span>{goal.progress}%</span>
               </div>
-              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#f0f0f0' }}>
+              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--ec-surface-2)' }}>
                 <div className="h-full rounded-full transition-all" style={{ width: `${goal.progress}%`, background: '#1a1a1a' }} />
               </div>
             </div>
           )}
           {/* Milestones */}
           <div className="mt-3 pt-3 border-t border-[rgba(0,0,0,0.06)]">
-            <p className="text-xs font-medium mb-2" style={{ color: '#6b6b6b' }}>
+            <p className="text-xs font-medium mb-2" style={{ color: 'var(--ec-text-muted)' }}>
               Milestones
               {milestones[goal.id] && (
-                <span className="ml-1" style={{ color: '#9e9e9e' }}>
+                <span className="ml-1" style={{ color: 'var(--ec-text-subtle)' }}>
                   ({milestones[goal.id].filter(m => m.completed).length}/{milestones[goal.id].length})
                 </span>
               )}
@@ -217,7 +217,7 @@ export default function GoalsPage() {
                       loadMilestones(goal.id)
                     }}
                   >
-                    <X size={11} style={{ color: '#9e9e9e' }} />
+                    <X size={11} style={{ color: 'var(--ec-text-subtle)' }} />
                   </button>
                 </li>
               ))}
@@ -253,7 +253,7 @@ export default function GoalsPage() {
                 }}
                 placeholder="Add milestone…"
                 className="flex-1 text-xs px-2 py-1 rounded-lg outline-none"
-                style={{ background: '#f5f2ef', color: '#1a1a1a', border: '1px solid transparent' }}
+                style={{ background: '#f5f2ef', color: 'var(--ec-text)', border: '1px solid transparent' }}
               />
               <button
                 type="submit"
@@ -270,7 +270,7 @@ export default function GoalsPage() {
           </div>
         </div>
         {goal.target_date && (
-          <span className="text-xs shrink-0 hidden sm:block" style={{ color: '#9e9e9e' }}>
+          <span className="text-xs shrink-0 hidden sm:block" style={{ color: 'var(--ec-text-subtle)' }}>
             {new Date(goal.target_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
           </span>
         )}
@@ -281,17 +281,17 @@ export default function GoalsPage() {
             className="w-11 h-11 rounded-lg flex items-center justify-center hover:bg-black/5 transition-colors"
             aria-label="Goal actions"
           >
-            <MoreHorizontal size={15} style={{ color: '#6b6b6b' }} />
+            <MoreHorizontal size={15} style={{ color: 'var(--ec-text-muted)' }} />
           </button>
           {openMenu === goal.id && (
             <div
               className="absolute right-0 top-8 z-10 w-36 rounded-xl py-1 text-sm shadow-lg"
-              style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.08)' }}
+              style={{ background: 'var(--ec-card-bg)', border: '1px solid rgba(0,0,0,0.08)' }}
             >
               <button
                 onClick={() => openEdit(goal)}
                 className="w-full text-left px-3 py-2 hover:bg-black/5 transition-colors"
-                style={{ color: '#0a0a0a' }}
+                style={{ color: 'var(--ec-text)' }}
               >
                 Edit
               </button>
@@ -324,8 +324,8 @@ export default function GoalsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold" style={{ color: '#1a1a1a' }}>Your Goals</h2>
-          <p className="text-sm mt-0.5" style={{ color: '#6b6b6b' }}>
+          <h2 className="text-base font-semibold" style={{ color: 'var(--ec-text)' }}>Your Goals</h2>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--ec-text-muted)' }}>
             Goals inform ESL about your priorities.
           </p>
         </div>
@@ -370,7 +370,7 @@ export default function GoalsPage() {
       {(!statusFilter || statusFilter === 'active' || statusFilter === 'paused') && (
       <Card className="rounded-2xl overflow-hidden border border-[rgba(0,0,0,0.08)] shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
         <div className="px-5 py-3 border-b border-black/5">
-          <h3 className="text-xs font-medium uppercase tracking-wide" style={{ color: '#6b6b6b' }}>
+          <h3 className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--ec-text-muted)' }}>
             Active &amp; Paused
           </h3>
         </div>
@@ -378,7 +378,7 @@ export default function GoalsPage() {
           {loading ? (
             [1, 2, 3].map(i => <Skeleton key={i} className="h-14 rounded-xl" />)
           ) : activeGoals.filter(g => !statusFilter || g.status === statusFilter).length === 0 ? (
-            <p className="px-2 py-4 text-sm text-center" style={{ color: '#9e9e9e' }}>
+            <p className="px-2 py-4 text-sm text-center" style={{ color: 'var(--ec-text-subtle)' }}>
               No active goals. Add one to get started.
             </p>
           ) : (
@@ -395,12 +395,12 @@ export default function GoalsPage() {
             onClick={e => { e.stopPropagation(); setShowCompleted(v => !v) }}
             className="w-full flex items-center justify-between px-5 py-3 border-b border-black/5 hover:bg-black/[0.02] transition-colors"
           >
-            <h3 className="text-xs font-medium uppercase tracking-wide" style={{ color: '#6b6b6b' }}>
+            <h3 className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--ec-text-muted)' }}>
               Completed &amp; Archived ({completedGoals.length})
             </h3>
             {showCompleted
-              ? <ChevronDown size={14} style={{ color: '#9e9e9e' }} />
-              : <ChevronRight size={14} style={{ color: '#9e9e9e' }} />
+              ? <ChevronDown size={14} style={{ color: 'var(--ec-text-subtle)' }} />
+              : <ChevronRight size={14} style={{ color: 'var(--ec-text-subtle)' }} />
             }
           </button>
           {showCompleted && (
@@ -415,51 +415,51 @@ export default function GoalsPage() {
       {sheetOpen && (
         <div className="fixed inset-0 z-50 flex" onClick={e => e.stopPropagation()}>
           <div className="flex-1 bg-black/20 backdrop-blur-sm" onClick={() => setSheetOpen(false)} />
-          <div className="w-[400px] flex flex-col h-full shadow-2xl" style={{ background: '#f9f9f9' }}>
+          <div className="w-[400px] flex flex-col h-full shadow-2xl" style={{ background: 'var(--ec-surface)' }}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-black/5">
-              <h3 className="text-sm font-semibold" style={{ color: '#0a0a0a' }}>
+              <h3 className="text-sm font-semibold" style={{ color: 'var(--ec-text)' }}>
                 {editingGoal ? 'Edit Goal' : 'Add Goal'}
               </h3>
               <button onClick={() => setSheetOpen(false)} aria-label="Close sheet">
-                <X size={18} style={{ color: '#6b6b6b' }} />
+                <X size={18} style={{ color: 'var(--ec-text-muted)' }} />
               </button>
             </div>
 
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
               <div>
-                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#6b6b6b' }}>Title</label>
+                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: 'var(--ec-text-muted)' }}>Title</label>
                 <input
                   type="text"
                   value={formTitle}
                   onChange={e => setFormTitle(e.target.value)}
                   placeholder="e.g. Ship new feature by Q2"
                   className="w-full rounded-xl px-3 py-2 text-sm outline-none"
-                  style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.10)', color: '#0a0a0a' }}
+                  style={{ background: 'var(--ec-card-bg)', border: '1px solid rgba(0,0,0,0.10)', color: 'var(--ec-text)' }}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#6b6b6b' }}>Description</label>
+                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: 'var(--ec-text-muted)' }}>Description</label>
                 <textarea
                   value={formDesc}
                   onChange={e => setFormDesc(e.target.value)}
                   placeholder="Optional details…"
                   rows={3}
                   className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-none"
-                  style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.10)', color: '#0a0a0a' }}
+                  style={{ background: 'var(--ec-card-bg)', border: '1px solid rgba(0,0,0,0.10)', color: 'var(--ec-text)' }}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#6b6b6b' }}>Priority (1 = highest)</label>
+                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: 'var(--ec-text-muted)' }}>Priority (1 = highest)</label>
                 <input
                   type="number" min={1} max={10}
                   value={formPriority}
                   onChange={e => setFormPriority(Number(e.target.value))}
                   className="w-full rounded-xl px-3 py-2 text-sm outline-none"
-                  style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.10)', color: '#0a0a0a' }}
+                  style={{ background: 'var(--ec-card-bg)', border: '1px solid rgba(0,0,0,0.10)', color: 'var(--ec-text)' }}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#6b6b6b' }}>Progress ({formProgress}%)</label>
+                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: 'var(--ec-text-muted)' }}>Progress ({formProgress}%)</label>
                 <input
                   type="range" min={0} max={100}
                   value={formProgress}
@@ -468,13 +468,13 @@ export default function GoalsPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#6b6b6b' }}>Target Date</label>
+                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: 'var(--ec-text-muted)' }}>Target Date</label>
                 <input
                   type="date"
                   value={formDate}
                   onChange={e => setFormDate(e.target.value)}
                   className="w-full rounded-xl px-3 py-2 text-sm outline-none"
-                  style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.10)', color: '#0a0a0a' }}
+                  style={{ background: 'var(--ec-card-bg)', border: '1px solid rgba(0,0,0,0.10)', color: 'var(--ec-text)' }}
                 />
               </div>
             </div>
@@ -483,7 +483,7 @@ export default function GoalsPage() {
               <button
                 onClick={() => setSheetOpen(false)}
                 className="flex-1 py-2 rounded-full text-sm font-medium"
-                style={{ background: 'rgba(0,0,0,0.05)', color: '#6b6b6b' }}
+                style={{ background: 'rgba(0,0,0,0.05)', color: 'var(--ec-text-muted)' }}
               >
                 Cancel
               </button>

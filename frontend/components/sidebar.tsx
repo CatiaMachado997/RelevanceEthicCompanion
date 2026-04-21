@@ -3,20 +3,25 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
-  LayoutDashboard, MessageSquare, Heart, Target,
-  Eye, Plug, Settings, LogOut, Bell, User, Sun, Moon, Search,
-  Plus, Pencil, Trash2, Check, X, FileText, FolderOpen, CheckSquare,
+  MessageSquare, Plug, Settings, LogOut, User, Sun, Moon,
+  Plus, Pencil, Trash2, Check, X, FolderPlus, Folder as FolderIcon,
+  ChevronRight, ChevronDown, Bell, Eye, UserCircle,
+  LayoutDashboard, MoreHorizontal, Target, CheckSquare, FolderOpen,
+  Heart, FileText,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/useAuth"
 import { useTheme } from "next-themes"
 import { useEffect, useState, useCallback } from "react"
 import { api } from "@/lib/api"
+import type { Folder } from "@/lib/api"
+import { toast } from "@/lib/toast"
 import { UserStatus } from "@/components/UserStatus"
 
 interface Conversation {
   id: string
   title: string
+  folder_id: string | null
   updated_at: string
 }
 
@@ -44,17 +49,20 @@ function groupByDate(convs: Conversation[]) {
 }
 
 const NAV_ITEMS = [
-  { href: "/dashboard",              label: "Dashboard",    icon: LayoutDashboard, exact: true },
   { href: "/dashboard/chat",         label: "Chat",         icon: MessageSquare },
-  { href: "/dashboard/values",       label: "Values",       icon: Heart },
-  { href: "/dashboard/goals",        label: "Goals",        icon: Target },
-  { href: "/dashboard/projects",     label: "Projects",     icon: FolderOpen },
-  { href: "/dashboard/tasks",        label: "Tasks",        icon: CheckSquare },
-  { href: "/dashboard/transparency", label: "Transparency", icon: Eye },
   { href: "/dashboard/integrations", label: "Integrations", icon: Plug },
-  { href: "/dashboard/documents",    label: "Documents",    icon: FileText },
-  { href: "/dashboard/notifications",label: "Notifications",icon: Bell },
-  { href: "/dashboard/search",       label: "Search",        icon: Search },
+  { href: "/dashboard",              label: "Dashboard",    icon: LayoutDashboard, exact: true },
+]
+
+// Power-user pages, revealed under the "More" disclosure.
+const MORE_ITEMS = [
+  { href: "/dashboard/goals",         label: "Goals",         icon: Target },
+  { href: "/dashboard/tasks",         label: "Tasks",         icon: CheckSquare },
+  { href: "/dashboard/projects",      label: "Projects",      icon: FolderOpen },
+  { href: "/dashboard/values",        label: "Values",        icon: Heart },
+  { href: "/dashboard/documents",     label: "Documents",     icon: FileText },
+  { href: "/dashboard/transparency",  label: "Transparency",  icon: Eye },
+  { href: "/dashboard/notifications", label: "Notifications", icon: Bell },
 ]
 
 interface SidebarNavProps {
@@ -70,7 +78,51 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
-  const [unreadNotifications, setUnreadNotifications] = useState(0)
+
+  // Folders state
+  const [folders, setFolders] = useState<Folder[]>([])
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
+  const [creatingFolder, setCreatingFolder] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null)
+  const [editFolderName, setEditFolderName] = useState('')
+  const [dragOverFolder, setDragOverFolder] = useState<string | null>(null) // null = ungrouped target; string = folder id
+  // Power-user "More" disclosure
+  const [moreOpen, setMoreOpen] = useState(false)
+  // Auto-open if the user is on one of the hidden pages
+  useEffect(() => {
+    if (MORE_ITEMS.some(m => pathname === m.href || pathname.startsWith(m.href + '/'))) {
+      setMoreOpen(true)
+    }
+  }, [pathname])
+
+  // Avatar menu (dropdown)
+  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false)
+  useEffect(() => {
+    if (!avatarMenuOpen) return
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('[data-avatar-menu]')) setAvatarMenuOpen(false)
+    }
+    window.addEventListener('mousedown', onClick)
+    return () => window.removeEventListener('mousedown', onClick)
+  }, [avatarMenuOpen])
+
+  // Unread notifications — polled once per minute + cleared on notifications page
+  const [unreadNotifs, setUnreadNotifs] = useState(0)
+  useEffect(() => {
+    const fetchCount = () => {
+      api.notifications.count()
+        .then(r => setUnreadNotifs(r.unread_count ?? 0))
+        .catch(() => {})
+    }
+    fetchCount()
+    const id = setInterval(fetchCount, 60_000)
+    return () => clearInterval(id)
+  }, [])
+  useEffect(() => {
+    if (pathname.includes('/notifications')) setUnreadNotifs(0)
+  }, [pathname])
 
   // Classic hydration gate: flip to true after mount so the first client
   // render matches the server output. The single extra render is the
@@ -84,7 +136,16 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
       .catch(() => {})
   }, [])
 
-  useEffect(() => { refreshConversations() }, [pathname, refreshConversations])
+  const refreshFolders = useCallback(() => {
+    api.folders.list()
+      .then(r => setFolders(r.folders))
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    refreshConversations()
+    refreshFolders()
+  }, [pathname, refreshConversations, refreshFolders])
 
   // Refresh immediately when a new conversation is created (e.g., first message sent)
   useEffect(() => {
@@ -92,26 +153,17 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
     return () => window.removeEventListener('ec:conversation-created', refreshConversations)
   }, [refreshConversations])
 
-  useEffect(() => {
-    const fetchCount = () => {
-      api.notifications.count()
-        .then(r => setUnreadNotifications(r.unread_count))
-        .catch(() => {})
-    }
-    fetchCount()
-    const interval = setInterval(fetchCount, 60_000)
-    return () => clearInterval(interval)
-  }, [])
 
-  useEffect(() => {
-    // Mark notifications read when user navigates to the notifications page.
-    // Intentional synchronous setState — fires at most once per navigation.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (pathname.includes('/notifications')) setUnreadNotifications(0)
-  }, [pathname])
 
   const handleNewChat = () => {
-    router.push('/dashboard/chat')
+    // If already on the base chat page, the router.push is a no-op and the
+    // chat state wouldn't reset. Dispatch a sibling event that the chat page
+    // listens for and clears its own state.
+    if (pathname === '/dashboard/chat') {
+      window.dispatchEvent(new Event('ec:new-chat'))
+    } else {
+      router.push('/dashboard/chat')
+    }
     onClose?.()
   }
 
@@ -126,6 +178,95 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
     await api.chat.conversations.rename(id, editTitle).catch(() => {})
     setConversations(prev => prev.map(c => c.id === id ? { ...c, title: editTitle } : c))
     setEditingId(null)
+  }
+
+  // ─── Folder CRUD ────────────────────────────────────────────────────
+  const handleCreateFolder = async () => {
+    const name = newFolderName.trim()
+    if (!name) { setCreatingFolder(false); setNewFolderName(''); return }
+    try {
+      const folder = await api.folders.create(name)
+      setFolders(prev => [...prev, folder])
+      setExpandedFolders(prev => new Set(prev).add(folder.id))
+      toast.success("Folder created", name)
+      setCreatingFolder(false)
+      setNewFolderName('')
+    } catch (e) {
+      console.error('create folder failed', e)
+      toast.error("Couldn't create folder", e instanceof Error ? e.message : undefined)
+      // Keep the input open so the user can retry
+    }
+  }
+
+  const handleRenameFolder = async (id: string) => {
+    const name = editFolderName.trim()
+    if (!name) { setEditingFolderId(null); return }
+    try {
+      const updated = await api.folders.update(id, { name })
+      setFolders(prev => prev.map(f => f.id === id ? updated : f))
+      toast.success("Folder renamed", name)
+      setEditingFolderId(null)
+      setEditFolderName('')
+    } catch (e) {
+      console.error('rename folder failed', e)
+      toast.error("Couldn't rename folder", e instanceof Error ? e.message : undefined)
+    }
+  }
+
+  const handleDeleteFolder = async (folder: Folder) => {
+    const convCount = conversations.filter(c => c.folder_id === folder.id).length
+    const msg = convCount > 0
+      ? `Delete "${folder.name}"? Its ${convCount} conversation${convCount === 1 ? '' : 's'} will be unfoldered (not deleted).`
+      : `Delete "${folder.name}"?`
+    if (!window.confirm(msg)) return
+
+    try {
+      await api.folders.delete(folder.id)
+      setFolders(prev => prev.filter(f => f.id !== folder.id))
+      // Orphaned conversations fall back to ungrouped — update local state
+      setConversations(prev => prev.map(c => c.folder_id === folder.id ? { ...c, folder_id: null } : c))
+      toast.success("Folder deleted", folder.name)
+    } catch (e) {
+      console.error('delete folder failed', e)
+      toast.error("Couldn't delete folder", e instanceof Error ? e.message : undefined)
+    }
+  }
+
+  const toggleFolder = (id: string) => {
+    setExpandedFolders(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  // ─── Drag & drop: move conversation into folder ─────────────────────
+  const handleDragStart = (e: React.DragEvent, convId: string) => {
+    e.dataTransfer.setData('text/ec-conversation', convId)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDragOverFolder = (e: React.DragEvent, folderId: string | null) => {
+    if (!e.dataTransfer.types.includes('text/ec-conversation')) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOverFolder(folderId ?? '__ungrouped__')
+  }
+
+  const handleDropOnFolder = async (e: React.DragEvent, folderId: string | null) => {
+    e.preventDefault()
+    const convId = e.dataTransfer.getData('text/ec-conversation')
+    setDragOverFolder(null)
+    if (!convId) return
+    // Optimistic update
+    setConversations(prev => prev.map(c => c.id === convId ? { ...c, folder_id: folderId } : c))
+    if (folderId) setExpandedFolders(prev => new Set(prev).add(folderId))
+    try {
+      await api.folders.moveConversation(convId, folderId)
+    } catch {
+      // On failure, refetch to get truth
+      refreshConversations()
+    }
   }
 
   const initials = user?.email
@@ -174,100 +315,335 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
                 fontWeight: active ? 500 : undefined,
               }}
             >
-              <span className="relative">
-                <Icon size={16} strokeWidth={active ? 2.2 : 1.8} />
-                {href === '/dashboard/notifications' && unreadNotifications > 0 && (
-                  <span
-                    className="absolute -top-1.5 -right-1.5 min-w-[14px] h-[14px] rounded-full flex items-center justify-center text-[9px] font-bold leading-none px-0.5"
-                    style={{ background: '#B04A3A', color: '#fff' }}
-                  >
-                    {unreadNotifications > 9 ? '9+' : unreadNotifications}
-                  </span>
-                )}
-              </span>
+              <Icon size={16} strokeWidth={active ? 2.2 : 1.8} />
               {label}
             </Link>
           )
         })}
 
-        {/* Conversation history */}
-        {conversations.length > 0 && (
-          <div className="mt-2 px-2">
-            <div className="flex items-center justify-between mb-1 px-1">
-              <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'var(--ec-text-subtle)' }}>
-                Chats
-              </span>
-              <button
-                onClick={handleNewChat}
-                className="w-5 h-5 flex items-center justify-center rounded hover:bg-[rgba(0,0,0,0.06)]"
-                title="New chat"
-              >
-                <Plus size={11} style={{ color: 'var(--ec-text-subtle)' }} />
-              </button>
-            </div>
+        {/* More — power-user disclosure */}
+        <button
+          onClick={() => setMoreOpen(v => !v)}
+          aria-expanded={moreOpen}
+          className="flex items-center gap-3 h-9 px-3 rounded-lg text-sm w-full transition-colors duration-100 hover:opacity-80"
+          style={{ color: "var(--ec-sidebar-muted)" }}
+        >
+          <MoreHorizontal size={16} strokeWidth={1.8} />
+          More
+          <ChevronDown
+            size={12}
+            className={`ml-auto transition-transform ${moreOpen ? 'rotate-180' : ''}`}
+            style={{ color: 'var(--ec-text-subtle)' }}
+          />
+        </button>
 
-            {groupByDate(conversations).map(group => (
-              <div key={group.label} className="mb-2">
-                <p className="text-[9px] font-medium px-1 mb-0.5 uppercase tracking-wider" style={{ color: 'var(--ec-text-subtle)', opacity: 0.6 }}>
-                  {group.label}
-                </p>
-                {group.items.map(conv => {
-                  const isActive = pathname === `/dashboard/chat/${conv.id}`
-                  const isEditing = editingId === conv.id
-                  return (
-                    <div
-                      key={conv.id}
-                      className="group flex items-center gap-1 rounded-lg px-2 py-1 text-xs cursor-pointer transition-colors"
-                      style={{
-                        background: isActive ? 'var(--ec-nav-active-bg, var(--ec-sidebar-active))' : 'transparent',
-                        color: isActive ? 'var(--ec-nav-active-text, var(--ec-sidebar-text))' : 'var(--ec-text-subtle)',
-                      }}
-                      onClick={() => !isEditing && router.push(`/dashboard/chat/${conv.id}`)}
-                    >
-                      {isEditing ? (
-                        <input
-                          autoFocus
-                          value={editTitle}
-                          onChange={e => setEditTitle(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') handleRename(conv.id)
-                            if (e.key === 'Escape') setEditingId(null)
-                          }}
-                          className="flex-1 bg-transparent outline-none text-xs"
-                          style={{ color: 'var(--ec-text)' }}
-                          onClick={e => e.stopPropagation()}
-                        />
-                      ) : (
-                        <span className="flex-1 truncate">{conv.title}</span>
-                      )}
-                      {isEditing ? (
-                        <div className="flex gap-0.5 shrink-0">
-                          <button onClick={e => { e.stopPropagation(); handleRename(conv.id) }}><Check size={10} /></button>
-                          <button onClick={e => { e.stopPropagation(); setEditingId(null) }}><X size={10} /></button>
-                        </div>
-                      ) : (
-                        <div className="hidden group-hover:flex gap-0.5 shrink-0">
-                          <button
-                            onClick={e => { e.stopPropagation(); setEditingId(conv.id); setEditTitle(conv.title) }}
-                            className="p-0.5 rounded hover:bg-[rgba(0,0,0,0.08)]"
-                          >
-                            <Pencil size={10} />
-                          </button>
-                          <button
-                            onClick={e => { e.stopPropagation(); handleDelete(conv.id) }}
-                            className="p-0.5 rounded hover:bg-[rgba(0,0,0,0.08)]"
-                          >
-                            <Trash2 size={10} />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            ))}
+        {moreOpen && (
+          <div className="ml-3 pl-2 border-l flex flex-col gap-0.5" style={{ borderColor: 'var(--ec-border)' }}>
+            {MORE_ITEMS.map(({ href, label, icon: Icon }) => {
+              const active = isActive(href)
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={onClose}
+                  className={cn(
+                    "flex items-center gap-3 h-8 px-3 rounded-lg text-xs transition-colors duration-100",
+                    !active && "hover:opacity-80"
+                  )}
+                  style={{
+                    background: active ? "var(--ec-sidebar-active)" : undefined,
+                    color: active ? "var(--ec-sidebar-text)" : "var(--ec-sidebar-muted)",
+                    fontWeight: active ? 500 : undefined,
+                  }}
+                >
+                  <Icon size={13} strokeWidth={active ? 2.2 : 1.8} />
+                  {label}
+                </Link>
+              )
+            })}
           </div>
         )}
+
+        {/* Helper: render a single conversation row */}
+        {(() => null)()}
+
+        {/* Folders */}
+        <div className="mt-4 px-2">
+          <div className="flex items-center justify-between mb-1 px-1">
+            <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'var(--ec-text-subtle)' }}>
+              Folders
+            </span>
+            <button
+              onClick={() => { setCreatingFolder(true); setNewFolderName('') }}
+              className="w-5 h-5 flex items-center justify-center rounded hover:bg-[rgba(0,0,0,0.06)]"
+              title="New folder"
+            >
+              <FolderPlus size={11} style={{ color: 'var(--ec-text-subtle)' }} />
+            </button>
+          </div>
+
+          {/* Inline new-folder input */}
+          {creatingFolder && (
+            <div className="flex items-center gap-1 px-1 mb-1">
+              <FolderIcon size={11} style={{ color: 'var(--ec-text-subtle)' }} />
+              <input
+                autoFocus
+                value={newFolderName}
+                onChange={e => setNewFolderName(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') handleCreateFolder()
+                  if (e.key === 'Escape') { setCreatingFolder(false); setNewFolderName('') }
+                }}
+                onBlur={handleCreateFolder}
+                placeholder="Folder name"
+                className="flex-1 bg-transparent outline-none text-xs border-b"
+                style={{ color: 'var(--ec-text)', borderColor: 'var(--ec-border)' }}
+              />
+            </div>
+          )}
+
+          {folders.length === 0 && !creatingFolder && (
+            <p className="text-[10px] px-1 italic" style={{ color: 'var(--ec-text-subtle)', opacity: 0.6 }}>
+              No folders yet
+            </p>
+          )}
+
+          {folders.map(folder => {
+            const isExpanded = expandedFolders.has(folder.id)
+            const isEditingFolder = editingFolderId === folder.id
+            const isDropTarget = dragOverFolder === folder.id
+            const convsInFolder = conversations.filter(c => c.folder_id === folder.id)
+
+            return (
+              <div
+                key={folder.id}
+                onDragOver={e => handleDragOverFolder(e, folder.id)}
+                onDragLeave={() => setDragOverFolder(null)}
+                onDrop={e => handleDropOnFolder(e, folder.id)}
+                className="rounded transition-colors"
+                style={{ background: isDropTarget ? 'var(--ec-sidebar-active)' : undefined }}
+              >
+                <div
+                  className="group flex items-center gap-1 px-1 py-1 rounded cursor-pointer hover:bg-[rgba(0,0,0,0.04)]"
+                  onClick={() => !isEditingFolder && toggleFolder(folder.id)}
+                >
+                  {isExpanded
+                    ? <ChevronDown size={11} style={{ color: 'var(--ec-text-subtle)' }} />
+                    : <ChevronRight size={11} style={{ color: 'var(--ec-text-subtle)' }} />}
+                  <FolderIcon size={11} style={{ color: folder.color ?? 'var(--ec-text-subtle)' }} />
+
+                  {isEditingFolder ? (
+                    <input
+                      autoFocus
+                      value={editFolderName}
+                      onChange={e => setEditFolderName(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') handleRenameFolder(folder.id)
+                        if (e.key === 'Escape') setEditingFolderId(null)
+                      }}
+                      onBlur={() => handleRenameFolder(folder.id)}
+                      onClick={e => e.stopPropagation()}
+                      className="flex-1 bg-transparent outline-none text-xs"
+                      style={{ color: 'var(--ec-text)' }}
+                    />
+                  ) : (
+                    <span className="flex-1 text-xs truncate" style={{ color: 'var(--ec-sidebar-text)' }}>
+                      {folder.name}
+                    </span>
+                  )}
+
+                  {!isEditingFolder && convsInFolder.length > 0 && (
+                    <span className="text-[10px] mr-1" style={{ color: 'var(--ec-text-subtle)' }}>
+                      {convsInFolder.length}
+                    </span>
+                  )}
+
+                  {!isEditingFolder && (
+                    <div className="hidden group-hover:flex gap-0.5 shrink-0">
+                      <button
+                        onClick={e => {
+                          e.stopPropagation()
+                          setEditingFolderId(folder.id)
+                          setEditFolderName(folder.name)
+                        }}
+                        className="p-0.5 rounded hover:bg-[rgba(0,0,0,0.08)]"
+                        title="Rename"
+                      >
+                        <Pencil size={10} style={{ color: 'var(--ec-text-subtle)' }} />
+                      </button>
+                      <button
+                        onClick={e => { e.stopPropagation(); handleDeleteFolder(folder) }}
+                        className="p-0.5 rounded hover:bg-[rgba(0,0,0,0.08)]"
+                        title="Delete folder"
+                      >
+                        <Trash2 size={10} style={{ color: 'var(--ec-text-subtle)' }} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Conversations inside this folder */}
+                {isExpanded && (
+                  <div className="ml-3 pl-2 border-l" style={{ borderColor: 'var(--ec-border)' }}>
+                    {convsInFolder.length === 0 ? (
+                      <p className="text-[10px] italic px-2 py-1" style={{ color: 'var(--ec-text-subtle)', opacity: 0.6 }}>
+                        Drop chats here
+                      </p>
+                    ) : (
+                      convsInFolder.map(conv => {
+                        const isActive = pathname === `/dashboard/chat/${conv.id}`
+                        const isEditing = editingId === conv.id
+                        return (
+                          <div
+                            key={conv.id}
+                            draggable={!isEditing}
+                            onDragStart={e => handleDragStart(e, conv.id)}
+                            className="group flex items-center gap-1 rounded-lg px-2 py-1 text-xs cursor-pointer transition-colors"
+                            style={{
+                              background: isActive ? 'var(--ec-sidebar-active)' : 'transparent',
+                              color: isActive ? 'var(--ec-sidebar-text)' : 'var(--ec-text-subtle)',
+                            }}
+                            onClick={() => !isEditing && router.push(`/dashboard/chat/${conv.id}`)}
+                          >
+                            {isEditing ? (
+                              <input
+                                autoFocus
+                                value={editTitle}
+                                onChange={e => setEditTitle(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') handleRename(conv.id)
+                                  if (e.key === 'Escape') setEditingId(null)
+                                }}
+                                className="flex-1 bg-transparent outline-none text-xs"
+                                style={{ color: 'var(--ec-text)' }}
+                                onClick={e => e.stopPropagation()}
+                              />
+                            ) : (
+                              <span className="flex-1 truncate">{conv.title}</span>
+                            )}
+                            {isEditing ? (
+                              <div className="flex gap-0.5 shrink-0">
+                                <button onClick={e => { e.stopPropagation(); handleRename(conv.id) }}><Check size={10} /></button>
+                                <button onClick={e => { e.stopPropagation(); setEditingId(null) }}><X size={10} /></button>
+                              </div>
+                            ) : (
+                              <div className="hidden group-hover:flex gap-0.5 shrink-0">
+                                <button
+                                  onClick={e => { e.stopPropagation(); setEditingId(conv.id); setEditTitle(conv.title) }}
+                                  className="p-0.5 rounded hover:bg-[rgba(0,0,0,0.08)]"
+                                >
+                                  <Pencil size={10} />
+                                </button>
+                                <button
+                                  onClick={e => { e.stopPropagation(); handleDelete(conv.id) }}
+                                  className="p-0.5 rounded hover:bg-[rgba(0,0,0,0.08)]"
+                                >
+                                  <Trash2 size={10} />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Unfoldered conversations */}
+        {(() => {
+          const ungrouped = conversations.filter(c => !c.folder_id)
+          if (ungrouped.length === 0) return null
+          const isDropTarget = dragOverFolder === '__ungrouped__'
+          return (
+            <div
+              onDragOver={e => handleDragOverFolder(e, null)}
+              onDragLeave={() => setDragOverFolder(null)}
+              onDrop={e => handleDropOnFolder(e, null)}
+              className="mt-4 px-2 rounded transition-colors"
+              style={{ background: isDropTarget ? 'var(--ec-sidebar-active)' : undefined }}
+            >
+              <div className="flex items-center justify-between mb-1 px-1">
+                <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'var(--ec-text-subtle)' }}>
+                  Conversations
+                </span>
+                <button
+                  onClick={handleNewChat}
+                  className="w-5 h-5 flex items-center justify-center rounded hover:bg-[rgba(0,0,0,0.06)]"
+                  title="New chat"
+                >
+                  <Plus size={11} style={{ color: 'var(--ec-text-subtle)' }} />
+                </button>
+              </div>
+
+              {groupByDate(ungrouped).map(group => (
+                <div key={group.label} className="mb-2">
+                  <p className="text-[9px] font-medium px-1 mb-0.5 uppercase tracking-wider" style={{ color: 'var(--ec-text-subtle)', opacity: 0.6 }}>
+                    {group.label}
+                  </p>
+                  {group.items.map(conv => {
+                    const isActive = pathname === `/dashboard/chat/${conv.id}`
+                    const isEditing = editingId === conv.id
+                    return (
+                      <div
+                        key={conv.id}
+                        draggable={!isEditing}
+                        onDragStart={e => handleDragStart(e, conv.id)}
+                        className="group flex items-center gap-1 rounded-lg px-2 py-1 text-xs cursor-pointer transition-colors"
+                        style={{
+                          background: isActive ? 'var(--ec-sidebar-active)' : 'transparent',
+                          color: isActive ? 'var(--ec-sidebar-text)' : 'var(--ec-text-subtle)',
+                        }}
+                        onClick={() => !isEditing && router.push(`/dashboard/chat/${conv.id}`)}
+                      >
+                        {isEditing ? (
+                          <input
+                            autoFocus
+                            value={editTitle}
+                            onChange={e => setEditTitle(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') handleRename(conv.id)
+                              if (e.key === 'Escape') setEditingId(null)
+                            }}
+                            className="flex-1 bg-transparent outline-none text-xs"
+                            style={{ color: 'var(--ec-text)' }}
+                            onClick={e => e.stopPropagation()}
+                          />
+                        ) : (
+                          <span className="flex-1 truncate">{conv.title}</span>
+                        )}
+                        {isEditing ? (
+                          <div className="flex gap-0.5 shrink-0">
+                            <button onClick={e => { e.stopPropagation(); handleRename(conv.id) }}><Check size={10} /></button>
+                            <button onClick={e => { e.stopPropagation(); setEditingId(null) }}><X size={10} /></button>
+                          </div>
+                        ) : (
+                          <div className="hidden group-hover:flex gap-0.5 shrink-0">
+                            <button
+                              onClick={e => { e.stopPropagation(); setEditingId(conv.id); setEditTitle(conv.title) }}
+                              className="p-0.5 rounded hover:bg-[rgba(0,0,0,0.08)]"
+                            >
+                              <Pencil size={10} />
+                            </button>
+                            <button
+                              onClick={e => { e.stopPropagation(); handleDelete(conv.id) }}
+                              className="p-0.5 rounded hover:bg-[rgba(0,0,0,0.08)]"
+                            >
+                              <Trash2 size={10} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              ))}
+            </div>
+          )
+        })()}
       </nav>
 
       {/* Bottom section */}
@@ -301,41 +677,107 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
           </button>
         )}
 
-        <button
-          onClick={() => signOut().catch(console.error)}
-          className="flex items-center gap-3 h-9 px-3 rounded-lg text-sm w-full transition-colors hover:opacity-80"
-          style={{ color: "var(--ec-sidebar-muted)" }}
-        >
-          <LogOut size={16} strokeWidth={1.8} />
-          Sign out
-        </button>
-
         {/* User status picker */}
         <div className="px-1 mt-1">
           <UserStatus />
         </div>
 
-        {/* User row — links to profile */}
-        <Link
-          href="/dashboard/profile"
-          onClick={onClose}
-          className="flex items-center gap-2.5 px-3 mt-2 pt-2 border-t transition-opacity hover:opacity-70"
-          style={{ borderColor: "var(--ec-sidebar-border)" }}
-        >
-          <div
-            className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0"
-            style={{ background: "var(--ec-text)", color: "var(--ec-sidebar-bg)" }}
+        {/* Avatar row — opens dropdown */}
+        <div className="relative mt-2 pt-2 border-t" data-avatar-menu style={{ borderColor: "var(--ec-sidebar-border)" }}>
+
+          {/* Dropdown — opens above the avatar */}
+          {avatarMenuOpen && (
+            <div
+              className="absolute left-2 right-2 bottom-[52px] rounded-xl overflow-hidden z-10"
+              style={{
+                background: "var(--ec-card-bg)",
+                border: "1px solid var(--ec-card-border)",
+                boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
+              }}
+            >
+              <Link
+                href="/dashboard/profile"
+                onClick={() => { setAvatarMenuOpen(false); onClose?.() }}
+                className="flex items-center gap-2.5 px-3 h-9 text-xs transition-colors hover:bg-[rgba(0,0,0,0.04)]"
+                style={{ color: "var(--ec-text)" }}
+              >
+                <UserCircle size={14} style={{ color: "var(--ec-text-muted)" }} />
+                Profile
+              </Link>
+              <Link
+                href="/dashboard/notifications"
+                onClick={() => { setAvatarMenuOpen(false); onClose?.() }}
+                className="flex items-center gap-2.5 px-3 h-9 text-xs transition-colors hover:bg-[rgba(0,0,0,0.04)]"
+                style={{ color: "var(--ec-text)" }}
+              >
+                <Bell size={14} style={{ color: "var(--ec-text-muted)" }} />
+                Notifications
+                {unreadNotifs > 0 && (
+                  <span
+                    className="ml-auto min-w-[18px] h-[18px] rounded-full flex items-center justify-center text-[10px] font-semibold px-1.5"
+                    style={{ background: '#B04A3A', color: '#fff' }}
+                  >
+                    {unreadNotifs > 99 ? '99+' : unreadNotifs}
+                  </span>
+                )}
+              </Link>
+              <Link
+                href="/dashboard/transparency"
+                onClick={() => { setAvatarMenuOpen(false); onClose?.() }}
+                className="flex items-center gap-2.5 px-3 h-9 text-xs transition-colors hover:bg-[rgba(0,0,0,0.04)]"
+                style={{ color: "var(--ec-text)" }}
+              >
+                <Eye size={14} style={{ color: "var(--ec-text-muted)" }} />
+                Transparency log
+              </Link>
+              <div className="h-px" style={{ background: "var(--ec-card-border)" }} />
+              <button
+                onClick={() => { setAvatarMenuOpen(false); signOut().catch(console.error) }}
+                className="w-full flex items-center gap-2.5 px-3 h-9 text-xs transition-colors hover:bg-[rgba(0,0,0,0.04)]"
+                style={{ color: "#B04A3A" }}
+              >
+                <LogOut size={14} />
+                Sign out
+              </button>
+            </div>
+          )}
+
+          <button
+            onClick={() => setAvatarMenuOpen(v => !v)}
+            className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80 text-left"
+            aria-expanded={avatarMenuOpen}
+            aria-haspopup="menu"
           >
-            {initials}
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs truncate" style={{ color: "var(--ec-text)" }}>
-              {user?.email?.split('@')[0] ?? 'My Account'}
-            </p>
-            <p className="text-[10px] truncate" style={{ color: "var(--ec-text-subtle)" }}>View profile</p>
-          </div>
-          <User size={12} className="ml-auto shrink-0" style={{ color: "var(--ec-text-subtle)" }} />
-        </Link>
+            <div className="relative shrink-0">
+              <div
+                className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold"
+                style={{ background: "var(--ec-text)", color: "var(--ec-sidebar-bg)" }}
+              >
+                {initials}
+              </div>
+              {unreadNotifs > 0 && (
+                <span
+                  className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2"
+                  style={{ background: '#B04A3A', borderColor: 'var(--ec-sidebar-bg)' }}
+                  aria-label={`${unreadNotifs} unread notifications`}
+                />
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs truncate" style={{ color: "var(--ec-text)" }}>
+                {user?.email?.split('@')[0] ?? 'My Account'}
+              </p>
+              <p className="text-[10px] truncate" style={{ color: "var(--ec-text-subtle)" }}>
+                {avatarMenuOpen ? 'Close menu' : 'Account menu'}
+              </p>
+            </div>
+            <ChevronDown
+              size={12}
+              className={`ml-auto shrink-0 transition-transform ${avatarMenuOpen ? 'rotate-180' : ''}`}
+              style={{ color: "var(--ec-text-subtle)" }}
+            />
+          </button>
+        </div>
       </div>
     </aside>
   )
