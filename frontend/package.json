@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "jest"
+    "test": "TZ=UTC jest"
   },
   "overrides": {
     "handlebars": "^4.7.8",
@@ -32,6 +32,8 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@supabase/supabase-js": "^2.100.0",
     "@tailwindcss/typography": "^0.5.19",
+    "@tanstack/react-query": "^5.99.2",
+    "@tanstack/react-query-devtools": "^5.99.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.23.25",
@@ -66,7 +68,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.0.3",
     "jest": "^30.2.0",
-    "jest-environment-jsdom": "^30.2.0",
+    "jest-environment-jsdom": "^30.3.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.17",
     "ts-jest": "^29.4.5",
