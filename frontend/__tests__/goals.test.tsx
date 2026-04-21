@@ -65,7 +65,7 @@ test('test_create_goal_calls_api', async () => {
   await userEvent.click(screen.getByRole('button', { name: /add goal/i }))
   await screen.findByText('Add Goal', { selector: 'h3' })
 
-  const titleInput = screen.getByPlaceholderText(/e.g. Launch MVP/i)
+  const titleInput = screen.getByPlaceholderText(/e\.g\. Ship new feature/i)
   await userEvent.type(titleInput, 'New Goal')
   await userEvent.click(screen.getByRole('button', { name: /save/i }))
 

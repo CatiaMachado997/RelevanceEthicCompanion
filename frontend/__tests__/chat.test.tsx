@@ -3,31 +3,14 @@ import userEvent from '@testing-library/user-event'
 import ChatPage from '../app/dashboard/chat/page'
 import api from '../lib/api'
 
-// Helper to create a mock stream that immediately resolves with given tokens
-function makeMockStream(tokens: string[] = ['Hello from AI']) {
-  let cancelled = false
-  const promise = new Promise<void>((resolve) => {
-    // Use a microtask so onToken fires after the promise is returned
-    Promise.resolve().then(() => {
-      if (!cancelled) {
-        tokens.forEach(t => {
-          // invoke the onToken callback stored on the mock
-          const calls = (api.chat.stream as jest.Mock).mock.calls
-          if (calls.length > 0) {
-            const onToken = calls[calls.length - 1][1]
-            if (onToken) onToken(t)
-          }
-        })
-        resolve()
-      }
-    })
-  }) as Promise<void> & { cancel: () => void }
-  promise.cancel = () => { cancelled = true }
-  return promise
-}
-
 jest.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({ user: null }),
+}))
+
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
+  usePathname: () => '/dashboard/chat',
+  useSearchParams: () => new URLSearchParams(),
 }))
 
 jest.mock('../lib/api', () => ({
@@ -37,9 +20,29 @@ jest.mock('../lib/api', () => ({
       history: jest.fn(),
       send: jest.fn(),
       stream: jest.fn(),
+      conversations: {
+        create: jest.fn(),
+        list: jest.fn(),
+        delete: jest.fn(),
+        update: jest.fn(),
+      },
     },
   },
 }))
+
+// react-markdown and its remark plugins are ESM-only, which Jest's default
+// CJS transform can't load. Mock it with a trivial passthrough — chat tests
+// only care that the assistant text is rendered, not that Markdown syntax
+// produces HTML.
+jest.mock('react-markdown', () => ({
+  __esModule: true,
+  default: ({ children }: { children: string }) => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mockReact: typeof import('react') = require('react')
+    return mockReact.createElement('div', null, children)
+  },
+}))
+jest.mock('remark-gfm', () => ({ __esModule: true, default: () => {} }))
 
 beforeAll(() => {
   Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
@@ -56,19 +59,29 @@ beforeAll(() => {
 beforeEach(() => {
   jest.resetAllMocks()
   ;(api.chat.history as jest.Mock).mockResolvedValue({ messages: [] })
-  ;(api.chat.stream as jest.Mock).mockImplementation((_msg: string, onToken: (t: string) => void) => {
-    let cancelled = false
-    const promise = new Promise<void>((resolve) => {
-      Promise.resolve().then(() => {
-        if (!cancelled) {
-          onToken('Hello from AI')
-          resolve()
-        }
-      })
-    }) as Promise<void> & { cancel: () => void }
-    promise.cancel = () => { cancelled = true }
-    return promise
+  ;(api.chat.conversations.create as jest.Mock).mockResolvedValue({
+    id: 'test-conv-id',
+    title: 'New conversation',
   })
+  // api.chat.stream signature: (message, options) where options includes
+  // onToken, onToolUse, etc.
+  ;(api.chat.stream as jest.Mock).mockImplementation(
+    (_msg: string, opts: { onToken?: (t: string) => void }) => {
+      let cancelled = false
+      const promise = new Promise<void>((resolve) => {
+        Promise.resolve().then(() => {
+          if (!cancelled) {
+            opts.onToken?.('Hello from AI')
+            resolve()
+          }
+        })
+      }) as Promise<void> & { cancel: () => void }
+      promise.cancel = () => {
+        cancelled = true
+      }
+      return promise
+    }
+  )
 })
 
 test('test_chat_loads_history_on_mount', async () => {
@@ -90,7 +103,10 @@ test('test_send_message_calls_api', async () => {
   await userEvent.type(textarea, 'Hello{Enter}')
 
   await waitFor(() => {
-    expect(api.chat.stream).toHaveBeenCalledWith('Hello', expect.any(Function))
+    expect(api.chat.stream).toHaveBeenCalledWith(
+      'Hello',
+      expect.objectContaining({ onToken: expect.any(Function) })
+    )
   })
 })
 
