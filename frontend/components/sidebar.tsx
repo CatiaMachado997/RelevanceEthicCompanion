@@ -72,6 +72,10 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
   const [editTitle, setEditTitle] = useState('')
   const [unreadNotifications, setUnreadNotifications] = useState(0)
 
+  // Classic hydration gate: flip to true after mount so the first client
+  // render matches the server output. The single extra render is the
+  // intended behavior.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setMounted(true) }, [])
 
   const refreshConversations = useCallback(() => {
@@ -100,6 +104,9 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
   }, [])
 
   useEffect(() => {
+    // Mark notifications read when user navigates to the notifications page.
+    // Intentional synchronous setState — fires at most once per navigation.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (pathname.includes('/notifications')) setUnreadNotifications(0)
   }, [pathname])
 
