@@ -11,7 +11,7 @@
  */
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 import {
   Target, CheckSquare, FolderOpen, Heart, FileText, Eye, Bell,
   ArrowRight, PanelRight,
@@ -32,13 +32,10 @@ interface ToolCard {
 
 
 export function ToolsLauncher() {
-  const [overview, setOverview] = useState<DashboardOverview | null>(null)
-
-  useEffect(() => {
-    api.dashboard.overview()
-      .then(setOverview)
-      .catch(() => {})
-  }, [])
+  const { data: overview } = useQuery<DashboardOverview>({
+    queryKey: ["dashboard-overview"],
+    queryFn: () => api.dashboard.overview(),
+  })
 
   const tools: ToolCard[] = [
     {
