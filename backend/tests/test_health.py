@@ -19,8 +19,10 @@ def test_health_returns_ok_structure(test_client):
 
 def test_health_weaviate_unavailable_does_not_crash():
     """When Weaviate is down, /health still returns 200 with weaviate=unavailable."""
+    # routes.health does `from utils.health import check_db` at import time,
+    # so we must patch the symbol where it's used, not where it's defined.
     with patch("utils.weaviate_client.get_weaviate_client", return_value=None), patch(
-        "utils.health.check_db", return_value={"status": "ok"}
+        "routes.health.check_db", return_value={"status": "ok"}
     ):
         from main import app
 
