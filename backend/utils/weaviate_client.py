@@ -119,7 +119,7 @@ class WeaviateClient:
         Args:
             collection: Collection name
             query_vector: Query embedding from Gemini
-            user_id: Firebase UID to filter results
+            user_id: Supabase user ID (UUID) to filter results
             limit: Maximum number of results
             filters: Additional filter conditions
 
@@ -176,7 +176,7 @@ class WeaviateClient:
         Args:
             collection: Collection name
             query: Search query string
-            user_id: Firebase UID to filter results
+            user_id: Supabase user ID (UUID) to filter results
             limit: Maximum number of results
             properties: Properties to search in (default: all text properties)
 
@@ -233,7 +233,7 @@ class WeaviateClient:
             collection: Collection name
             query: Search query string for BM25
             query_vector: Query embedding for semantic search
-            user_id: Firebase UID to filter results
+            user_id: Supabase user ID (UUID) to filter results
             limit: Maximum number of results
             alpha: Balance between vector (1.0) and keyword (0.0) search
 

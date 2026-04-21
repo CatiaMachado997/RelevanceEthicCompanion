@@ -77,7 +77,7 @@ class RelevanceContext(BaseModel):
     This is what we pass to the scoring engine to make decisions.
     """
 
-    user_id: str = Field(description="Firebase UID")
+    user_id: str = Field(description="Supabase user ID (UUID)")
     query: Optional[str] = Field(None, description="User's query if any")
     active_goals: List[str] = Field(
         default_factory=list, description="List of active goal titles"
@@ -112,7 +112,7 @@ class RelevanceFeedback(BaseModel):
     """
 
     id: Optional[str] = None
-    user_id: str = Field(description="Firebase UID")
+    user_id: str = Field(description="Supabase user ID (UUID)")
     item_id: str = Field(description="ID of the item that was shown")
     item_type: ItemType = Field(description="Type of item")
     feedback_type: FeedbackType = Field(description="Type of feedback")
