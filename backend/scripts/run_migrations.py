@@ -47,7 +47,9 @@ def run_migrations(migrations_dir: str | None = None) -> None:
                 )
             """)
             cur.execute("SELECT filename FROM schema_migrations")
-            applied = {row[0] for row in cur.fetchall()}
+            # utils.db configures all cursors with `row_factory=dict_row`,
+            # so rows are dicts — index by column name, not position.
+            applied = {row["filename"] for row in cur.fetchall()}
 
     # Each migration runs in its own connection so it commits atomically.
     # If a migration fails, only that migration is rolled back; earlier ones
