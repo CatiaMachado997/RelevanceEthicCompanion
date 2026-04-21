@@ -103,6 +103,11 @@ jobs:
         run: npm run build
         env:
           NEXT_PUBLIC_API_URL: "http://localhost:8000"
+          # Dummy Supabase credentials for the Next.js static-export step.
+          # Prerender imports lib/supabase.ts at build time, which throws
+          # without these set. The values aren't used at runtime in CI.
+          NEXT_PUBLIC_SUPABASE_URL: "https://ci.supabase.co"
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "ci-dummy-anon-key"
 
   # ESL-specific tests (Critical — must never drop below 75% coverage)
   esl-tests:

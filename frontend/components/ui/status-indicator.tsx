@@ -6,7 +6,8 @@ import {
   ShieldAlert,
   ShieldCheck,
   AlertTriangle,
-  Info
+  Info,
+  type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -25,7 +26,7 @@ interface StatusIndicatorProps {
   className?: string
 }
 
-const config: Record<StatusType, { icon: React.ComponentType<any>; color: string; bg: string }> = {
+const config: Record<StatusType, { icon: LucideIcon; color: string; bg: string }> = {
   success: {
     icon: CheckCircle,
     color: 'text-[#6B9B7F]',

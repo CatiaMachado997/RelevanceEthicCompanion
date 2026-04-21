@@ -53,7 +53,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [loading, isAuthenticated, router])
 
-  // Close mobile sidebar on route change
+  // Close mobile sidebar on route change. Intentional synchronous
+  // setState — produces at most one extra render when the sidebar was
+  // previously open, which is exactly the desired UX.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setSidebarOpen(false) }, [pathname])
 
   if (loading) return null

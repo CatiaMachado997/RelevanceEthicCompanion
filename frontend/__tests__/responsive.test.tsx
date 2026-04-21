@@ -14,13 +14,20 @@ jest.mock('../lib/supabase', () => ({
 }))
 
 jest.mock('../components/sidebar', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  SidebarNav: function MockSidebar() { return require('react').createElement('nav', { 'data-testid': 'sidebar' }) },
+  SidebarNav: function MockSidebar() {
+    // jest.mock factories can't reference outer imports. Lazy-require React.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mockReact: typeof import('react') = require('react')
+    return mockReact.createElement('nav', { 'data-testid': 'sidebar' })
+  },
 }))
 
 jest.mock('../components/top-bar', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  TopBar: function MockTopBar() { return require('react').createElement('div', { 'data-testid': 'top-bar' }) },
+  TopBar: function MockTopBar() {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mockReact: typeof import('react') = require('react')
+    return mockReact.createElement('div', { 'data-testid': 'top-bar' })
+  },
 }))
 
 jest.mock('next/navigation', () => ({
