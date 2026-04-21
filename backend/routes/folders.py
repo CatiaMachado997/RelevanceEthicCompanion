@@ -11,13 +11,14 @@ No ESL gating: folder CRUD is a private, self-directed organisational
 action that doesn't affect other people or push anything to the user.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel, Field
 from typing import Optional
 
 from psycopg.errors import UniqueViolation
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 from utils.db import get_db_connection
+from utils.rate_limit import limiter
 
 
 router = APIRouter(prefix="/api/folders", tags=["Folders"])
@@ -74,7 +75,9 @@ async def list_folders(
 
 
 @router.post("")
+@limiter.limit("30/minute")
 async def create_folder(
+    request: Request,
     body: FolderCreate,
     user_id: str = Depends(get_current_user_id),
 ) -> dict:
