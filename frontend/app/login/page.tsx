@@ -149,16 +149,12 @@ export default function LoginPage() {
               )}
 
               <div>
-                <h1 className="text-3xl mb-1.5 leading-tight" style={{ fontFamily: 'var(--font-fraunces)', color: '#111111', fontWeight: 400 }}>
-                  Your Personal Assistant
+                <h1 className="text-2xl mb-1 leading-tight" style={{ fontFamily: 'var(--font-fraunces)', color: '#111111', fontWeight: 400 }}>
+                  Welcome back
                 </h1>
-                <p className="text-base" style={{ color: '#444444' }}>
-                  Hi There!
+                <p className="text-sm" style={{ color: '#666666' }}>
+                  Sign in to your workspace
                 </p>
-              </div>
-
-              <div className="text-xs font-semibold tracking-wider uppercase" style={{ color: '#555555' }}>
-                Login
               </div>
 
               {/* OAuth provider buttons */}
@@ -220,9 +216,9 @@ export default function LoginPage() {
 
               {/* Divider */}
               <div className="flex items-center gap-3">
-                <div className="flex-1 h-px" style={{ background: '#d4d4d4' }} />
-                <span className="text-xs text-center leading-tight" style={{ color: '#555555' }}>Don&apos;t have a provider above?<br className="sm:hidden" /> Use your e-mail to Login</span>
-                <div className="flex-1 h-px" style={{ background: '#d4d4d4' }} />
+                <div className="flex-1 h-px" style={{ background: '#e0e0e0' }} />
+                <span className="text-xs" style={{ color: '#999999' }}>or</span>
+                <div className="flex-1 h-px" style={{ background: '#e0e0e0' }} />
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-3">
