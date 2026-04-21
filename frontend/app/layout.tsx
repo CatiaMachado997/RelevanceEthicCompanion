@@ -4,6 +4,7 @@ import "./globals.css";
 import { Fraunces } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "sonner";
+import { QueryProvider } from "@/lib/query-client";
 
 const fraunces = Fraunces({
   subsets: ["latin"],
@@ -25,17 +26,19 @@ export default function RootLayout({
     <html lang="en" className={`${GeistSans.className} ${fraunces.variable}`} suppressHydrationWarning>
       <body className="antialiased bg-background text-foreground">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          {children}
-          <Toaster
-            position="bottom-right"
-            toastOptions={{
-              style: {
-                background: "var(--ec-card-bg)",
-                color: "var(--ec-text)",
-                border: "1px solid var(--ec-card-border)",
-              },
-            }}
-          />
+          <QueryProvider>
+            {children}
+            <Toaster
+              position="bottom-right"
+              toastOptions={{
+                style: {
+                  background: "var(--ec-card-bg)",
+                  color: "var(--ec-text)",
+                  border: "1px solid var(--ec-card-border)",
+                },
+              }}
+            />
+          </QueryProvider>
         </ThemeProvider>
       </body>
     </html>
