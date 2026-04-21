@@ -118,6 +118,7 @@ export default function SearchPage() {
           {query && (
             <button
               onClick={handleClear}
+              aria-label="Clear search"
               className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-0.5 hover:bg-[#f5f5f5]"
             >
               <X className="h-4 w-4 text-[#9e9e9e]" />
