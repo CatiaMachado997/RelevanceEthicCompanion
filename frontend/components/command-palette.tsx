@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useQuery } from "@tanstack/react-query"
 import {
   Search, MessageSquare, Folder as FolderIcon, Plus, Settings, Plug,
   ArrowRight, Brain, Target, CheckSquare, FolderOpen, Shield,
@@ -45,8 +46,18 @@ export function CommandPalette() {
   const [query, setQuery] = useState("")
   const [cursor, setCursor] = useState(0)
 
-  const [conversations, setConversations] = useState<Conversation[]>([])
-  const [folders, setFolders] = useState<Folder[]>([])
+  // Shared query cache — same keys the sidebar uses, so no duplicate fetches
+  const { data: convData } = useQuery({
+    queryKey: ["conversations"],
+    queryFn: () => api.chat.conversations.list(),
+  })
+  const { data: folderData } = useQuery({
+    queryKey: ["folders"],
+    queryFn: () => api.folders.list(),
+  })
+  const conversations: Conversation[] = convData?.conversations ?? []
+  const folders: Folder[] = folderData?.folders ?? []
+
   const inputRef = useRef<HTMLInputElement>(null)
 
   // ─── Global keybinding: ⌘K / Ctrl+K opens; Esc closes ────────────────
@@ -69,14 +80,11 @@ export function CommandPalette() {
     }
   }, [open])
 
-  // ─── Fetch fresh data each time the palette opens ────────────────────
+  // ─── Reset query/cursor and autofocus each time the palette opens ─────
   useEffect(() => {
     if (!open) return
-    api.chat.conversations.list().then(r => setConversations(r.conversations)).catch(() => {})
-    api.folders.list().then(r => setFolders(r.folders)).catch(() => {})
     setQuery("")
     setCursor(0)
-    // autofocus input
     requestAnimationFrame(() => inputRef.current?.focus())
   }, [open])
 

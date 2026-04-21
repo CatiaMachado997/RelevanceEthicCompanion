@@ -12,7 +12,8 @@ import {
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/useAuth"
 import { useTheme } from "next-themes"
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import type { Folder } from "@/lib/api"
 import { toast } from "@/lib/toast"
@@ -75,12 +76,23 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
   const { signOut, user } = useAuth()
   const { resolvedTheme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
-  const [conversations, setConversations] = useState<Conversation[]>([])
+  const qc = useQueryClient()
+  const { data: convData } = useQuery({
+    queryKey: ["conversations"],
+    queryFn: () => api.chat.conversations.list(),
+  })
+  const { data: folderData } = useQuery({
+    queryKey: ["folders"],
+    queryFn: () => api.folders.list(),
+  })
+  const conversations: Conversation[] = convData?.conversations ?? []
+  const folders: Folder[] = folderData?.folders ?? []
+
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
 
-  // Folders state
-  const [folders, setFolders] = useState<Folder[]>([])
+  // Folder optimistic expansion (track newly created folder name to expand it once data arrives)
+  const pendingExpandName = useRef<string | null>(null)
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const [creatingFolder, setCreatingFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
@@ -130,28 +142,28 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setMounted(true) }, [])
 
-  const refreshConversations = useCallback(() => {
-    api.chat.conversations.list()
-      .then(r => setConversations(r.conversations))
-      .catch(() => {})
-  }, [])
-
-  const refreshFolders = useCallback(() => {
-    api.folders.list()
-      .then(r => setFolders(r.folders))
-      .catch(() => {})
-  }, [])
-
+  // Re-validate when navigating to a new route
   useEffect(() => {
-    refreshConversations()
-    refreshFolders()
-  }, [pathname, refreshConversations, refreshFolders])
+    qc.invalidateQueries({ queryKey: ["conversations"] })
+    qc.invalidateQueries({ queryKey: ["folders"] })
+  }, [pathname, qc])
+
+  // Expand a newly created folder once its data arrives from the cache refetch
+  useEffect(() => {
+    if (!pendingExpandName.current) return
+    const match = folders.find(f => f.name === pendingExpandName.current)
+    if (match) {
+      setExpandedFolders(prev => new Set(prev).add(match.id))
+      pendingExpandName.current = null
+    }
+  }, [folders])
 
   // Refresh immediately when a new conversation is created (e.g., first message sent)
   useEffect(() => {
-    window.addEventListener('ec:conversation-created', refreshConversations)
-    return () => window.removeEventListener('ec:conversation-created', refreshConversations)
-  }, [refreshConversations])
+    const h = () => qc.invalidateQueries({ queryKey: ["conversations"] })
+    window.addEventListener('ec:conversation-created', h)
+    return () => window.removeEventListener('ec:conversation-created', h)
+  }, [qc])
 
 
 
@@ -169,14 +181,14 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
 
   const handleDelete = async (id: string) => {
     await api.chat.conversations.delete(id).catch(() => {})
-    setConversations(prev => prev.filter(c => c.id !== id))
+    qc.invalidateQueries({ queryKey: ["conversations"] })
     if (pathname === `/dashboard/chat/${id}`) router.push('/dashboard/chat')
   }
 
   const handleRename = async (id: string) => {
     if (!editTitle.trim()) return
     await api.chat.conversations.rename(id, editTitle).catch(() => {})
-    setConversations(prev => prev.map(c => c.id === id ? { ...c, title: editTitle } : c))
+    qc.invalidateQueries({ queryKey: ["conversations"] })
     setEditingId(null)
   }
 
@@ -185,9 +197,9 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
     const name = newFolderName.trim()
     if (!name) { setCreatingFolder(false); setNewFolderName(''); return }
     try {
-      const folder = await api.folders.create(name)
-      setFolders(prev => [...prev, folder])
-      setExpandedFolders(prev => new Set(prev).add(folder.id))
+      await api.folders.create(name)
+      pendingExpandName.current = name   // expand once query refetch delivers the new folder
+      qc.invalidateQueries({ queryKey: ["folders"] })
       toast.success("Folder created", name)
       setCreatingFolder(false)
       setNewFolderName('')
@@ -202,8 +214,8 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
     const name = editFolderName.trim()
     if (!name) { setEditingFolderId(null); return }
     try {
-      const updated = await api.folders.update(id, { name })
-      setFolders(prev => prev.map(f => f.id === id ? updated : f))
+      await api.folders.update(id, { name })
+      qc.invalidateQueries({ queryKey: ["folders"] })
       toast.success("Folder renamed", name)
       setEditingFolderId(null)
       setEditFolderName('')
@@ -222,9 +234,8 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
 
     try {
       await api.folders.delete(folder.id)
-      setFolders(prev => prev.filter(f => f.id !== folder.id))
-      // Orphaned conversations fall back to ungrouped — update local state
-      setConversations(prev => prev.map(c => c.folder_id === folder.id ? { ...c, folder_id: null } : c))
+      qc.invalidateQueries({ queryKey: ["folders"] })
+      qc.invalidateQueries({ queryKey: ["conversations"] })
       toast.success("Folder deleted", folder.name)
     } catch (e) {
       console.error('delete folder failed', e)
@@ -258,14 +269,12 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
     const convId = e.dataTransfer.getData('text/ec-conversation')
     setDragOverFolder(null)
     if (!convId) return
-    // Optimistic update
-    setConversations(prev => prev.map(c => c.id === convId ? { ...c, folder_id: folderId } : c))
     if (folderId) setExpandedFolders(prev => new Set(prev).add(folderId))
     try {
       await api.folders.moveConversation(convId, folderId)
-    } catch {
-      // On failure, refetch to get truth
-      refreshConversations()
+    } finally {
+      // Always refetch to get truth (handles both success and failure)
+      qc.invalidateQueries({ queryKey: ["conversations"] })
     }
   }
 
