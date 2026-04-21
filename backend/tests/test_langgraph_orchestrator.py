@@ -117,12 +117,17 @@ async def test_stream_token_events_have_token_field():
 @pytest.mark.asyncio
 async def test_stream_missing_message_returns_422():
     """Request without message param returns 422 Unprocessable Entity."""
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        r = await client.get(
-            "/api/chat/stream?user_id=00000000-0000-0000-0000-000000000000"
-        )
+    from utils.supabase_auth import get_current_read_user_id
+    app.dependency_overrides[get_current_read_user_id] = lambda: "00000000-0000-0000-0000-000000000000"
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            r = await client.get(
+                "/api/chat/stream?user_id=00000000-0000-0000-0000-000000000000"
+            )
+    finally:
+        app.dependency_overrides.pop(get_current_read_user_id, None)
     assert r.status_code == 422
 
 

@@ -104,19 +104,18 @@ def test_overdue_count_from_db():
 # ── Route ─────────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture
-def mock_read_auth(monkeypatch):
-    monkeypatch.setattr(
-        "utils.supabase_auth.get_current_read_user_id",
-        lambda: "00000000-0000-0000-0000-000000000000",
-    )
-
-
-def test_snapshot_route_returns_200(mock_read_auth):
+def test_snapshot_route_returns_200():
     """GET /api/context/snapshot returns 200 with snapshot keys."""
-    with patch("services.context_snapshot.get_db_connection", make_db_mock()):
-        from main import app
+    from fastapi import FastAPI
+    from routes.context import router as context_router
+    from utils.supabase_auth import get_current_read_user_id
 
+    TEST_USER_ID = "00000000-0000-0000-0000-000000000000"
+    app = FastAPI()
+    app.include_router(context_router)
+    app.dependency_overrides[get_current_read_user_id] = lambda: TEST_USER_ID
+
+    with patch("services.context_snapshot.get_db_connection", make_db_mock()):
         client = TestClient(app)
         response = client.get("/api/context/snapshot")
 
