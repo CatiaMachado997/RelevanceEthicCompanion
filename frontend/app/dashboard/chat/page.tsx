@@ -63,6 +63,17 @@ const GROQ_MODELS = [
 ]
 const DEFAULT_MODEL = GROQ_MODELS[0].id
 
+const STORAGE_KEY_MODEL = "ec_selected_model"
+
+function loadInitialModel(): string {
+  if (typeof window === "undefined") return DEFAULT_MODEL
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY_MODEL)
+    if (saved && GROQ_MODELS.some(m => m.id === saved)) return saved
+  } catch {}
+  return DEFAULT_MODEL
+}
+
 const SOURCE_OPTIONS = [
   { id: 'calendar', label: 'Calendar', icon: Calendar },
   { id: 'web',      label: 'Web',      icon: Globe },
@@ -288,7 +299,11 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [userScrolled, setUserScrolled] = useState(false)
   const [activeTool, setActiveTool] = useState<string | null>(null)
-  const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL)
+  const [selectedModel, setSelectedModelRaw] = useState<string>(() => loadInitialModel())
+  const setSelectedModel = useCallback((id: string) => {
+    setSelectedModelRaw(id)
+    try { localStorage.setItem(STORAGE_KEY_MODEL, id) } catch {}
+  }, [])
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
   const [rateLimitWarning, setRateLimitWarning] = useState<{ level: string; message: string } | null>(null)
   const rateLimitDismissedRef = useRef(false)
