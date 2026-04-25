@@ -19,7 +19,7 @@
  * and mount <SlidePanelHost /> once at the layout level.
  */
 
-import { useCallback, useEffect } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import { X } from "lucide-react"
 
 
@@ -32,7 +32,26 @@ interface SlidePanelProps {
   children: React.ReactNode
 }
 
+// Selector matching everything Tab can reach.
+// Excludes negative tabindex and disabled controls.
+const FOCUSABLE_SELECTOR = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  '[tabindex]:not([tabindex="-1"])',
+].join(",")
+
+function getFocusable(root: HTMLElement): HTMLElement[] {
+  return Array.from(
+    root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+  ).filter((el) => !el.hasAttribute("aria-hidden"))
+}
+
 export function SlidePanel({ open, onClose, title, width = "440px", children }: SlidePanelProps) {
+  const panelRef = useRef<HTMLElement | null>(null)
+
   // Esc to close
   useEffect(() => {
     if (!open) return
@@ -51,6 +70,48 @@ export function SlidePanel({ open, onClose, title, width = "440px", children }: 
     return () => { document.body.style.overflow = prev }
   }, [open])
 
+  // Focus trap: capture the previously focused element when the panel
+  // opens, move focus inside, and restore it when the panel closes.
+  // Tab/Shift-Tab cycle inside the panel — Esc/backdrop click still close.
+  useEffect(() => {
+    if (!open) return
+    const panel = panelRef.current
+    if (!panel) return
+
+    const previouslyFocused = document.activeElement as HTMLElement | null
+    const focusables = getFocusable(panel)
+    ;(focusables[0] ?? panel).focus()
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return
+      const items = getFocusable(panel)
+      if (items.length === 0) {
+        e.preventDefault()
+        return
+      }
+      const first = items[0]
+      const last = items[items.length - 1]
+      const active = document.activeElement as HTMLElement | null
+      if (e.shiftKey && active === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+
+    panel.addEventListener("keydown", onKey)
+    return () => {
+      panel.removeEventListener("keydown", onKey)
+      // Restore focus to whatever opened the panel — only if it's still
+      // in the document (could have unmounted during the panel's life).
+      if (previouslyFocused && document.contains(previouslyFocused)) {
+        previouslyFocused.focus()
+      }
+    }
+  }, [open])
+
   return (
     <>
       {/* Backdrop — only the area left of the panel, and only on mobile/tablet.
@@ -66,10 +127,15 @@ export function SlidePanel({ open, onClose, title, width = "440px", children }: 
 
       {/* Panel */}
       <aside
+        ref={panelRef}
         role="dialog"
+        aria-modal="true"
         aria-label={title ?? "Detail panel"}
         aria-hidden={!open}
-        className={`fixed top-0 right-0 bottom-0 z-[95] flex flex-col transition-transform duration-250 ease-out shadow-2xl`}
+        // tabIndex=-1 so the panel itself can receive programmatic focus
+        // when it has no focusable children yet (initial focus fallback).
+        tabIndex={-1}
+        className={`fixed top-0 right-0 bottom-0 z-[95] flex flex-col transition-transform duration-250 ease-out shadow-2xl outline-none`}
         style={{
           width: `min(100vw, ${width})`,
           background: "var(--ec-card-bg)",
