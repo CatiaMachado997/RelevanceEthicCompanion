@@ -16,8 +16,8 @@ from google.auth.transport.requests import Request
 
 from services.connectors import get_connector
 from services.connectors.base import SourceItem
+from services.connector_indexer import ConnectorIndexer
 from services.context_manager import ContextManager
-from models.context import SemanticMemoryEntry
 from utils.db import get_db_connection
 from config import settings
 
@@ -188,23 +188,19 @@ class DataIngestionService:
             conn.commit()
 
     async def _maybe_embed(self, item: SourceItem, user_id: str):
-        """Store in M2 (Weaviate) if available — best-effort."""
-        if not (
-            self.context_manager.weaviate and self.context_manager.embedding_service
-        ):
-            return
+        """Index the item into DocumentMemory via ConnectorIndexer.
+
+        After Sprint B this is the only path connector content takes into
+        Weaviate — `store_semantic_memory` is no longer called for source
+        items because we want them to be cited by `search_documents` in chat.
+        Best-effort: failures log and continue (Weaviate may be offline).
+        """
         try:
-            content = f"{item.title}. {item.body or ''}"
-            memory_entry = SemanticMemoryEntry(
-                user_id=user_id,
-                content=content,
-                source=item.source_type,
-                timestamp=datetime.now(timezone.utc),
-                metadata={"external_id": item.external_id, **item.metadata},
-            )
-            await self.context_manager.store_semantic_memory(memory_entry)
+            indexer = ConnectorIndexer()
+            n = await indexer.index(item)
+            logger.debug(f"indexed {n} chunk(s) for {item.source_type}:{item.external_id}")
         except Exception as e:
-            logger.warning(f"⚠️ M2 embed failed for {item.external_id}: {e}")
+            logger.warning(f"⚠️ ConnectorIndexer failed for {item.external_id}: {e}")
 
     async def _store_data_source(
         self,
