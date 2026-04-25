@@ -55,6 +55,23 @@ class BackgroundScheduler:
             max_instances=1,  # Prevent overlap
         )
 
+        # Gmail sync — every 30 minutes
+        self.scheduler.add_job(
+            func=self._sync_all_gmail,
+            trigger="interval",
+            minutes=30,
+            id="sync_gmail",
+            replace_existing=True,
+        )
+        # Slack sync — every 5 minutes
+        self.scheduler.add_job(
+            func=self._sync_all_slack,
+            trigger="interval",
+            minutes=5,
+            id="sync_slack",
+            replace_existing=True,
+        )
+
         # Task 2: Clean up expired tokens daily at 3 AM
         self.scheduler.add_job(
             func=self._cleanup_expired_tokens,
@@ -139,6 +156,8 @@ class BackgroundScheduler:
 
         logger.info("✅ Background scheduler started")
         logger.info("   - Calendar sync: Every 15 minutes")
+        logger.info("   - Gmail sync: Every 30 minutes")
+        logger.info("   - Slack sync: Every 5 minutes")
         logger.info("   - Token cleanup: Daily at 3 AM")
         logger.info("   - Health check: Every hour")
         logger.info("   - Weekly digest: Every Monday at 8 AM")
@@ -223,6 +242,51 @@ class BackgroundScheduler:
         except Exception as e:
             logger.error(f"❌ Failed to get users with calendar: {e}")
             return []
+
+    async def _sync_all_gmail(self):
+        await self._sync_all_for_source("gmail")
+
+    async def _sync_all_slack(self):
+        await self._sync_all_for_source("slack")
+
+    async def _sync_all_for_source(self, source_type: str):
+        """Generic per-source sync runner — replaces the calendar-specific helper
+        once we have three sources."""
+        try:
+            users = await self._get_users_with_source(source_type)
+            synced = failed = 0
+            for user_id in users:
+                try:
+                    r = await self.data_ingestion.sync_data_source(
+                        user_id, source_type
+                    )
+                    if r.get("success"):
+                        synced += 1
+                    else:
+                        failed += 1
+                except Exception as e:
+                    failed += 1
+                    logger.error(
+                        f"❌ {source_type} sync failed for {user_id}: {e}"
+                    )
+            logger.info(
+                f"✅ Scheduled {source_type} sync: {synced} ok, {failed} failed"
+            )
+        except Exception as e:
+            logger.error(
+                f"❌ Critical error in {source_type} sync: {e}", exc_info=True
+            )
+
+    async def _get_users_with_source(self, source_type: str) -> list:
+        from utils.db import get_db_connection
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT user_id FROM data_sources "
+                    "WHERE source_type = %s AND enabled = TRUE",
+                    (source_type,),
+                )
+                return [r["user_id"] for r in cur.fetchall()]
 
     async def _cleanup_expired_tokens(self):
         """
