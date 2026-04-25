@@ -69,9 +69,30 @@ class WeaviateClient:
                 self.client.collections.create_from_dict(schema)
                 logger.info(f"✅ Created collection: {class_name}")
 
+            # Idempotent runtime fix-ups for properties added after initial
+            # collection creation (so existing deployments are backfilled).
+            self.ensure_document_memory_source_type()
+
             logger.info("✅ All Weaviate schemas initialized")
         except Exception as e:
             logger.error(f"❌ Failed to initialize schemas: {e}")
+            raise
+
+    def ensure_document_memory_source_type(self):
+        """Add `source_type` to DocumentMemory if missing — idempotent."""
+        try:
+            coll = self.client.collections.get("DocumentMemory")
+            config = coll.config.get()
+            existing = {p.name for p in config.properties}
+            if "source_type" not in existing:
+                from weaviate.classes.config import Property, DataType
+
+                coll.config.add_property(
+                    Property(name="source_type", data_type=DataType.TEXT)
+                )
+                logger.info("✅ Added 'source_type' property to DocumentMemory")
+        except Exception as e:
+            logger.error(f"❌ Failed to ensure DocumentMemory.source_type: {e}")
             raise
 
     def store_memory(
