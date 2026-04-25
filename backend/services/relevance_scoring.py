@@ -129,7 +129,7 @@ class RelevanceScoringEngine:
         THIS IS YOUR ALGORITHM - Not LLM intelligence
 
         Args:
-            user_id: Firebase UID
+            user_id: Supabase UUID
             candidates: Items to score
             context: Relevance context (goals, events, query, etc.)
 
