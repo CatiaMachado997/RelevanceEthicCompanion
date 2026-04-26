@@ -296,6 +296,37 @@ class WeaviateClient:
             logger.error(f"❌ Hybrid search failed: {e}")
             raise
 
+    def delete_by_filter(self, collection_name: str, where: dict) -> int:
+        """Delete all objects in `collection_name` matching the given filter.
+
+        `where` is a dict of property→value pairs that are AND'd together
+        (e.g. ``{"user_id": "...", "source_type": "gmail"}``). Each pair is
+        compared with ``Filter.by_property(k).equal(v)``.
+
+        Returns the count of objects successfully deleted, or 0 on failure
+        (Weaviate unavailable, malformed filter, etc.) to match the
+        graceful-degradation pattern used elsewhere in this module.
+        """
+        try:
+            if not where:
+                return 0
+            coll = self.client.collections.get(collection_name)
+            flt = None
+            for k, v in where.items():
+                clause = Filter.by_property(k).equal(v)
+                flt = clause if flt is None else flt & clause
+            res = coll.data.delete_many(where=flt)
+            count = getattr(res, "successful", 0) or 0
+            logger.info(
+                f"✅ delete_by_filter on {collection_name}: removed {count} objects"
+            )
+            return count
+        except Exception as e:
+            logger.warning(
+                f"⚠️ delete_by_filter failed on {collection_name}: {e}"
+            )
+            return 0
+
     def delete_by_id(self, collection: str, uuid: str):
         """Delete an object by UUID"""
         try:

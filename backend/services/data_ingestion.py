@@ -19,6 +19,7 @@ from services.connectors.base import SourceItem
 from services.connector_indexer import ConnectorIndexer
 from services.context_manager import ContextManager
 from utils.db import get_db_connection
+from utils.weaviate_client import get_weaviate_client
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -515,6 +516,59 @@ class DataIngestionService:
             "gmail": counts.get("gmail", 0),
             "slack": counts.get("slack", 0),
             "total": sum(counts.values()),
+        }
+
+    async def disconnect_data_source(
+        self, user_id: str, source_type: str
+    ) -> Dict[str, Any]:
+        """Disconnect a connector and wipe everything associated with it.
+
+        Order matters:
+          1. Weaviate vectors (DocumentMemory matching user_id + source_type)
+          2. Postgres source_items rows
+          3. Postgres data_sources row (tokens + state)
+
+        Vectors are deleted first so that if the SQL DELETE fails the user
+        can retry — SQL still tells us there's cleanup to do. Conversely if
+        SQL is wiped first and vector deletion fails, we'd have orphan
+        vectors with no token to drive a retry from.
+
+        Returns a dict with counts:
+            {"vectors_deleted": int, "items_deleted": int, "tokens_deleted": int}
+        """
+        # Step 1: vectors first
+        vectors_deleted = 0
+        weav = get_weaviate_client()
+        if weav is not None:
+            vectors_deleted = weav.delete_by_filter(
+                "DocumentMemory",
+                {"user_id": str(user_id), "source_type": source_type},
+            )
+
+        # Steps 2 & 3: SQL
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM source_items WHERE user_id = %s AND source_type = %s",
+                    (user_id, source_type),
+                )
+                items_deleted = cur.rowcount or 0
+                cur.execute(
+                    "DELETE FROM data_sources WHERE user_id = %s AND source_type = %s",
+                    (user_id, source_type),
+                )
+                tokens_deleted = cur.rowcount or 0
+            conn.commit()
+
+        logger.info(
+            f"✅ disconnected {source_type} for {user_id}: "
+            f"{vectors_deleted} vectors, {items_deleted} items, "
+            f"{tokens_deleted} tokens"
+        )
+        return {
+            "vectors_deleted": vectors_deleted,
+            "items_deleted": items_deleted,
+            "tokens_deleted": tokens_deleted,
         }
 
     async def disconnect_source(self, user_id: str, source_type: str) -> bool:
