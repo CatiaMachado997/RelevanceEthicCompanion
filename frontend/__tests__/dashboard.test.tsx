@@ -2,6 +2,24 @@ import { render, screen } from '@testing-library/react';
 import DashboardPage from '../app/dashboard/page';
 import { transparencyApi, contextApi, insightApi } from '../lib/api';
 
+// next/link transitively reads router context; without an app router
+// mounted in the test tree, render() throws "invariant expected app
+// router to be mounted". Stub to a plain <a> that just forwards props.
+//
+// jest.mock factories run before imports — they can't reference any
+// out-of-scope variables, including TS-injected helpers. Avoid rest
+// spread (which Babel/TS lowers to a `__rest` import) and pull React
+// in lazily inside the factory.
+jest.mock('next/link', () => ({
+  __esModule: true,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  default: function MockLink(props: any) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const r = require('react')
+    return r.createElement('a', props, props.children)
+  },
+}));
+
 // Mock all APIs used by the dashboard
 jest.mock('../lib/api', () => ({
   transparencyApi: {
@@ -16,6 +34,18 @@ jest.mock('../lib/api', () => ({
   },
   // Type re-export — unused at runtime, kept for type imports.
 }));
+
+// DashboardHero / RecentConversations / ToolsLauncher all use
+// @tanstack/react-query under the hood; the test would need a
+// QueryClientProvider otherwise. Stub them — this test is about the
+// "Today" + "ESL activity" sections.
+jest.mock('../components/tools-launcher', () => ({
+  ToolsLauncher: () => null,
+}))
+jest.mock('../components/dashboard-hero', () => ({
+  DashboardHero: () => null,
+  RecentConversations: () => null,
+}))
 
 // recharts is heavy and not under test here.
 jest.mock('recharts', () => ({

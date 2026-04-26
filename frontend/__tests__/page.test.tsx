@@ -11,11 +11,10 @@ jest.mock('next/navigation', () => ({
 describe('Home page', () => {
   it('renders the landing wordmark, tagline, and sign-in link', () => {
     render(<Home />);
-    // Wordmark appears; match the uppercase version to disambiguate from
-    // the prose mention.
-    expect(
-      screen.getByText(/^Ethic Companion$/i, { selector: 'p' })
-    ).toBeInTheDocument();
+    // Wordmark — currently rendered as a <span> next to the logo.
+    // Drop the selector qualifier so the test survives a wrapper
+    // change (h1 → span → p) as long as the literal text is present.
+    expect(screen.getByText(/^Ethic Companion$/i)).toBeInTheDocument();
     expect(
       screen.getByText(/respects your boundaries/i)
     ).toBeInTheDocument();
