@@ -84,6 +84,7 @@ async def stream_langgraph(
     model: str = "llama-3.3-70b-versatile",
     conversation_id: Optional[str] = None,
     active_sources: Optional[list] = None,
+    force_retrieval: bool = False,
 ) -> AsyncGenerator[dict, None]:
     """
     Stream SSE events from the LangGraph orchestrator.
@@ -116,10 +117,12 @@ async def stream_langgraph(
         "response_text": "",
         "response_events": [],
         "citations": [],
+        "document_sources": [],
         "token_count": 0,
         "token_warning": None,
         "pending_tool_confirmation": None,
         "source_context": [],
+        "force_retrieval": force_retrieval,
     }
     graph = get_graph()
 
@@ -129,6 +132,7 @@ async def stream_langgraph(
     response_text = ""
     esl_data = {}
     citations: list = []
+    document_sources: list = []
     tool_events_yielded = False
     done_yielded = False
 
@@ -169,6 +173,7 @@ async def stream_langgraph(
                         yield ev
                 # Capture citation sources for the done event
                 citations = output.get("citations", [])
+                document_sources = output.get("document_sources", [])
 
             # ── Token warning ──
             elif kind == "on_chain_end" and node in ("tool_execution", "tool_planner"):
@@ -218,6 +223,7 @@ async def stream_langgraph(
                         "event": "done",
                         "esl_decision": esl_data,
                         "citations": citations,
+                        "document_sources": document_sources,
                     }
 
     except Exception as e:
@@ -228,7 +234,12 @@ async def stream_langgraph(
         return
 
     if not done_yielded:
-        yield {"event": "done", "esl_decision": esl_data, "citations": citations}
+        yield {
+            "event": "done",
+            "esl_decision": esl_data,
+            "citations": citations,
+            "document_sources": document_sources,
+        }
 
     # Store conversation turns non-blocking
     await _post_stream_store(
@@ -236,6 +247,8 @@ async def stream_langgraph(
         user_msg=message,
         assistant_msg=response_text,
         conversation_id=conversation_id,
+        document_sources=document_sources,
+        citations=citations,
     )
 
 
@@ -244,6 +257,8 @@ async def _post_stream_store(
     user_msg: str,
     assistant_msg: str,
     conversation_id: Optional[str],
+    document_sources: Optional[list] = None,
+    citations: Optional[list] = None,
 ) -> None:
     """Persist conversation turns to M1 + M2. Non-blocking — errors are logged."""
     import logging
@@ -253,13 +268,24 @@ async def _post_stream_store(
         from orchestrator.nodes.context import get_context_manager
 
         cm = get_context_manager()
+        # Build assistant metadata: only include fields that have content.
+        assistant_meta: dict = {}
+        if document_sources:
+            assistant_meta["document_sources"] = document_sources
+        if citations:
+            assistant_meta["citations"] = citations
+
         # Adapt to actual ContextManager API (check what store methods exist)
         if hasattr(cm, "store_conversation_turn"):
             await cm.store_conversation_turn(
                 user_id, "user", user_msg, conversation_id=conversation_id
             )
             await cm.store_conversation_turn(
-                user_id, "assistant", assistant_msg, conversation_id=conversation_id
+                user_id,
+                "assistant",
+                assistant_msg,
+                conversation_id=conversation_id,
+                metadata=assistant_meta or None,
             )
         if hasattr(cm, "store_semantic_memory"):
             try:

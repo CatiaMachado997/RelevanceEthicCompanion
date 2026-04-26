@@ -36,6 +36,10 @@ class AgentState(TypedDict):
     # Citations — sources consulted by tool calls
     citations: list  # [{"tool": str, "label": str, "icon": str}, ...]
 
+    # Document sources — per-chunk citations from search_documents (RAG)
+    # [{chunk_uuid, document_id, filename, chunk_index, snippet, score}, ...]
+    document_sources: list
+
     # Token tracking
     token_count: int
     token_warning: Optional[dict]
@@ -45,3 +49,7 @@ class AgentState(TypedDict):
 
     # Source items context from synced integrations
     source_context: list  # [{source_type, source_item_type, title, body, item_at}]
+
+    # When True, planner injects a search_documents tool call regardless of
+    # the LLM's judgement. Set by the `/ask` slash command in the UI.
+    force_retrieval: bool

@@ -75,6 +75,7 @@ _TOOL_CITATION_META: dict = {
     "query_memory": {"label": "Memory", "icon": "memory"},
     "get_user_goals": {"label": "Goals", "icon": "target"},
     "web_search": {"label": "Web Search", "icon": "globe"},
+    "search_documents": {"label": "Documents", "icon": "file-text"},
     "create_note": None,  # write tool — omit from citations
 }
 
@@ -231,8 +232,24 @@ async def tool_planner_node(state: AgentState) -> dict:
     messages.append(HumanMessage(content=state["message"]))
 
     response = await llm_with_tools.ainvoke(messages)
-    tool_calls = getattr(response, "tool_calls", []) or []
+    tool_calls = list(getattr(response, "tool_calls", []) or [])
     proposed = response.content if not tool_calls else ""
+
+    # `/ask` slash command: force a search_documents call so the user can audit
+    # which chunks the answer was grounded in regardless of the planner's choice.
+    if state.get("force_retrieval"):
+        already = any(tc.get("name") == "search_documents" for tc in tool_calls)
+        if not already:
+            tool_calls.insert(
+                0,
+                {
+                    "name": "search_documents",
+                    "args": {"query": state["message"], "k": 5},
+                    "id": "forced_search_documents",
+                },
+            )
+            proposed = ""
+
     return {"tool_calls": tool_calls, "proposed_content": proposed}
 
 
@@ -245,8 +262,13 @@ async def tool_execution_node(state: AgentState) -> dict:
 
     cm = get_context_manager()
     user_id = state["user_id"]
+    # Mutable list passed into search_documents — populated when the tool runs.
+    document_sources: list = []
     tools = await create_langchain_tools(
-        cm, user_id, active_sources=state.get("active_sources") or []
+        cm,
+        user_id,
+        active_sources=state.get("active_sources") or [],
+        citation_collector=document_sources,
     )
     tool_map = {t.name: t for t in tools}
     llm = ChatGroq(
@@ -359,6 +381,7 @@ async def tool_execution_node(state: AgentState) -> dict:
         "proposed_content": proposed,
         "response_events": events,
         "citations": _build_citations(results),
+        "document_sources": document_sources,
         "token_count": state.get("token_count", 0) + tokens_used,
         "token_warning": warning,
         "pending_tool_confirmation": pending_confirmation,

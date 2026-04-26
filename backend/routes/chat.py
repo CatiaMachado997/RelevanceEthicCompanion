@@ -30,6 +30,10 @@ class ChatMessage(BaseModel):
     role: str = Field(..., description="'user' or 'assistant'")
     content: str = Field(..., description="Message content")
     timestamp: Optional[str] = None
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Per-turn structured data (e.g. document_sources for RAG citations).",
+    )
 
 
 class ChatRequest(BaseModel):
@@ -169,6 +173,7 @@ async def stream_chat(
     model: str = DEFAULT_MODEL,
     conversation_id: Optional[str] = None,
     active_sources: str = "",  # comma-separated: "calendar,web,goals,memory" — empty = all
+    force_retrieval: bool = False,  # `/ask` slash command — force a search_documents call
     user_id: str = Depends(get_current_read_user_id),
 ):
     """Server-Sent Events endpoint for streaming chat responses via LangGraph."""
@@ -183,7 +188,12 @@ async def stream_chat(
 
     async def _lg_stream():
         async for event in stream_langgraph(
-            user_id, message, model, conversation_id, active_sources=sources
+            user_id,
+            message,
+            model,
+            conversation_id,
+            active_sources=sources,
+            force_retrieval=force_retrieval,
         ):
             yield f"data: {_json.dumps(event)}\n\n"
 
@@ -412,6 +422,7 @@ async def get_conversation_history(
                 if t.get("created_at") and hasattr(t["created_at"], "isoformat")
                 else (str(t["created_at"]) if t.get("created_at") else "")
             ),
+            metadata=t.get("metadata") or {},
         )
         for t in turns
     ]

@@ -1232,21 +1232,15 @@ export const connectorsApi = {
   backfill: (
     sourceType: string,
     since?: string,
-  ): Promise<{ job_id: string; status: string; success?: boolean; items_synced?: number }> => {
-    // Backend accepts `since_days`; if a since ISO string is provided, derive days from now.
-    let since_days = 90
-    if (since) {
-      const sinceMs = new Date(since).getTime()
-      if (!Number.isNaN(sinceMs)) {
-        const diff = Math.ceil((Date.now() - sinceMs) / (1000 * 60 * 60 * 24))
-        since_days = Math.max(1, diff)
-      }
-    }
-    return apiRequest<{ job_id: string; status: string; success?: boolean; items_synced?: number }>(
+  ): Promise<{ job_id: string; status: string }> => {
+    // Backend (routes/connectors.py) expects { since: ISO-8601 | null }.
+    const body: { since?: string } = {}
+    if (since) body.since = since
+    return apiRequest<{ job_id: string; status: string }>(
       `/api/connectors/${sourceType}/backfill`,
       {
         method: 'POST',
-        body: JSON.stringify({ since_days }),
+        body: JSON.stringify(body),
       },
     )
   },

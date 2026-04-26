@@ -87,8 +87,11 @@ export function IntegrationCard({
     setBusy('backfill')
     try {
       const r = await connectorsApi.backfill(source_type)
-      const synced = r.items_synced ?? 0
-      toast.success('Backfill complete', `${synced} items indexed`)
+      if (r.status === 'failed') {
+        toast.error('Backfill failed')
+      } else {
+        toast.success('Backfill complete', `job ${r.job_id.slice(0, 8)}`)
+      }
       onChange?.()
     } catch (e) {
       toast.error('Backfill failed', e instanceof Error ? e.message : undefined)

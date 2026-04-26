@@ -6,7 +6,8 @@ import remarkGfm from 'remark-gfm'
 import { CodeBlock } from '@/components/chat/CodeBlock'
 import { ArtifactCard } from '@/components/chat/ArtifactCard'
 import { SlashCommands } from '@/components/chat/slash-commands'
-import api, { CitationSource, toolMarketplaceApi } from '@/lib/api'
+import api, { CitationSource, DocumentSource, toolMarketplaceApi } from '@/lib/api'
+import { SourceCards } from '@/components/chat/SourceCards'
 import { ToolConfirmation } from '@/components/ToolConfirmation'
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
@@ -39,6 +40,7 @@ interface Message {
     reason: string
   }
   citations?: CitationSource[]
+  documentSources?: DocumentSource[]
   pendingConfirmation?: PendingConfirmation
 }
 
@@ -367,6 +369,8 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
           role:      m.role as 'user' | 'assistant',
           content:   m.content,
           timestamp: m.timestamp ?? '',
+          citations: m.metadata?.citations,
+          documentSources: m.metadata?.document_sources,
         })))
       })
       .catch(console.error)
@@ -399,6 +403,21 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
     window.addEventListener('ec:new-chat', onNew)
     return () => window.removeEventListener('ec:new-chat', onNew)
   }, [conversationId, router])
+
+  // The `/ask` slash command dispatches `ec:slash-submit` so the user doesn't
+  // have to press Enter twice. We feed the typed text straight into handleSend,
+  // which detects the `/ask ` prefix and sets force_retrieval on the stream.
+  useEffect(() => {
+    const onSubmit = (e: Event) => {
+      const detail = (e as CustomEvent<{ message?: string }>).detail
+      const message = detail?.message
+      if (!message) return
+      handleSend(message)
+    }
+    window.addEventListener('ec:slash-submit', onSubmit)
+    return () => window.removeEventListener('ec:slash-submit', onSubmit)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const saveTitle = async () => {
     const t = titleDraft.trim()
@@ -449,7 +468,15 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
 
   /* send */
   const handleSend = async (text?: string) => {
-    const userText = (text ?? input).trim()
+    let userText = (text ?? input).trim()
+    // `/ask <query>` slash command — strip the prefix and force document
+    // retrieval on this turn, regardless of the planner's judgement.
+    let forceRetrieval = false
+    const askMatch = userText.match(/^\/ask\s+([\s\S]+)$/i)
+    if (askMatch) {
+      userText = askMatch[1].trim()
+      forceRetrieval = true
+    }
     const userMessage = attachedFile
       ? `${userText ? userText + '\n\n' : ''}[Attached file: ${attachedFile.name}]\n\`\`\`\n${attachedFile.content.slice(0, 8000)}\n\`\`\``
       : userText
@@ -493,6 +520,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
         model: selectedModel,
         conversation_id: activeConvId,
         active_sources: selectedSources,
+        force_retrieval: forceRetrieval,
         onRateLimitWarning: (level, message) => { if (!rateLimitDismissedRef.current) setRateLimitWarning({ level, message }) },
         onRateLimitExceeded: (retryAfter, message) => {
           setRateLimitExceeded({ retryAfter, message })
@@ -527,10 +555,12 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
               : m
           ))
         },
-        onDone: ({ citations }) => {
-          if (citations && citations.length > 0) {
+        onDone: ({ citations, document_sources }) => {
+          if ((citations && citations.length > 0) || (document_sources && document_sources.length > 0)) {
             setMessages(prev => prev.map(m =>
-              m.id === assistantId ? { ...m, citations } : m
+              m.id === assistantId
+                ? { ...m, citations: citations ?? m.citations, documentSources: document_sources ?? m.documentSources }
+                : m
             ))
           }
         },
@@ -873,6 +903,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                     </>
                   ) : null}
                   <CitationPills citations={msg.citations} />
+                  <SourceCards sources={msg.documentSources} />
                   {msg.pendingConfirmation && (
                     <ToolConfirmation
                       toolName={msg.pendingConfirmation.tool_name}
