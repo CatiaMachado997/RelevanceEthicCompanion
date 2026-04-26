@@ -13,6 +13,9 @@ from pathlib import Path
 from typing import Optional
 
 import requests
+import urllib3
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +50,7 @@ class ObsidianClient:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.vault_path = vault_path.strip("/")
-        self.fallback_dir = Path(fallback_dir) if fallback_dir else Path("autolab/results")
+        self.fallback_dir = Path(fallback_dir) if fallback_dir else Path(__file__).parent / "results"
         self._headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "text/markdown",
@@ -89,8 +92,8 @@ class ObsidianClient:
             )
             if resp.status_code not in (200, 204):
                 raise ValueError(f"Obsidian API returned {resp.status_code}")
-        except Exception as e:
-            logger.debug(f"Obsidian unavailable ({e}), writing to fallback")
+        except (requests.exceptions.RequestException, ValueError, OSError) as e:
+            logger.warning(f"Obsidian write failed ({e}), falling back to JSONL")
             self._write_fallback(result)
 
     def update_best(self, result: ExperimentResult) -> None:
@@ -105,21 +108,26 @@ class ObsidianClient:
         )
         vault_file = f"{self.vault_path}/Experiments/{result.track}/best.md"
         try:
-            requests.put(
+            resp = requests.put(
                 f"{self.base_url}/vault/{vault_file}",
                 headers=self._headers,
                 data=content,
                 verify=False,
                 timeout=5,
             )
-        except Exception as e:
-            logger.debug(f"Obsidian best.md update failed ({e}), writing to fallback")
+            if resp.status_code not in (200, 204):
+                raise ValueError(f"Obsidian API returned {resp.status_code}")
+        except (requests.exceptions.RequestException, ValueError) as e:
+            logger.warning(f"Obsidian write failed ({e}), falling back to JSONL")
             best_file = self.fallback_dir / result.track / "best.json"
             best_file.parent.mkdir(parents=True, exist_ok=True)
             best_file.write_text(json.dumps(asdict(result), indent=2))
 
     def _write_fallback(self, result: ExperimentResult) -> None:
-        log_file = self.fallback_dir / result.track / "log.jsonl"
-        log_file.parent.mkdir(parents=True, exist_ok=True)
-        with log_file.open("a") as f:
-            f.write(json.dumps(asdict(result)) + "\n")
+        try:
+            log_file = self.fallback_dir / result.track / "log.jsonl"
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+            with log_file.open("a") as f:
+                f.write(json.dumps(asdict(result)) + "\n")
+        except Exception as e:
+            logger.error(f"Fallback write also failed: {e}")

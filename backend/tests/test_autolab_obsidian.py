@@ -76,3 +76,29 @@ def test_ping_returns_true_when_obsidian_available():
     with patch("autolab.obsidian.requests.get") as mock_get:
         mock_get.return_value = MagicMock(status_code=200)
         assert client.ping() is True
+
+
+def test_update_best_fallback_on_http_error(tmp_path):
+    client = ObsidianClient(
+        api_key="test-key",
+        base_url="https://127.0.0.1:27124",
+        vault_path="EthicCompanion",
+        fallback_dir=str(tmp_path),
+    )
+    result = ExperimentResult(
+        track="esl_tuning",
+        trial=5,
+        score=0.90,
+        baseline=0.85,
+        delta=0.05,
+        outcome="WIN",
+        hypothesis="best result so far",
+    )
+    with patch("autolab.obsidian.requests.put") as mock_put:
+        mock_put.return_value = MagicMock(status_code=500)
+        client.update_best(result)
+
+    best_file = tmp_path / "esl_tuning" / "best.json"
+    assert best_file.exists()
+    data = json.loads(best_file.read_text())
+    assert data["score"] == pytest.approx(0.90)
