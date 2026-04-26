@@ -225,6 +225,50 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
     }
   }
 
+  // ─── Folder color ──────────────────────────────────────────────────
+  // 8-swatch palette + "no color". Backend already accepts {color: string|null}
+  // on PATCH /api/folders/:id; this just exposes it in the sidebar.
+  const FOLDER_COLORS: { name: string; value: string }[] = [
+    { name: "Red",    value: "#E5484D" },
+    { name: "Orange", value: "#E58E26" },
+    { name: "Yellow", value: "#D5AE2A" },
+    { name: "Green",  value: "#46A758" },
+    { name: "Teal",   value: "#12A594" },
+    { name: "Blue",   value: "#3D63DD" },
+    { name: "Purple", value: "#8E4EC6" },
+    { name: "Pink",   value: "#D6409F" },
+  ]
+  const [colorPickerFolderId, setColorPickerFolderId] = useState<string | null>(null)
+
+  // Close the color picker on outside-click — same pattern as the avatar menu.
+  useEffect(() => {
+    if (!colorPickerFolderId) return
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('[data-folder-color-picker]')) setColorPickerFolderId(null)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setColorPickerFolderId(null)
+    }
+    window.addEventListener('mousedown', onClick)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', onClick)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [colorPickerFolderId])
+
+  const handleSetFolderColor = async (id: string, color: string | null) => {
+    setColorPickerFolderId(null)
+    try {
+      await api.folders.update(id, { color })
+      qc.invalidateQueries({ queryKey: ["folders"] })
+    } catch (e) {
+      console.error('set folder color failed', e)
+      toast.error("Couldn't update folder color", e instanceof Error ? e.message : undefined)
+    }
+  }
+
   const handleDeleteFolder = async (folder: Folder) => {
     const convCount = conversations.filter(c => c.folder_id === folder.id).length
     const msg = convCount > 0
@@ -468,7 +512,26 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
                   )}
 
                   {!isEditingFolder && (
-                    <div className="hidden group-hover:flex gap-0.5 shrink-0">
+                    <div className="relative hidden group-hover:flex gap-0.5 shrink-0" data-folder-color-picker={colorPickerFolderId === folder.id ? "" : undefined}>
+                      <button
+                        onClick={e => {
+                          e.stopPropagation()
+                          setColorPickerFolderId(prev => prev === folder.id ? null : folder.id)
+                        }}
+                        className="p-0.5 rounded hover:bg-[rgba(0,0,0,0.08)]"
+                        title="Folder color"
+                        aria-label="Change folder color"
+                        aria-haspopup="menu"
+                        aria-expanded={colorPickerFolderId === folder.id}
+                      >
+                        <span
+                          className="block w-2.5 h-2.5 rounded-full border"
+                          style={{
+                            background: folder.color ?? 'transparent',
+                            borderColor: folder.color ? folder.color : 'var(--ec-text-subtle)',
+                          }}
+                        />
+                      </button>
                       <button
                         onClick={e => {
                           e.stopPropagation()
@@ -487,6 +550,57 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
                       >
                         <Trash2 size={10} style={{ color: 'var(--ec-text-subtle)' }} />
                       </button>
+
+                      {colorPickerFolderId === folder.id && (
+                        <div
+                          role="menu"
+                          aria-label="Folder color"
+                          onClick={e => e.stopPropagation()}
+                          className="absolute right-0 top-full mt-1 z-20 rounded-lg p-2 shadow-lg"
+                          style={{
+                            background: 'var(--ec-card-bg)',
+                            border: '1px solid var(--ec-card-border)',
+                            boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
+                          }}
+                        >
+                          <div className="flex gap-1.5">
+                            {FOLDER_COLORS.map(c => (
+                              <button
+                                key={c.value}
+                                role="menuitem"
+                                onClick={() => handleSetFolderColor(folder.id, c.value)}
+                                title={c.name}
+                                aria-label={c.name}
+                                className="w-5 h-5 rounded-full transition-transform hover:scale-110"
+                                style={{
+                                  background: c.value,
+                                  outline: folder.color === c.value
+                                    ? `2px solid var(--ec-text)`
+                                    : 'none',
+                                  outlineOffset: '2px',
+                                }}
+                              />
+                            ))}
+                            <button
+                              role="menuitem"
+                              onClick={() => handleSetFolderColor(folder.id, null)}
+                              title="No color"
+                              aria-label="No color"
+                              className="w-5 h-5 rounded-full transition-transform hover:scale-110 flex items-center justify-center"
+                              style={{
+                                background: 'transparent',
+                                border: '1px dashed var(--ec-text-subtle)',
+                                outline: folder.color == null
+                                  ? `2px solid var(--ec-text)`
+                                  : 'none',
+                                outlineOffset: '2px',
+                              }}
+                            >
+                              <X size={10} style={{ color: 'var(--ec-text-subtle)' }} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
