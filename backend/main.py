@@ -307,6 +307,7 @@ from routes import (
     folders,
     dashboard,
     connectors,
+    weekly_review,
 )
 from routes import settings as settings_router
 from routes.insight import router as insight_router
@@ -336,6 +337,7 @@ app.include_router(folders.router)
 app.include_router(dashboard.router)
 app.include_router(status_router)
 app.include_router(connectors.router, prefix="/api/connectors", tags=["connectors"])
+app.include_router(weekly_review.router, prefix="/api/weekly-review", tags=["weekly-review"])
 
 from routes import tool_marketplace
 
