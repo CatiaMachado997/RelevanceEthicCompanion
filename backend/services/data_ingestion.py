@@ -92,7 +92,12 @@ class DataIngestionService:
 
     # ── Sync ───────────────────────────────────────────────────────────────
 
-    async def sync_data_source(self, user_id: str, source_type: str) -> Dict[str, Any]:
+    async def sync_data_source(
+        self,
+        user_id: str,
+        source_type: str,
+        since: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
         logger.info(f"🔄 Starting sync: {source_type} for user {user_id}")
 
         try:
@@ -105,6 +110,7 @@ class DataIngestionService:
             raw_items = await connector.fetch_raw_items(
                 access_token=access_token,
                 refresh_token=None,  # token is already fresh
+                since=since,
             )
 
             items_synced = 0
@@ -152,6 +158,83 @@ class DataIngestionService:
                 "items_synced": 0,
                 "source_type": source_type,
             }
+
+    # ── Backfill ───────────────────────────────────────────────────────────
+
+    async def start_backfill(
+        self,
+        user_id: str,
+        source_type: str,
+        since: Optional[datetime] = None,
+    ) -> str:
+        """Run a backfill sync, tracking lifecycle in connector_backfill_jobs.
+
+        Inserts a 'pending' row, transitions to 'running', invokes
+        sync_data_source(since=since), and finalizes to 'complete' or
+        'failed'. Re-raises on failure so callers can surface errors.
+        Returns the backfill job id (UUID string).
+        """
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO connector_backfill_jobs
+                        (user_id, source_type, status)
+                    VALUES (%s, %s, 'pending')
+                    RETURNING id
+                    """,
+                    (user_id, source_type),
+                )
+                job_id = str(cur.fetchone()["id"])
+            conn.commit()
+
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE connector_backfill_jobs
+                    SET status = 'running', started_at = NOW()
+                    WHERE id = %s
+                    """,
+                    (job_id,),
+                )
+            conn.commit()
+
+        try:
+            result = await self.sync_data_source(user_id, source_type, since=since)
+            items_processed = (
+                result.get("items_synced", 0) if isinstance(result, dict) else 0
+            )
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE connector_backfill_jobs
+                        SET status = 'complete',
+                            finished_at = NOW(),
+                            items_processed = %s
+                        WHERE id = %s
+                        """,
+                        (items_processed, job_id),
+                    )
+                conn.commit()
+            return job_id
+        except Exception as e:
+            error_msg = str(e)[:500]
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE connector_backfill_jobs
+                        SET status = 'failed',
+                            finished_at = NOW(),
+                            error_message = %s
+                        WHERE id = %s
+                        """,
+                        (error_msg, job_id),
+                    )
+                conn.commit()
+            raise
 
     # ── Storage helpers ────────────────────────────────────────────────────
 
