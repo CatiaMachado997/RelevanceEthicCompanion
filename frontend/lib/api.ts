@@ -1215,6 +1215,63 @@ export const dashboardApi = {
   overview: () => apiRequest<DashboardOverview>('/api/dashboard/overview'),
 }
 
+// ==================== Connectors API (Sprint B) ====================
+
+export interface ConnectorStatus {
+  source_type: string
+  connected: boolean
+  last_sync: string | null
+  items_count: number
+  error: string | null
+}
+
+export const connectorsApi = {
+  list: (): Promise<{ connectors: ConnectorStatus[] }> =>
+    apiRequest<{ connectors: ConnectorStatus[] }>('/api/connectors'),
+
+  backfill: (
+    sourceType: string,
+    since?: string,
+  ): Promise<{ job_id: string; status: string; success?: boolean; items_synced?: number }> => {
+    // Backend accepts `since_days`; if a since ISO string is provided, derive days from now.
+    let since_days = 90
+    if (since) {
+      const sinceMs = new Date(since).getTime()
+      if (!Number.isNaN(sinceMs)) {
+        const diff = Math.ceil((Date.now() - sinceMs) / (1000 * 60 * 60 * 24))
+        since_days = Math.max(1, diff)
+      }
+    }
+    return apiRequest<{ job_id: string; status: string; success?: boolean; items_synced?: number }>(
+      `/api/connectors/${sourceType}/backfill`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ since_days }),
+      },
+    )
+  },
+
+  disconnect: (
+    sourceType: string,
+  ): Promise<{ vectors_deleted: number; items_deleted: number; tokens_deleted: number; success?: boolean }> =>
+    apiRequest<{ vectors_deleted: number; items_deleted: number; tokens_deleted: number; success?: boolean }>(
+      `/api/connectors/${sourceType}`,
+      { method: 'DELETE' },
+    ),
+}
+
+export function listConnectors() {
+  return connectorsApi.list()
+}
+
+export function backfillConnector(sourceType: string, since?: string) {
+  return connectorsApi.backfill(sourceType, since)
+}
+
+export function disconnectConnector(sourceType: string) {
+  return connectorsApi.disconnect(sourceType)
+}
+
 export const api = {
   values: valuesApi,
   chat: chatApi,
@@ -1235,6 +1292,7 @@ export const api = {
   folders: foldersApi,
   profile: profileApi,
   dashboard: dashboardApi,
+  connectors: connectorsApi,
 };
 
 export default api;
