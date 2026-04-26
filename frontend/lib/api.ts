@@ -16,6 +16,21 @@ export interface CitationSource {
   icon: string
 }
 
+/**
+ * Per-chunk citation row from the search_documents (RAG) tool.
+ * Surfaced in the chat `done` event and persisted in turn metadata.
+ */
+export interface DocumentSource {
+  chunk_uuid: string
+  document_id: string
+  filename: string
+  chunk_index: number
+  snippet: string
+  score: number
+  /** Origin of the chunk: "document" (uploaded), "gmail", "slack", etc. */
+  source_type?: string
+}
+
 const authConfig: {
   getAccessToken: AccessTokenProvider | null
   onUnauthorized: UnauthorizedHandler | null
@@ -260,10 +275,11 @@ export const chatApi = {
           onToolPendingConfirmation?: (data: { tool_id: string; tool_name: string; action_name: string; preview: string }) => void
           onRateLimitWarning?: (level: string, message: string) => void
           onRateLimitExceeded?: (retryAfter: string, message: string) => void
-          onDone?: (data: { esl_decision?: Record<string, unknown>; citations?: CitationSource[] }) => void
+          onDone?: (data: { esl_decision?: Record<string, unknown>; citations?: CitationSource[]; document_sources?: DocumentSource[] }) => void
           model?: string
           conversation_id?: string
           active_sources?: string[]
+          force_retrieval?: boolean
         },
   ): Promise<void> & { cancel: () => void } => {
     const callbacks =
@@ -281,7 +297,8 @@ export const chatApi = {
       const convParam = callbacks.conversation_id ? `&conversation_id=${encodeURIComponent(callbacks.conversation_id)}` : ''
       const sourcesParam = callbacks.active_sources?.length
         ? `&active_sources=${encodeURIComponent(callbacks.active_sources.join(','))}` : ''
-      const url = `${API_URL}/api/chat/stream?message=${encodeURIComponent(message)}${modelParam}${convParam}${sourcesParam}`
+      const forceParam = callbacks.force_retrieval ? '&force_retrieval=true' : ''
+      const url = `${API_URL}/api/chat/stream?message=${encodeURIComponent(message)}${modelParam}${convParam}${sourcesParam}${forceParam}`
       es = new EventSource(url, { withCredentials: true })
 
       es.onmessage = (e) => {
@@ -316,7 +333,7 @@ export const chatApi = {
             return
           }
           if (data.event === 'done') {
-            callbacks.onDone?.({ esl_decision: data.esl_decision, citations: data.citations })
+            callbacks.onDone?.({ esl_decision: data.esl_decision, citations: data.citations, document_sources: data.document_sources })
             es!.close()
             if (!settled) { settled = true; resolve() }
             return
@@ -334,7 +351,7 @@ export const chatApi = {
             return
           }
           if (data.done) {
-            callbacks.onDone?.({ esl_decision: data.esl_decision, citations: data.citations })
+            callbacks.onDone?.({ esl_decision: data.esl_decision, citations: data.citations, document_sources: data.document_sources })
             es!.close()
             if (!settled) { settled = true; resolve() }
             return
@@ -382,6 +399,7 @@ export const chatApi = {
         role: string
         content: string
         timestamp: string
+        metadata?: { document_sources?: DocumentSource[]; citations?: CitationSource[] } & Record<string, unknown>
       }>
       total_count: number
     }>(`/api/chat/history?limit=${limit}&offset=${offset}${conversationId ? `&conversation_id=${conversationId}` : ''}`),

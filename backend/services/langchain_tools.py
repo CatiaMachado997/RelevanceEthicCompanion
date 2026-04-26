@@ -393,6 +393,85 @@ class NoteCreateTool(BaseTool):
         raise NotImplementedError("Use async version (_arun)")
 
 
+# ==================== Search Documents Tool (RAG) ====================
+
+
+class SearchDocumentsInput(BaseModel):
+    """Input for the document search tool"""
+
+    query: str = Field(
+        description="What to search for in the user's uploaded documents"
+    )
+    k: int = Field(
+        default=5, description="Maximum number of document chunks to retrieve"
+    )
+
+
+class SearchDocumentsTool(BaseTool):
+    """Tool for retrieving grounded chunks from the user's documents (RAG).
+
+    Returns a text summary the LLM uses to synthesize cited answers, AND
+    appends structured citation rows to the shared `citation_collector`
+    list so the chat layer can attach them to the assistant turn metadata.
+
+    Read-only on the user's own data — ESL-exempt.
+    """
+
+    name: str = "search_documents"
+    description: str = (
+        "Search the user's indexed knowledge — uploaded documents, recent emails "
+        "(Gmail), and Slack messages — for passages relevant to the query. Use "
+        "this whenever the user asks a question that could plausibly be answered "
+        "by their own files, inbox, or conversations. Returns ranked excerpts "
+        "with attribution (source_type indicates whether each result came from a "
+        "document, an email, or a Slack message)."
+    )
+    args_schema: Type[BaseModel] = SearchDocumentsInput
+
+    user_id: str = ""
+    retrieval_service: Any = None
+    citation_collector: Any = None  # list passed by reference
+
+    def __init__(self, retrieval_service, user_id: str, citation_collector: list):
+        super().__init__()
+        self.retrieval_service = retrieval_service
+        self.user_id = user_id
+        self.citation_collector = citation_collector
+
+    async def _arun(self, query: str, k: int = 5) -> str:
+        """Run hybrid retrieval and emit both LLM-readable text + structured sources."""
+        try:
+            results = await self.retrieval_service.retrieve(
+                query=query, user_id=self.user_id, k=int(k)
+            )
+        except Exception as e:
+            logger.error(f"search_documents retrieval failed: {e}")
+            return f"Error searching documents: {str(e)}"
+
+        if not results:
+            return "No matching document chunks found."
+
+        # Append structured citations for the chat layer (deduped by chunk_uuid).
+        seen = {row.get("chunk_uuid") for row in self.citation_collector}
+        for r in results:
+            if r.get("chunk_uuid") not in seen:
+                self.citation_collector.append(r)
+                seen.add(r.get("chunk_uuid"))
+
+        # Format human-readable excerpts the LLM can quote and cite.
+        lines = [f"Found {len(results)} relevant excerpts:"]
+        for i, r in enumerate(results, 1):
+            snippet = (r.get("snippet") or "").strip().replace("\n", " ")
+            if len(snippet) > 400:
+                snippet = snippet[:400] + "..."
+            filename = r.get("filename") or "untitled"
+            lines.append(f"\n[{i}] ({filename}) {snippet}")
+        return "\n".join(lines)
+
+    def _run(self, query: str, k: int = 5) -> str:
+        raise NotImplementedError("Use async version (_arun)")
+
+
 # ==================== Tool Factory ====================
 
 # Maps tool name → source identifier used by the active_sources filter.
@@ -403,6 +482,7 @@ _TOOL_SOURCE_MAP: dict = {
     "get_user_goals": "goals",
     "web_search": "web",
     "create_note": None,  # always available
+    "search_documents": "documents",
 }
 
 
@@ -412,8 +492,15 @@ async def create_langchain_tools(
     tavily_client=None,
     relevance_engine=None,
     active_sources: list | None = None,
+    citation_collector: list | None = None,
 ) -> list:
-    """Return all LangChain tools for this user — built-ins + marketplace tools."""
+    """Return all LangChain tools for this user — built-ins + marketplace tools.
+
+    Args:
+        citation_collector: Mutable list that the search_documents tool appends
+            citation rows to. The chat layer reads it after the agent run to
+            attach sources to the assistant turn metadata.
+    """
     filter_sources = set(active_sources) if active_sources else set()
 
     candidates = [
@@ -422,6 +509,21 @@ async def create_langchain_tools(
         UserGoalsTool(context_manager=context_manager, user_id=user_id),
         NoteCreateTool(context_manager=context_manager, user_id=user_id),
     ]
+
+    # Document RAG tool — always registered so the planner sees its schema.
+    # citation_collector (when provided by the chat/execution layer) receives
+    # citation rows; otherwise an internal throwaway list is used.
+    from services.rag_retrieval import RagRetrievalService
+
+    candidates.append(
+        SearchDocumentsTool(
+            retrieval_service=RagRetrievalService(),
+            user_id=user_id,
+            citation_collector=citation_collector
+            if citation_collector is not None
+            else [],
+        )
+    )
 
     if tavily_client:
         candidates.append(
