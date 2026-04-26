@@ -12,6 +12,7 @@ from datetime import datetime, UTC
 from utils.db import get_db
 from utils.serialization import serialize_row, serialize_rows
 from services.context_manager import ContextManager
+from services.work_rollups import WorkRollupsService
 from esl.engine import EthicalSafeguardLayer
 from esl.models import ProposedAction, ActionType, UrgencyLevel, ESLDecisionStatus
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
@@ -27,6 +28,20 @@ def get_esl(
 ) -> EthicalSafeguardLayer:
     """Get ESL instance"""
     return EthicalSafeguardLayer(context_manager)
+
+
+def get_work_rollups_service() -> WorkRollupsService:
+    """Get WorkRollupsService instance"""
+    return WorkRollupsService()
+
+
+_GOAL_ROLLUP_ZERO: Dict[str, int] = {
+    "milestones_total": 0,
+    "milestones_hit": 0,
+    "tasks_total": 0,
+    "tasks_done": 0,
+    "progress_pct": 0,
+}
 
 
 # Request/Response models
@@ -174,16 +189,21 @@ async def list_goals(
 
 
 @router.get("/{goal_id}", response_model=dict)
-async def get_goal(goal_id: str, user_id: str = Depends(get_current_read_user_id)):
+async def get_goal(
+    goal_id: str,
+    user_id: str = Depends(get_current_read_user_id),
+    rollups: WorkRollupsService = Depends(get_work_rollups_service),
+):
     """
     Get a specific goal by ID
 
     Args:
         goal_id: Goal ID
         user_id: Current user ID
+        rollups: Work rollups service for inlined progress data
 
     Returns:
-        Goal data
+        Goal data with rollup
     """
     try:
         with get_db() as conn:
@@ -197,8 +217,18 @@ async def get_goal(goal_id: str, user_id: str = Depends(get_current_read_user_id
         if not goal:
             raise HTTPException(status_code=404, detail="Goal not found")
 
-        return {"status": "success", "data": serialize_row(goal)}
+        rollup_raw = rollups.get_goal_rollup(goal_id)
+        if rollup_raw:
+            rollup = {k: v for k, v in rollup_raw.items() if k not in ("goal_id", "user_id")}
+        else:
+            rollup = dict(_GOAL_ROLLUP_ZERO)
 
+        data = serialize_row(goal)
+        data["rollup"] = rollup
+        return {"status": "success", "data": data}
+
+    except HTTPException:
+        raise
     except Exception as e:
         if "not found" in str(e).lower():
             raise HTTPException(status_code=404, detail="Goal not found")
