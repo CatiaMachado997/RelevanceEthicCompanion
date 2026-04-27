@@ -168,21 +168,45 @@ async def list_goals(
     try:
         with get_db() as conn:
             with conn.cursor() as cur:
-                query = "SELECT * FROM goals WHERE user_id = %s"
+                query = (
+                    "SELECT g.*, "
+                    "COALESCE(r.milestones_total, 0) AS milestones_total, "
+                    "COALESCE(r.milestones_hit,   0) AS milestones_hit, "
+                    "COALESCE(r.tasks_total,      0) AS tasks_total, "
+                    "COALESCE(r.tasks_done,       0) AS tasks_done, "
+                    "COALESCE(r.progress_pct,     0) AS progress_pct "
+                    "FROM goals g "
+                    "LEFT JOIN v_goal_rollup r ON r.goal_id = g.id "
+                    "WHERE g.user_id = %s"
+                )
                 params = [str(user_id)]
 
                 if status:
-                    query += " AND status = %s"
+                    query += " AND g.status = %s"
                     params.append(status)
                 elif active_only:
-                    query += " AND status = 'active'"
+                    query += " AND g.status = 'active'"
 
-                query += " ORDER BY priority"
+                query += " ORDER BY g.priority"
 
                 cur.execute(query, tuple(params))
                 goals = cur.fetchall()
 
-        return {"status": "success", "count": len(goals), "data": serialize_rows(goals)}
+        rollup_keys = (
+            "milestones_total",
+            "milestones_hit",
+            "tasks_total",
+            "tasks_done",
+            "progress_pct",
+        )
+        shaped: List[Dict[str, Any]] = []
+        for row in goals:
+            data = serialize_row(row)
+            rollup = {k: data.pop(k, 0) for k in rollup_keys}
+            data["rollup"] = rollup
+            shaped.append(data)
+
+        return {"status": "success", "count": len(shaped), "data": shaped}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching goals: {str(e)}")

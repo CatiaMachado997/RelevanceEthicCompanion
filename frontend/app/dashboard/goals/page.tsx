@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { goalsApi, api, type Goal, type GoalRollup, type Milestone } from '@/lib/api'
+import { goalsApi, api, type Goal, type Milestone } from '@/lib/api'
 import { Plus, MoreHorizontal, Check, X, ChevronDown, ChevronRight, Target } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card } from '@/components/ui/card'
@@ -147,17 +147,7 @@ export default function GoalsPage() {
   function GoalRow({ goal }: { goal: Goal }) {
     const dotColor = PRIORITY_COLORS[Math.min(goal.priority - 1, 4)]
     const isCompleted = goal.status === 'completed'
-    const goalMilestones = milestones[goal.id] ?? []
-    // Derive a fallback rollup when backend list endpoint omits it.
-    // (Sprint D Task 5 only added rollup to GET /api/goals/{id}, not list.)
-    const fallbackRollup: GoalRollup = {
-      milestones_total: goalMilestones.length,
-      milestones_hit: goalMilestones.filter(m => m.completed).length,
-      tasks_total: 0,
-      tasks_done: 0,
-      progress_pct: goal.progress ?? 0,
-    }
-    const rollup = goal.rollup ?? fallbackRollup
+    const rollup = goal.rollup
     return (
       <div
         className="flex items-center gap-4 px-5 py-4 rounded-2xl transition-shadow duration-150 hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)]"
@@ -178,14 +168,11 @@ export default function GoalsPage() {
           {goal.description && (
             <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--ec-text-subtle)' }}>{goal.description}</p>
           )}
-          <div className="mt-2">
-            <GoalProgressCard rollup={rollup} />
-            {!goal.rollup && (
-              <p className="text-[10px] mt-1" style={{ color: 'var(--ec-text-subtle)' }}>
-                Rollup unavailable in list view
-              </p>
-            )}
-          </div>
+          {rollup && (
+            <div className="mt-2">
+              <GoalProgressCard rollup={rollup} />
+            </div>
+          )}
           {/* Milestones */}
           <div className="mt-3 pt-3 border-t border-[rgba(0,0,0,0.06)]">
             <p className="text-xs font-medium mb-2" style={{ color: 'var(--ec-text-muted)' }}>
