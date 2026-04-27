@@ -25,7 +25,7 @@ def test_postgres():
             port=5432,
             database="ethic-companion",
             user="postgres",
-            password=DB_PASSWORD
+            password=DB_PASSWORD,
         )
         cursor = conn.cursor()
         cursor.execute("SELECT version();")

@@ -7,11 +7,13 @@ from utils.supabase_auth import get_current_read_user_id
 
 TEST_USER_ID = "00000000-0000-0000-0000-000000000000"
 
+
 def _client():
     app = FastAPI()
     app.include_router(dashboard_router)
     app.dependency_overrides[get_current_read_user_id] = lambda: TEST_USER_ID
     return TestClient(app)
+
 
 def _db(fetchone_seq):
     cur = MagicMock()
@@ -23,10 +25,19 @@ def _db(fetchone_seq):
     conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
     return conn
 
+
 def test_overview_returns_all_counts():
     client = _client()
     # One fetchone per COUNT query, in the order: goals, tasks, projects, values, documents, transparency, notifications.
-    counts = [{"cnt": 3}, {"cnt": 8}, {"cnt": 2}, {"cnt": 5}, {"cnt": 12}, {"cnt": 42}, {"cnt": 1}]
+    counts = [
+        {"cnt": 3},
+        {"cnt": 8},
+        {"cnt": 2},
+        {"cnt": 5},
+        {"cnt": 12},
+        {"cnt": 42},
+        {"cnt": 1},
+    ]
     with patch("routes.dashboard.get_db_connection", return_value=_db(counts)):
         r = client.get("/api/dashboard/overview")
     assert r.status_code == 200
