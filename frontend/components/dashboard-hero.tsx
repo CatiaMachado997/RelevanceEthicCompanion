@@ -11,8 +11,10 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { MessageSquare, Target, Search, ArrowRight } from "lucide-react"
+import { useQuery } from "@tanstack/react-query"
+import { MessageSquare, Target, Search, ArrowRight, Clock, Sparkles } from "lucide-react"
 import { useAuth } from "@/hooks/useAuth"
+import { contextApi, insightApi, type ContextSnapshot } from "@/lib/api"
 
 
 function greeting(hour: number): string {
@@ -29,11 +31,31 @@ export function DashboardHero() {
   const router = useRouter()
 
   useEffect(() => {
+    // Hydration gate — server-rendered as `null`, populated client-side
+    // to avoid SSR/CSR mismatch on the time-aware greeting.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setNow(new Date())
     // Re-render every minute so the greeting stays accurate across midnight / hour boundaries.
     const interval = setInterval(() => setNow(new Date()), 60_000)
     return () => clearInterval(interval)
   }, [])
+
+  // Pulled into the hero from the (now-removed) "Today" + "Daily insight"
+  // sections below. Kept compact: a single chip for the next event, and
+  // one italic line for the insight. Both fail silently if the backend
+  // is offline — the hero still works as a greeting.
+  const { data: snapshot } = useQuery<ContextSnapshot>({
+    queryKey: ["context-snapshot"],
+    queryFn: () => contextApi.snapshot(),
+    retry: false,
+    staleTime: 60_000,
+  })
+  const { data: insight } = useQuery<{ insight: string; cached: boolean }>({
+    queryKey: ["daily-insight"],
+    queryFn: () => insightApi.daily(),
+    retry: false,
+    staleTime: 5 * 60_000,
+  })
 
   const name = user?.email?.split("@")[0] ?? "there"
   const hour = now?.getHours() ?? 0
@@ -41,6 +63,14 @@ export function DashboardHero() {
   const dayLine = now
     ? now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })
     : ""
+
+  const nextEvent = snapshot?.upcoming_events?.[0]
+  const nextEventTime = nextEvent?.start_time
+    ? new Date(nextEvent.start_time).toLocaleTimeString(undefined, {
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : null
 
   return (
     <section>
@@ -54,6 +84,31 @@ export function DashboardHero() {
         {dayLine && (
           <p className="text-sm mt-1" style={{ color: "var(--ec-text-muted)" }}>
             {dayLine}
+          </p>
+        )}
+
+        {/* Today's next event — replaces the standalone "Today" card */}
+        {nextEvent && (
+          <p
+            className="mt-2 inline-flex items-center gap-1.5 text-xs"
+            style={{ color: "var(--ec-text-muted)" }}
+          >
+            <Clock size={12} style={{ color: "var(--ec-text-subtle)" }} />
+            <span style={{ color: "var(--ec-text-subtle)" }}>Next up:</span>
+            {nextEventTime && <span className="tabular-nums">{nextEventTime}</span>}
+            <span style={{ color: "var(--ec-text)" }}>·</span>
+            <span className="truncate max-w-[18rem]">{nextEvent.title}</span>
+          </p>
+        )}
+
+        {/* Daily insight — one line, replaces the standalone insight card */}
+        {insight?.insight && (
+          <p
+            className="mt-1.5 inline-flex items-start gap-1.5 text-xs italic"
+            style={{ color: "var(--ec-text-muted)" }}
+          >
+            <Sparkles size={12} className="mt-0.5 shrink-0" style={{ color: "var(--ec-text-subtle)" }} />
+            <span className="line-clamp-2">{insight.insight}</span>
           </p>
         )}
       </div>
