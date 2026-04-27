@@ -212,7 +212,7 @@ def _build_system_prompt(state: AgentState) -> str:
 
 async def tool_planner_node(state: AgentState) -> dict:
     """Ask the LLM which tools to call given the current message + context."""
-    from langchain_core.messages import HumanMessage, SystemMessage
+    from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
     from langchain_groq import ChatGroq
     from services.langchain_tools import create_langchain_tools
 
@@ -231,10 +231,14 @@ async def tool_planner_node(state: AgentState) -> dict:
 
     messages: List[BaseMessage] = [SystemMessage(content=_build_system_prompt(state))]
     for h in state.get("conversation_history", []):
+        # Prior assistant turns must be AIMessage so the LLM treats them as
+        # its own past replies (i.e. real conversational memory). Using
+        # SystemMessage here mixed prior replies with system instructions
+        # and prevented the model from following the conversation thread.
         messages.append(
             HumanMessage(content=h["content"])
             if h["role"] == "user"
-            else SystemMessage(content=h["content"])
+            else AIMessage(content=h["content"])
         )
     messages.append(HumanMessage(content=state["message"]))
 
