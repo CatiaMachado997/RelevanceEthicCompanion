@@ -32,11 +32,21 @@ def test_ndcg_perfect_retrieval():
 
 def test_evaluate_returns_none_when_weaviate_down(tmp_path):
     """evaluate_context_config returns None gracefully when Weaviate is unavailable."""
+    import sys
     surface_path = tmp_path / "surface.py"
     surface_path.write_text(
         "from autolab.tracks.context_scoring.surface import WeaviateConfig\nconfig = WeaviateConfig()\n"
     )
-    with patch("utils.weaviate_client.get_weaviate_client") as mock_wc:
-        mock_wc.side_effect = Exception("Weaviate not running")
-        result = evaluate_context_config(surface_path)
+    # weaviate may not be installed in the test environment; mock the module so
+    # utils.weaviate_client can be imported before patching get_weaviate_client.
+    mock_weaviate_mod = MagicMock()
+    weaviate_mocks = {
+        "weaviate": mock_weaviate_mod,
+        "weaviate.classes": MagicMock(),
+        "weaviate.classes.query": MagicMock(),
+    }
+    with patch.dict("sys.modules", weaviate_mocks):
+        with patch("utils.weaviate_client.get_weaviate_client") as mock_wc:
+            mock_wc.side_effect = Exception("Weaviate not running")
+            result = evaluate_context_config(surface_path)
     assert result is None
