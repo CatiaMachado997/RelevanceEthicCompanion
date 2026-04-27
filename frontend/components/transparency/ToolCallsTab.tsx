@@ -50,6 +50,150 @@ function prettyJson(value: unknown): string {
   }
 }
 
+// Sprint G Task 4: shape of the retrieval breadcrumb trace recorded into
+// `tool_call_events.output.trace` for `search_documents` calls.
+type RetrievalTrace = {
+  query?: string
+  candidates?: Array<{
+    chunk_uuid?: string | null
+    hybrid_score?: number
+    snippet_preview?: string
+  }>
+  rerank_applied?: boolean
+  rerank_top?: Array<{
+    chunk_uuid?: string | null
+    rerank_score?: number
+  }> | null
+  final?: Array<string | null>
+}
+
+function extractTrace(event: ToolCallEvent | null): RetrievalTrace | null {
+  if (!event || event.tool_name !== 'search_documents') return null
+  const out = event.output as unknown
+  if (!out || typeof out !== 'object') return null
+  const maybe = (out as { trace?: unknown }).trace
+  if (!maybe || typeof maybe !== 'object') return null
+  return maybe as RetrievalTrace
+}
+
+function shortUuid(uuid: string | null | undefined): string {
+  if (!uuid) return '—'
+  if (uuid.length <= 12) return uuid
+  return `${uuid.slice(0, 8)}…${uuid.slice(-4)}`
+}
+
+function RetrievalTraceSection({ trace }: { trace: RetrievalTrace }) {
+  const finalSet = new Set((trace.final || []).filter(Boolean) as string[])
+  const candidates = trace.candidates || []
+  const rerankTop = trace.rerank_top || []
+
+  return (
+    <div>
+      <p className="text-xs font-medium uppercase tracking-wide text-[#9e9e9e] mb-1">
+        Retrieval trace
+      </p>
+      <div className="space-y-3 bg-[#fafafa] rounded-lg p-3">
+        {trace.query !== undefined && (
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-[#9e9e9e] mb-1">Query</p>
+            <p className="text-xs text-[#0a0a0a] break-words">{trace.query}</p>
+          </div>
+        )}
+
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[11px] uppercase tracking-wide text-[#9e9e9e]">
+              Hybrid candidates ({candidates.length})
+            </p>
+            <span className="text-[11px] text-[#6b6b6b]">
+              rerank: {trace.rerank_applied ? 'applied' : 'not applied'}
+            </span>
+          </div>
+          {candidates.length === 0 ? (
+            <p className="text-xs text-[#6b6b6b]">No candidates.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {candidates.map((c, i) => {
+                const isFinal = c.chunk_uuid ? finalSet.has(c.chunk_uuid) : false
+                return (
+                  <li
+                    key={`${c.chunk_uuid || 'na'}-${i}`}
+                    className={`text-xs rounded-md px-2 py-1.5 border ${
+                      isFinal
+                        ? 'bg-[#f0fdf4] border-[#bbf7d0] text-[#166534]'
+                        : 'bg-white border-[rgba(0,0,0,0.06)] text-[#0a0a0a]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <code className="font-mono text-[11px]">{shortUuid(c.chunk_uuid)}</code>
+                      <span className="text-[11px] text-[#6b6b6b] whitespace-nowrap">
+                        hybrid: {(c.hybrid_score ?? 0).toFixed(3)}
+                        {isFinal && <span className="ml-2 font-medium">cited</span>}
+                      </span>
+                    </div>
+                    {c.snippet_preview && (
+                      <p className="mt-1 text-[11px] text-[#6b6b6b] break-words">
+                        {c.snippet_preview}
+                      </p>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+
+        {trace.rerank_applied && rerankTop.length > 0 && (
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-[#9e9e9e] mb-1">
+              Rerank scores
+            </p>
+            <ul className="space-y-1">
+              {rerankTop.map((r, i) => {
+                const isFinal = r.chunk_uuid ? finalSet.has(r.chunk_uuid) : false
+                return (
+                  <li
+                    key={`${r.chunk_uuid || 'na'}-${i}`}
+                    className="flex items-center justify-between text-xs px-2 py-1 rounded bg-white border border-[rgba(0,0,0,0.06)]"
+                  >
+                    <code className="font-mono text-[11px] text-[#0a0a0a]">
+                      {shortUuid(r.chunk_uuid)}
+                    </code>
+                    <span className="text-[11px] text-[#6b6b6b]">
+                      rerank: {(r.rerank_score ?? 0).toFixed(3)}
+                      {isFinal && <span className="ml-2 font-medium text-[#166534]">cited</span>}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        )}
+
+        <div>
+          <p className="text-[11px] uppercase tracking-wide text-[#9e9e9e] mb-1">
+            Final cited ({(trace.final || []).length})
+          </p>
+          {(trace.final || []).length === 0 ? (
+            <p className="text-xs text-[#6b6b6b]">None.</p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {(trace.final || []).map((uuid, i) => (
+                <code
+                  key={`${uuid || 'na'}-${i}`}
+                  className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-[#f0fdf4] text-[#166534] border border-[#bbf7d0]"
+                >
+                  {shortUuid(uuid)}
+                </code>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ToolCallsTab() {
   const [events, setEvents] = useState<ToolCallEvent[]>([])
   const [loading, setLoading] = useState(true)
@@ -204,6 +348,10 @@ export default function ToolCallsTab() {
                   {prettyJson(selected.output)}
                 </pre>
               </div>
+              {(() => {
+                const trace = extractTrace(selected)
+                return trace ? <RetrievalTraceSection trace={trace} /> : null
+              })()}
             </div>
           )}
         </DialogContent>

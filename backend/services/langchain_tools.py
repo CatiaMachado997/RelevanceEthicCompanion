@@ -437,19 +437,34 @@ class SearchDocumentsTool(BaseTool):
     user_id: str = ""
     retrieval_service: Any = None
     citation_collector: Any = None  # list passed by reference
+    # Sprint G Task 4: retrieval breadcrumbs trace from the most recent call.
+    # `tool_execution_node` reads this after `_arun` and folds it into the
+    # `tool_call_events.output` JSONB so Transparency can render the trace.
+    last_trace: Any = None
 
     def __init__(self, retrieval_service, user_id: str, citation_collector: list):
         super().__init__()
         self.retrieval_service = retrieval_service
         self.user_id = user_id
         self.citation_collector = citation_collector
+        self.last_trace = None
 
     async def _arun(self, query: str, k: int = 5) -> str:
         """Run hybrid retrieval and emit both LLM-readable text + structured sources."""
         try:
-            results = await self.retrieval_service.retrieve(
-                query=query, user_id=self.user_id, k=int(k)
-            )
+            # Prefer the trace-returning variant when available so Transparency
+            # can show the retrieval breadcrumbs. Fall back to the legacy
+            # `retrieve()` for test doubles that only mock the old method.
+            if hasattr(self.retrieval_service, "retrieve_with_trace"):
+                results, trace = await self.retrieval_service.retrieve_with_trace(
+                    query=query, user_id=self.user_id, k=int(k)
+                )
+                self.last_trace = trace
+            else:
+                results = await self.retrieval_service.retrieve(
+                    query=query, user_id=self.user_id, k=int(k)
+                )
+                self.last_trace = None
         except Exception as e:
             logger.error(f"search_documents retrieval failed: {e}")
             return f"Error searching documents: {str(e)}"

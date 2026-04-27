@@ -4,7 +4,7 @@ import json
 import logging
 import time
 from datetime import datetime, UTC
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from pydantic import SecretStr
 
@@ -460,12 +460,21 @@ async def tool_execution_node(state: AgentState) -> dict:
                     "APPROVED",
                     "Marketplace tool executed",
                 )
+            # Sprint G Task 4: fold the retrieval breadcrumb trace into the
+            # telemetry output so Transparency's tool-call detail can render
+            # candidates → rerank → final cited.
+            telemetry_output: Any = (
+                result if isinstance(result, (dict, list)) else str(result)
+            )
+            trace = getattr(t, "last_trace", None)
+            if tool_name == "search_documents" and trace is not None:
+                telemetry_output = {"result": str(result), "trace": trace}
             _record_telemetry(
                 user_id,
                 conversation_id,
                 tool_name,
                 tool_input,
-                result if isinstance(result, (dict, list)) else str(result),
+                telemetry_output,
                 status="success",
                 latency_ms=int((t1 - t0) * 1000),
                 esl_decision="APPROVED" if (tool_id and action_name) else None,

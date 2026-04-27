@@ -1,14 +1,16 @@
 """Tests for SearchDocumentsTool — the LangChain wrapper around RagRetrievalService."""
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 USER_ID = "00000000-0000-0000-0000-000000000000"
 
 
 def _make_retrieval_mock(results):
-    svc = MagicMock()
+    # Use spec so the tool's hasattr() probe for `retrieve_with_trace` (Sprint G
+    # Task 4) returns False — this fixture covers the legacy retrieve-only path.
+    svc = MagicMock(spec=["retrieve"])
     svc.retrieve = AsyncMock(return_value=results)
     return svc
 
@@ -89,6 +91,137 @@ async def test_dedupes_citations_across_calls():
     await tool._arun("second")
 
     assert len(collector) == 1
+
+
+@pytest.mark.asyncio
+async def test_tool_stashes_trace_from_retrieve_with_trace():
+    """Sprint G Task 4: when the retrieval service exposes
+    `retrieve_with_trace`, the tool calls it and stashes the trace on
+    `last_trace` for the orchestrator to fold into telemetry output."""
+    from services.langchain_tools import SearchDocumentsTool
+
+    rows = [
+        {
+            "chunk_uuid": "u1",
+            "filename": "x.md",
+            "snippet": "hi",
+            "score": 0.5,
+        }
+    ]
+    trace = {
+        "query": "q",
+        "candidates": [
+            {"chunk_uuid": "u1", "hybrid_score": 0.5, "snippet_preview": "hi"}
+        ],
+        "rerank_applied": False,
+        "rerank_top": None,
+        "final": ["u1"],
+    }
+    svc = MagicMock()
+    svc.retrieve_with_trace = AsyncMock(return_value=(rows, trace))
+
+    collector: list = []
+    tool = SearchDocumentsTool(
+        retrieval_service=svc, user_id=USER_ID, citation_collector=collector
+    )
+
+    out = await tool._arun("q")
+    assert "Found 1 relevant excerpts" in out
+    assert tool.last_trace == trace
+    svc.retrieve_with_trace.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_trace_is_recorded_into_tool_call_events_output():
+    """Sprint G Task 4: the orchestrator's tool-execution path must fold the
+    `search_documents` retrieval trace into the `tool_call_events.output`
+    JSONB so the Transparency UI can render the breadcrumbs."""
+    from orchestrator.nodes.tools import tool_execution_node
+
+    rows = [
+        {
+            "chunk_uuid": "u1",
+            "filename": "brief.md",
+            "snippet": "Project Atlas is the top initiative.",
+            "score": 0.88,
+        }
+    ]
+    expected_trace = {
+        "query": "what is project atlas?",
+        "candidates": [
+            {
+                "chunk_uuid": "u1",
+                "hybrid_score": 0.88,
+                "snippet_preview": "Project Atlas is the top initiative.",
+            }
+        ],
+        "rerank_applied": False,
+        "rerank_top": None,
+        "final": ["u1"],
+    }
+
+    fake_retrieval = MagicMock()
+    fake_retrieval.retrieve_with_trace = AsyncMock(
+        return_value=(rows, expected_trace)
+    )
+
+    from services.langchain_tools import SearchDocumentsTool
+
+    sd_tool = SearchDocumentsTool(
+        retrieval_service=fake_retrieval,
+        user_id=USER_ID,
+        citation_collector=[],
+    )
+
+    fake_llm = MagicMock()
+    fake_llm.ainvoke = AsyncMock(return_value=MagicMock(content="ok"))
+
+    state = {
+        "user_id": USER_ID,
+        "message": "what is project atlas?",
+        "conversation_id": "conv-1",
+        "model": "llama-3.3-70b-versatile",
+        "tool_calls": [
+            {
+                "name": "search_documents",
+                "args": {"query": "what is project atlas?", "k": 5},
+                "id": "call_1",
+            }
+        ],
+        "tool_results": [],
+        "active_sources": [],
+        "document_sources": [],
+        "proposed_content": "",
+    }
+
+    captured: dict = {}
+
+    def fake_record(**kwargs):
+        captured.update(kwargs)
+        return "evt-1"
+
+    telemetry_inst = MagicMock()
+    telemetry_inst.record_tool_call = MagicMock(side_effect=fake_record)
+
+    with patch(
+        "orchestrator.nodes.tools.get_context_manager", return_value=MagicMock()
+    ), patch(
+        "services.langchain_tools.create_langchain_tools",
+        AsyncMock(return_value=[sd_tool]),
+    ), patch(
+        "langchain_groq.ChatGroq", return_value=fake_llm
+    ), patch(
+        "services.tool_telemetry.ToolTelemetryService", return_value=telemetry_inst
+    ):
+        await tool_execution_node(state)
+
+    assert captured.get("tool_name") == "search_documents"
+    assert captured.get("status") == "success"
+    output = captured.get("output")
+    assert isinstance(output, dict), f"expected dict output, got {type(output)}"
+    assert "trace" in output
+    assert output["trace"] == expected_trace
+    assert "result" in output
 
 
 @pytest.mark.asyncio

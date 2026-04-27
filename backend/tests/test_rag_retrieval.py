@@ -146,6 +146,130 @@ async def test_retrieve_passes_user_id_and_query_to_hybrid_search():
 
 
 @pytest.mark.asyncio
+async def test_retrieve_with_trace_builds_trace_no_rerank():
+    """Sprint G Task 4: trace mirrors hybrid candidates and final cited UUIDs.
+
+    With JINA_API_KEY empty (default in tests), rerank falls back and the
+    `rerank_applied` flag must be False with `rerank_top=None`.
+    """
+    raw = [
+        {
+            "uuid": "uuid-1",
+            "score": 0.91,
+            "properties": {
+                "content": "The answer is 42.",
+                "document_id": "doc-1",
+                "filename": "answers.md",
+                "chunk_index": 3,
+            },
+        },
+        {
+            "uuid": "uuid-2",
+            "score": 0.55,
+            "properties": {
+                "content": "Unrelated content.",
+                "document_id": "doc-2",
+                "filename": "other.md",
+                "chunk_index": 0,
+            },
+        },
+    ]
+    weaviate = _make_weaviate_mock(raw)
+    with patch(
+        "services.rag_retrieval.get_weaviate_client", return_value=weaviate
+    ), patch(
+        "services.rag_retrieval._get_embedding_service",
+        return_value=_make_embedder_mock(vector=[0.5, 0.6]),
+    ):
+        from services.rag_retrieval import RagRetrievalService
+
+        results, trace = await RagRetrievalService().retrieve_with_trace(
+            "what is the answer?", USER_ID, k=2
+        )
+
+    assert trace["query"] == "what is the answer?"
+    assert len(trace["candidates"]) == 2
+    assert trace["candidates"][0]["chunk_uuid"] == "uuid-1"
+    assert trace["candidates"][0]["hybrid_score"] == 0.91
+    assert "answer is 42" in trace["candidates"][0]["snippet_preview"]
+    assert trace["rerank_applied"] is False
+    assert trace["rerank_top"] is None
+    assert trace["final"] == [r["chunk_uuid"] for r in results]
+
+
+@pytest.mark.asyncio
+async def test_retrieve_with_trace_marks_rerank_applied():
+    """When rerank annotates results with `rerank_score`, trace.rerank_applied
+    flips to True and `rerank_top` lists the (chunk_uuid, rerank_score) pairs."""
+    raw = [
+        {
+            "uuid": "uuid-a",
+            "score": 0.5,
+            "properties": {
+                "content": "alpha",
+                "document_id": "d",
+                "filename": "f",
+                "chunk_index": 0,
+            },
+        }
+    ]
+    weaviate = _make_weaviate_mock(raw)
+    with patch(
+        "services.rag_retrieval.get_weaviate_client", return_value=weaviate
+    ), patch(
+        "services.rag_retrieval._get_embedding_service",
+        return_value=_make_embedder_mock(vector=[0.1]),
+    ), patch(
+        "services.rag_retrieval.rerank",
+        AsyncMock(
+            return_value=[
+                {
+                    "chunk_uuid": "uuid-a",
+                    "filename": "f",
+                    "snippet": "alpha",
+                    "score": 0.5,
+                    "rerank_score": 0.97,
+                    "source_type": "document",
+                }
+            ]
+        ),
+    ):
+        from services.rag_retrieval import RagRetrievalService
+
+        results, trace = await RagRetrievalService().retrieve_with_trace(
+            "alpha?", USER_ID, k=1
+        )
+
+    assert len(results) == 1
+    assert trace["rerank_applied"] is True
+    assert trace["rerank_top"] == [{"chunk_uuid": "uuid-a", "rerank_score": 0.97}]
+    assert trace["final"] == ["uuid-a"]
+
+
+@pytest.mark.asyncio
+async def test_retrieve_with_trace_returns_empty_trace_when_weaviate_unavailable():
+    """Trace is always built — even when retrieval short-circuits."""
+    with patch(
+        "services.rag_retrieval.get_weaviate_client", return_value=None
+    ), patch(
+        "services.rag_retrieval._get_embedding_service",
+        return_value=_make_embedder_mock(),
+    ):
+        from services.rag_retrieval import RagRetrievalService
+
+        results, trace = await RagRetrievalService().retrieve_with_trace(
+            "hi", USER_ID
+        )
+
+    assert results == []
+    assert trace["query"] == "hi"
+    assert trace["candidates"] == []
+    assert trace["rerank_applied"] is False
+    assert trace["rerank_top"] is None
+    assert trace["final"] == []
+
+
+@pytest.mark.asyncio
 async def test_retrieve_returns_empty_on_weaviate_error():
     """If hybrid_search raises, retrieve() degrades to [] (don't break the chat turn)."""
     weaviate = MagicMock()

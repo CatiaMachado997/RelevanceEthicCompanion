@@ -56,31 +56,61 @@ class RagRetrievalService:
     ) -> list[dict[str, Any]]:
         """Return up to `k` document chunks relevant to `query` for `user_id`.
 
-        Result shape (one row per chunk):
+        Backwards-compatible wrapper around :meth:`retrieve_with_trace` that
+        discards the breadcrumb trace. New callers that want to surface the
+        retrieval breadcrumbs in Transparency should call
+        :meth:`retrieve_with_trace` directly.
+        """
+        results, _trace = await self.retrieve_with_trace(query, user_id, k=k)
+        return results
+
+    async def retrieve_with_trace(
+        self,
+        query: str,
+        user_id: str,
+        k: int = DEFAULT_K,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        """Sprint G Task 4: retrieve + a structured breadcrumb `trace`.
+
+        The trace mirrors the retrieval pipeline so the Transparency panel
+        can show exactly which chunks were considered, which were reranked,
+        and which were finally cited.
+
+        Trace shape::
+
             {
-                "chunk_uuid": str,        # Weaviate object UUID
-                "document_id": str,
-                "filename": str,
-                "chunk_index": int,
-                "snippet": str,           # the chunk content
-                "score": float,           # hybrid fusion score
-                "source_type": str,       # "document" | "gmail" | "slack" | ...
+                "query": str,
+                "candidates": [
+                    {"chunk_uuid", "hybrid_score", "snippet_preview"},  # all hybrid candidates pre-rerank
+                    ...
+                ],
+                "rerank_applied": bool,            # True iff Jina was actually called and succeeded
+                "rerank_top": [{"chunk_uuid", "rerank_score"}, ...] | None,
+                "final": [chunk_uuid, ...],        # chunk_uuids of returned results, in order
             }
 
-        Returns an empty list when Weaviate is unavailable or any error
-        occurs — never raises into the caller's chat turn.
+        Always builds a trace, even on failure paths — empty candidates and
+        `final=[]` when Weaviate is unavailable or hybrid search fails.
         """
+        trace: dict[str, Any] = {
+            "query": query,
+            "candidates": [],
+            "rerank_applied": False,
+            "rerank_top": None,
+            "final": [],
+        }
+
         weaviate = get_weaviate_client()
         if weaviate is None:
             logger.info("RAG retrieval skipped — Weaviate unavailable")
-            return []
+            return [], trace
 
         try:
             embedder = _get_embedding_service()
             query_vector = await embedder.generate_query_embedding(query)
         except Exception as e:
             logger.warning(f"RAG retrieval skipped — query embedding failed: {e}")
-            return []
+            return [], trace
 
         # Sprint G Task 3: fetch a wider candidate pool so the reranker has
         # meaningful choices. The reranker (or fallback) trims back to `k`.
@@ -96,18 +126,45 @@ class RagRetrievalService:
             )
         except Exception as e:
             logger.warning(f"RAG retrieval failed in Weaviate hybrid_search: {e}")
-            return []
+            return [], trace
 
         candidates = [self._format(item) for item in raw]
+        trace["candidates"] = [
+            {
+                "chunk_uuid": c.get("chunk_uuid"),
+                "hybrid_score": float(c.get("score") or 0.0),
+                "snippet_preview": (c.get("snippet") or "")[:200],
+            }
+            for c in candidates
+        ]
+
         # Cross-encoder rerank pass — graceful no-op if JINA_API_KEY is empty
         # or the call fails. Returns at most `k` rows.
-        return await rerank(
+        results = await rerank(
             query,
             candidates,
             top_k=k,
             api_key=settings.JINA_API_KEY,
             model=settings.RERANK_MODEL,
         )
+
+        # `rerank()` annotates kept candidates with `rerank_score` on success
+        # and falls back to `candidates[:top_k]` (no key) on missing-key/error.
+        rerank_applied = any("rerank_score" in r for r in results)
+        trace["rerank_applied"] = rerank_applied
+        if rerank_applied:
+            trace["rerank_top"] = [
+                {
+                    "chunk_uuid": r.get("chunk_uuid"),
+                    "rerank_score": float(r.get("rerank_score") or 0.0),
+                }
+                for r in results
+            ]
+        else:
+            trace["rerank_top"] = None
+
+        trace["final"] = [r.get("chunk_uuid") for r in results]
+        return results, trace
 
     @staticmethod
     def _format(item: dict[str, Any]) -> dict[str, Any]:
