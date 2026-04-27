@@ -116,8 +116,8 @@ def _fetch_recent_source_items(user_id: str, source_type: str, limit: int = 5) -
                 FROM source_items
                 WHERE user_id = %s
                   AND source_type = %s
-                  AND embedding_status = 'completed'
-                  AND created_at > NOW() - INTERVAL '24 hours'
+                  AND embedding_status = 'indexed'
+                  AND synced_at > NOW() - INTERVAL '24 hours'
                 ORDER BY COALESCE(item_at, synced_at) DESC
                 LIMIT %s
                 """,

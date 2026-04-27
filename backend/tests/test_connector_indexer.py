@@ -181,7 +181,7 @@ async def test_index_success_does_not_touch_row(
     mock_embed, mock_weaviate, mock_indexer_db
 ):
     """On success the indexer no longer writes the row itself — the
-    success update lives in data_ingestion._maybe_embed (status='completed',
+    success update lives in data_ingestion._maybe_embed (status='indexed',
     embedding_error=NULL). This test pins that behavior so we don't
     accidentally re-add a duplicate UPDATE here."""
     from services.connector_indexer import ConnectorIndexer
@@ -208,7 +208,7 @@ async def test_index_success_does_not_touch_row(
 @pytest.mark.asyncio
 @patch("services.data_ingestion.get_db_connection")
 async def test_maybe_embed_success_clears_error(mock_get_db):
-    """data_ingestion._maybe_embed writes embedding_status='completed' and
+    """data_ingestion._maybe_embed writes embedding_status='indexed' and
     embedding_error=NULL after a successful indexer.index() call."""
     from services.data_ingestion import DataIngestionService
     from services.connectors.base import SourceItem
@@ -239,7 +239,7 @@ async def test_maybe_embed_success_clears_error(mock_get_db):
     ]
     assert len(update_calls) == 1
     sql, params = update_calls[0].args
-    assert "embedding_status = 'completed'" in sql
+    assert "embedding_status = 'indexed'" in sql
     assert "embedding_error = NULL" in sql
     assert params == (USER_ID, "gmail", "msg_42")
     conn.commit.assert_called_once()

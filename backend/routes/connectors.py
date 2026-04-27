@@ -163,10 +163,10 @@ async def connector_status(
                 """
                 SELECT
                     COUNT(*) AS total_items,
-                    COUNT(*) FILTER (WHERE embedding_status = 'completed') AS indexed,
+                    COUNT(*) FILTER (WHERE embedding_status = 'indexed') AS indexed,
                     COUNT(*) FILTER (WHERE embedding_status = 'failed') AS failed,
                     COUNT(*) FILTER (WHERE embedding_status = 'pending' OR embedding_status IS NULL) AS pending,
-                    MAX(created_at) AS last_sync_at,
+                    MAX(synced_at) AS last_sync_at,
                     (
                         SELECT embedding_error
                         FROM source_items
@@ -174,7 +174,7 @@ async def connector_status(
                           AND source_type = %s
                           AND embedding_status = 'failed'
                           AND embedding_error IS NOT NULL
-                        ORDER BY created_at DESC
+                        ORDER BY synced_at DESC
                         LIMIT 1
                     ) AS last_error
                 FROM source_items
@@ -202,12 +202,12 @@ async def reindex_source(
     user_id: str = Depends(get_current_user_id),
     indexer: ConnectorIndexer = Depends(get_connector_indexer),
 ) -> Dict[str, Any]:
-    """Retry indexing for items where embedding_status != 'completed'.
+    """Retry indexing for items where embedding_status != 'indexed'.
 
     Pulls up to 200 stuck rows for `(user_id, source_type)`, calls
     `ConnectorIndexer.index()` directly on each (so per-item failures count
     rather than being silently swallowed by `_maybe_embed`), and on success
-    flips the row to 'completed'.
+    flips the row to 'indexed'.
 
     No ESL gate — this is operational/internal, matching the
     `tool_telemetry.record_tool_call` precedent.
@@ -225,7 +225,7 @@ async def reindex_source(
                 FROM source_items
                 WHERE user_id = %s
                   AND source_type = %s
-                  AND (embedding_status IS NULL OR embedding_status != 'completed')
+                  AND (embedding_status IS NULL OR embedding_status != 'indexed')
                 LIMIT 200
                 """,
                 (user_id, source_type),
@@ -259,13 +259,13 @@ async def reindex_source(
                 sensitivity=row.get("sensitivity") or 0,
             )
             await indexer.index(item)
-            # Mirror data_ingestion._maybe_embed: mark completed + clear error.
+            # Mirror data_ingestion._maybe_embed: mark indexed + clear error.
             try:
                 with get_db_connection() as conn:
                     with conn.cursor() as cur:
                         cur.execute(
                             """UPDATE source_items
-                                  SET embedding_status = 'completed',
+                                  SET embedding_status = 'indexed',
                                       embedding_error = NULL
                                 WHERE user_id = %s
                                   AND source_type = %s
@@ -274,7 +274,7 @@ async def reindex_source(
                         )
                     conn.commit()
             except Exception as db_exc:
-                logger.warning(f"⚠️ reindex completed-update failed for {item.external_id}: {db_exc}")
+                logger.warning(f"⚠️ reindex indexed-update failed for {item.external_id}: {db_exc}")
             succeeded += 1
         except Exception as e:
             # ConnectorIndexer already wrote 'failed' + embedding_error and

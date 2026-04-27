@@ -291,7 +291,7 @@ class DataIngestionService:
                     with conn.cursor() as cur:
                         cur.execute(
                             """UPDATE source_items
-                                  SET embedding_status = 'completed',
+                                  SET embedding_status = 'indexed',
                                       embedding_error = NULL
                                 WHERE user_id = %s
                                   AND source_type = %s
@@ -301,7 +301,7 @@ class DataIngestionService:
                     conn.commit()
             except Exception as db_exc:
                 logger.warning(
-                    f"⚠️ embedding_status=completed update failed for {item.external_id}: {db_exc}"
+                    f"⚠️ embedding_status=indexed update failed for {item.external_id}: {db_exc}"
                 )
         except Exception as e:
             logger.warning(f"⚠️ ConnectorIndexer failed for {item.external_id}: {e}")

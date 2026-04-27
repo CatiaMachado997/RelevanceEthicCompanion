@@ -223,10 +223,10 @@ def test_reindex_returns_processed_succeeded_failed():
 
 
 def test_reindex_excludes_completed_items():
-    """The SQL filter must skip rows where embedding_status='completed'.
+    """The SQL filter must skip rows where embedding_status='indexed'.
     We verify the SELECT contains the filter and that rows the mock returns
     are the only ones the indexer sees."""
-    # Mock returns ZERO stuck rows (because all are 'completed' upstream).
+    # Mock returns ZERO stuck rows (because all are 'indexed' upstream).
     conn, cur = _reindex_db_mock([])
 
     indexer_mock = MagicMock()
@@ -247,7 +247,7 @@ def test_reindex_excludes_completed_items():
     select_call = cur.execute.call_args_list[0]
     sql = select_call.args[0]
     assert "embedding_status" in sql
-    assert "!= 'completed'" in sql
+    assert "!= 'indexed'" in sql
     assert "LIMIT 200" in sql
 
 
