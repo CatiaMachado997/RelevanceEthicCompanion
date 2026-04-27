@@ -193,7 +193,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize and start background scheduler (Phase 5)
     try:
-        from services.scheduler import BackgroundScheduler
+        from services.scheduler import BackgroundScheduler, set_scheduler_instance
         from services.data_ingestion import DataIngestionService
         from services.context_manager import ContextManager
         from services.embedding_service import EmbeddingService
@@ -208,6 +208,7 @@ async def lifespan(app: FastAPI):
 
         _scheduler = BackgroundScheduler(data_ingestion)
         _scheduler.start()
+        set_scheduler_instance(_scheduler)
 
         print("🔄 Background Scheduler: STARTED")
         print("   - Calendar sync: Every 15 minutes")

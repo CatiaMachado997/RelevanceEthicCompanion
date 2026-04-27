@@ -18,6 +18,23 @@ from utils.db import get_db_connection
 logger = logging.getLogger(__name__)
 
 
+# Module-level singleton — set by main.lifespan() at startup. Other services
+# (e.g. SystemHealthService) read this via get_scheduler_instance() so they
+# don't have to import from `main` (which would be a circular import).
+_scheduler_singleton: "BackgroundScheduler | None" = None
+
+
+def set_scheduler_instance(scheduler: "BackgroundScheduler") -> None:
+    """Register the running scheduler so other services can read job state."""
+    global _scheduler_singleton
+    _scheduler_singleton = scheduler
+
+
+def get_scheduler_instance() -> "BackgroundScheduler | None":
+    """Return the running BackgroundScheduler, or None if not started."""
+    return _scheduler_singleton
+
+
 class BackgroundScheduler:
     """
     Manages background tasks for data ingestion
