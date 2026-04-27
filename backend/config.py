@@ -163,6 +163,9 @@ class Settings(BaseSettings):
     # Dev mode: override mock user ID to match the real user who connected OAuth
     DEV_USER_ID: str = "00000000-0000-0000-0000-000000000000"
 
+    # Retention — daily prune job for tool_call_events / esl_audit_log
+    RETENTION_DAYS: int = 90
+
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 
 

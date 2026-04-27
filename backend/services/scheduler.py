@@ -152,6 +152,16 @@ class BackgroundScheduler:
             max_instances=1,
         )
 
+        # Sprint E Task 1: daily prune of tool_call_events + esl_audit_log
+        self.scheduler.add_job(
+            func=self._prune_old_telemetry,
+            trigger=CronTrigger(hour=4, minute=0),
+            id="prune_old_telemetry",
+            name="Prune tool_call_events and esl_audit_log older than RETENTION_DAYS",
+            replace_existing=True,
+            max_instances=1,
+        )
+
         # Start scheduler
         self.scheduler.start()
         self._running = True
@@ -1270,6 +1280,43 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
 
         except Exception as e:
             logger.error(f"[Scheduler] Related-items clustering job failed: {e}")
+
+    async def _prune_old_telemetry(self):
+        """
+        Sprint E Task 1: drop telemetry rows older than RETENTION_DAYS from
+        `tool_call_events` (uses `created_at`) and `esl_audit_log` (uses
+        `timestamp`). Daily at 04:00 UTC. Errors are logged, not raised, so a
+        broken prune doesn't take down the scheduler thread.
+        """
+        try:
+            from config import settings
+
+            days = int(getattr(settings, "RETENTION_DAYS", 90))
+
+            tool_deleted = 0
+            audit_deleted = 0
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "DELETE FROM tool_call_events "
+                        "WHERE created_at < NOW() - (INTERVAL '1 day' * %s)",
+                        (days,),
+                    )
+                    tool_deleted = cur.rowcount or 0
+
+                    cur.execute(
+                        "DELETE FROM esl_audit_log "
+                        "WHERE timestamp < NOW() - (INTERVAL '1 day' * %s)",
+                        (days,),
+                    )
+                    audit_deleted = cur.rowcount or 0
+
+            logger.info(
+                f"pruned {tool_deleted} tool_call_events, "
+                f"{audit_deleted} esl_audit_log rows older than {days}d"
+            )
+        except Exception as e:
+            logger.error(f"[Scheduler] prune_old_telemetry failed: {e}")
 
     async def _health_check(self):
         """
