@@ -79,11 +79,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="absolute left-0 top-0 h-full shadow-xl">
             <div className="relative">
               <button
-                className="absolute top-3 right-[-40px] w-8 h-8 flex items-center justify-center rounded-full bg-white shadow"
+                className="absolute top-3 right-[-40px] w-8 h-8 flex items-center justify-center rounded-full shadow"
                 onClick={() => setSidebarOpen(false)}
                 aria-label="Close menu"
+                style={{ background: 'var(--ec-card-bg)', color: 'var(--ec-text)' }}
               >
-                <X size={14} style={{ color: '#1a1a1a' }} />
+                <X size={14} />
               </button>
               <SidebarNav onClose={() => setSidebarOpen(false)} />
             </div>
