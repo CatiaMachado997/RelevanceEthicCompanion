@@ -13,6 +13,7 @@ from pydantic import BaseModel
 # OrchestratorV2 imported lazily inside get_orchestrator() below
 from services.context_manager import ContextManager
 from services.tool_telemetry import ToolTelemetryService
+from services.system_health import SystemHealthService
 from esl.audit import ESLAuditLogger
 from utils.db import get_db_connection
 from utils.supabase_auth import get_current_read_user_id
@@ -79,6 +80,11 @@ def get_orchestrator():
 def get_tool_telemetry_service() -> ToolTelemetryService:
     """Factory for ``ToolTelemetryService`` (overridable in tests)."""
     return ToolTelemetryService()
+
+
+def get_system_health_service() -> SystemHealthService:
+    """Factory for ``SystemHealthService`` (overridable in tests)."""
+    return SystemHealthService()
 
 
 @router.get("/logs", response_model=ESLLogsResponse)
@@ -324,3 +330,16 @@ async def list_tool_calls(
         events.append(event)
 
     return {"events": events}
+
+
+@router.get("/system-health")
+async def get_system_health(
+    user_id: str = Depends(get_current_read_user_id),
+    health: SystemHealthService = Depends(get_system_health_service),
+) -> Dict[str, Any]:
+    """Sprint E Task 3: aggregate tool latency, ESL summary, and scheduler state."""
+    return {
+        "tool_health": health.get_tool_health(user_id),
+        "esl_summary": health.get_esl_summary(user_id),
+        "scheduler": health.get_scheduler_status(),
+    }

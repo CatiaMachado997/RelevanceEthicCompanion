@@ -25,6 +25,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { FilterChips } from '@/components/ui/filter-chips'
 import { Button } from '@/components/ui/button'
 import ToolCallsTab from '@/components/transparency/ToolCallsTab'
+import SystemHealthTab from '@/components/transparency/SystemHealthTab'
 import {
   PieChart,
   Pie,
@@ -109,7 +110,7 @@ export default function TransparencyPage() {
   const [loading, setLoading] = useState(true)
   const [days, setDays] = useState('7')
   const [statusFilter, setStatusFilter] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'esl' | 'tools'>('esl')
+  const [activeTab, setActiveTab] = useState<'esl' | 'tools' | 'health'>('esl')
 
   useEffect(() => {
     loadData()
@@ -227,10 +228,24 @@ export default function TransparencyPage() {
         >
           Tool calls
         </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => setActiveTab('health')}
+          className={`rounded-none border-b-2 px-4 py-2 text-sm ${
+            activeTab === 'health'
+              ? 'border-[#0a0a0a] text-[#0a0a0a]'
+              : 'border-transparent text-[#6b6b6b] hover:text-[#0a0a0a]'
+          }`}
+        >
+          System health
+        </Button>
       </div>
 
       {activeTab === 'tools' ? (
         <ToolCallsTab />
+      ) : activeTab === 'health' ? (
+        <SystemHealthTab />
       ) : loading ? (
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">

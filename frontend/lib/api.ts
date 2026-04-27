@@ -570,6 +570,32 @@ export const goalsApi = {
 
 // ==================== Transparency API ====================
 
+export interface ToolHealth {
+  tool_name: string
+  source: string
+  calls_24h: number
+  success_rate: number
+  p50_latency_ms: number
+  p95_latency_ms: number
+}
+
+export interface EslSummaryRow {
+  count_24h: number
+  count_7d: number
+}
+
+export interface SchedulerJob {
+  job_id: string
+  next_run_time: string | null
+  trigger: string
+}
+
+export interface SystemHealth {
+  tool_health: ToolHealth[]
+  esl_summary: Record<string, EslSummaryRow>
+  scheduler: SchedulerJob[]
+}
+
 export interface ToolCallEvent {
   id: string
   tool_name: string
@@ -656,6 +682,12 @@ export const transparencyApi = {
       `/api/transparency/tool-calls${qs ? `?${qs}` : ''}`,
     )
   },
+
+  /**
+   * Get aggregated system health (Sprint E Task 3).
+   */
+  getSystemHealth: (): Promise<SystemHealth> =>
+    apiRequest<SystemHealth>('/api/transparency/system-health'),
 }
 
 // ==================== Feedback API ====================
