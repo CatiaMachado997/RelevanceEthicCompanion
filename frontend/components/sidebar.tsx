@@ -116,8 +116,26 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
       const target = e.target as HTMLElement
       if (!target.closest('[data-avatar-menu]')) setAvatarMenuOpen(false)
     }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setAvatarMenuOpen(false)
+    }
     window.addEventListener('mousedown', onClick)
-    return () => window.removeEventListener('mousedown', onClick)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', onClick)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [avatarMenuOpen])
+
+  // Move focus into the menu when it opens so keyboard users land
+  // on the first item rather than staying on the trigger.
+  const avatarMenuRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!avatarMenuOpen) return
+    const first = avatarMenuRef.current?.querySelector<HTMLElement>(
+      '[role="menuitem"]'
+    )
+    first?.focus()
   }, [avatarMenuOpen])
 
   // Unread notifications — polled once per minute + cleared on notifications page
@@ -697,6 +715,10 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
           {/* Dropdown — opens above the avatar */}
           {avatarMenuOpen && (
             <div
+              ref={avatarMenuRef}
+              role="menu"
+              aria-orientation="vertical"
+              aria-label="Account menu"
               className="absolute left-2 right-2 bottom-[52px] rounded-xl overflow-hidden z-10"
               style={{
                 background: "var(--ec-card-bg)",
@@ -706,6 +728,7 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
             >
               <Link
                 href="/dashboard/profile"
+                role="menuitem"
                 onClick={() => { setAvatarMenuOpen(false); onClose?.() }}
                 className="flex items-center gap-2.5 px-3 h-9 text-xs transition-colors hover:bg-[rgba(0,0,0,0.04)]"
                 style={{ color: "var(--ec-text)" }}
@@ -715,6 +738,7 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
               </Link>
               <Link
                 href="/dashboard/notifications"
+                role="menuitem"
                 onClick={() => { setAvatarMenuOpen(false); onClose?.() }}
                 className="flex items-center gap-2.5 px-3 h-9 text-xs transition-colors hover:bg-[rgba(0,0,0,0.04)]"
                 style={{ color: "var(--ec-text)" }}
@@ -732,6 +756,7 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
               </Link>
               <Link
                 href="/dashboard/transparency"
+                role="menuitem"
                 onClick={() => { setAvatarMenuOpen(false); onClose?.() }}
                 className="flex items-center gap-2.5 px-3 h-9 text-xs transition-colors hover:bg-[rgba(0,0,0,0.04)]"
                 style={{ color: "var(--ec-text)" }}
@@ -739,8 +764,9 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
                 <Eye size={14} style={{ color: "var(--ec-text-muted)" }} />
                 Transparency log
               </Link>
-              <div className="h-px" style={{ background: "var(--ec-card-border)" }} />
+              <div className="h-px" role="separator" style={{ background: "var(--ec-card-border)" }} />
               <button
+                role="menuitem"
                 onClick={() => { setAvatarMenuOpen(false); signOut().catch(console.error) }}
                 className="w-full flex items-center gap-2.5 px-3 h-9 text-xs transition-colors hover:bg-[rgba(0,0,0,0.04)]"
                 style={{ color: "#B04A3A" }}
