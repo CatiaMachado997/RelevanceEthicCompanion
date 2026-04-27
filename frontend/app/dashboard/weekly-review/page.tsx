@@ -6,7 +6,6 @@ import { weeklyReviewApi, type WeeklyReview } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { toast } from '@/lib/toast'
 
 /** Format YYYY-MM-DD from a Date in UTC-stable way (matches backend ISO date). */
 function toIsoDate(d: Date): string {
@@ -132,7 +131,7 @@ export default function WeeklyReviewPage() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to load weekly review'
       setError(msg)
-      toast.error('Could not load weekly review', msg)
+      console.error('[weekly-review] load failed:', err)
     } finally {
       setLoading(false)
     }

@@ -6,7 +6,6 @@ import { transparencyApi, type SystemHealth } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { toast } from '@/lib/toast'
 
 const ESL_STATUSES: Array<'APPROVED' | 'MODIFIED' | 'VETOED'> = [
   'APPROVED',
@@ -50,7 +49,7 @@ export default function SystemHealthTab() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to load system health'
       setError(msg)
-      toast.error('Failed to load system health', msg)
+      console.error('[system-health] load failed:', e)
     } finally {
       setLoading(false)
     }

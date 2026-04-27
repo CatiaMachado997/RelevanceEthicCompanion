@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { PageHeader } from '@/components/ui/page-header'
 import { IntegrationCard } from '@/components/settings/IntegrationCard'
 import { connectorsApi, type ConnectorStatus } from '@/lib/api'
-import { toast } from '@/lib/toast'
 
 const SUPPORTED = ['gmail', 'slack', 'google_calendar'] as const
 
@@ -30,7 +29,7 @@ export default function IntegrationsPage() {
       )
       setRows(merged)
     } catch (e) {
-      toast.error('Failed to load integrations', e instanceof Error ? e.message : undefined)
+      console.error('[integrations] load failed:', e)
     } finally {
       setLoading(false)
     }
