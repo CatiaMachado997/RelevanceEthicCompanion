@@ -28,5 +28,5 @@ test('test_renders_static_stats', () => {
   render(<ProfilePage />)
   expect(screen.getByText('Values Set')).toBeInTheDocument()
   expect(screen.getByText('Active Goals')).toBeInTheDocument()
-  expect(screen.getByText('ESL Approval Rate')).toBeInTheDocument()
+  expect(screen.getByText('ESL Approval')).toBeInTheDocument()
 })
