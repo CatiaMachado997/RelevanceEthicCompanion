@@ -138,6 +138,27 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
     first?.focus()
   }, [avatarMenuOpen])
 
+  // Up/Down arrow + Home/End nav inside the avatar menu — completes
+  // the WAI-ARIA menu pattern (Esc-to-close + initial focus already
+  // wired above). Tab still works as a fallback because each menuitem
+  // is a real focusable Link/button.
+  const handleAvatarMenuKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return
+    const items = Array.from(
+      avatarMenuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [],
+    )
+    if (items.length === 0) return
+    e.preventDefault()
+    const active = document.activeElement as HTMLElement | null
+    const currentIdx = active ? items.indexOf(active) : -1
+    let nextIdx: number
+    if (e.key === 'Home') nextIdx = 0
+    else if (e.key === 'End') nextIdx = items.length - 1
+    else if (e.key === 'ArrowDown') nextIdx = (currentIdx + 1) % items.length
+    else nextIdx = currentIdx <= 0 ? items.length - 1 : currentIdx - 1
+    items[nextIdx]?.focus()
+  }
+
   // Unread notifications — polled once per minute + cleared on notifications page
   const [unreadNotifs, setUnreadNotifs] = useState(0)
   useEffect(() => {
@@ -719,6 +740,7 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
               role="menu"
               aria-orientation="vertical"
               aria-label="Account menu"
+              onKeyDown={handleAvatarMenuKey}
               className="absolute left-2 right-2 bottom-[52px] rounded-xl overflow-hidden z-10"
               style={{
                 background: "var(--ec-card-bg)",
