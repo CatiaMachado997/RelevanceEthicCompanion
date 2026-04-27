@@ -2,6 +2,18 @@
 
 Single GET endpoint that returns the user's weekly review aggregation.
 The router does NOT carry a prefix — main.py sets it when including.
+
+ESL note (Sprint D Task 11): this endpoint is a read-only aggregator
+over the user's own data. It does not produce a user-facing action and
+therefore does not pass through `EthicalSafeguardLayer.evaluate_action`.
+The same is true of every other route added in Sprint D
+(`tasks.py` dependency sub-routes, project/goal rollups,
+`task_dependencies` and `work_rollups` services): they are CRUD on the
+user's own work-management graph, not proactive notifications. Per-route
+auth (`get_current_user_id` / `get_current_read_user_id`) is sufficient.
+If a future "send me my weekly review on Monday morning" notification is
+added, that proactive action MUST go through ESL like the existing
+daily-focus and pre-meeting briefs.
 """
 
 from __future__ import annotations
