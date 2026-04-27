@@ -81,12 +81,16 @@ export function CommandPalette() {
   }, [open])
 
   // ─── Reset query/cursor and autofocus each time the palette opens ─────
+  // Intentional synchronous setState — resets query/cursor whenever the
+  // palette is reopened. Runs at most once per open transition.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!open) return
     setQuery("")
     setCursor(0)
     requestAnimationFrame(() => inputRef.current?.focus())
   }, [open])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const close = useCallback(() => setOpen(false), [])
 
@@ -262,10 +266,13 @@ export function CommandPalette() {
     return out.slice(0, 30)
   }, [query, folders, conversations, router, close])
 
-  // Clamp cursor if results shrink
+  // Clamp cursor if results shrink. Intentional synchronous setState —
+  // produces at most one extra render when results shorten past the cursor.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (cursor >= results.length) setCursor(Math.max(0, results.length - 1))
   }, [results.length, cursor])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const onKeyDownInput = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") {

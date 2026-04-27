@@ -28,12 +28,15 @@ export function DashboardHero() {
   const [now, setNow] = useState<Date | null>(null)
   const router = useRouter()
 
+  // Hydration gate: setNow on mount avoids server/client time mismatch,
+  // then a 1-minute interval keeps greetings accurate across boundaries.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     setNow(new Date())
-    // Re-render every minute so the greeting stays accurate across midnight / hour boundaries.
     const interval = setInterval(() => setNow(new Date()), 60_000)
     return () => clearInterval(interval)
   }, [])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const name = user?.email?.split("@")[0] ?? "there"
   const hour = now?.getHours() ?? 0

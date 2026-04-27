@@ -10,7 +10,6 @@ from fastapi import APIRouter, Depends
 from utils.supabase_auth import get_current_read_user_id
 from utils.db import get_db_connection
 
-
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
 
@@ -20,13 +19,31 @@ async def overview(
 ) -> dict:
     """Return every count the dashboard launcher needs, in one response."""
     queries = [
-        ("goals_active",        "SELECT COUNT(*) AS cnt FROM goals WHERE user_id = %s AND status = 'active'"),
-        ("tasks_open",          "SELECT COUNT(*) AS cnt FROM tasks WHERE user_id = %s AND status IN ('todo','in_progress')"),
-        ("projects_active",     "SELECT COUNT(*) AS cnt FROM projects WHERE user_id = %s AND status = 'active'"),
-        ("values_count",        "SELECT COUNT(*) AS cnt FROM user_values WHERE user_id = %s AND active = TRUE"),
-        ("documents_count",     "SELECT COUNT(*) AS cnt FROM documents WHERE user_id = %s"),
-        ("esl_decisions_7d",    "SELECT COUNT(*) AS cnt FROM esl_audit_log WHERE user_id = %s AND created_at > NOW() - INTERVAL '7 days'"),
-        ("notifications_unread","SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = %s AND read = FALSE"),
+        (
+            "goals_active",
+            "SELECT COUNT(*) AS cnt FROM goals WHERE user_id = %s AND status = 'active'",
+        ),
+        (
+            "tasks_open",
+            "SELECT COUNT(*) AS cnt FROM tasks WHERE user_id = %s AND status IN ('todo','in_progress')",
+        ),
+        (
+            "projects_active",
+            "SELECT COUNT(*) AS cnt FROM projects WHERE user_id = %s AND status = 'active'",
+        ),
+        (
+            "values_count",
+            "SELECT COUNT(*) AS cnt FROM user_values WHERE user_id = %s AND active = TRUE",
+        ),
+        ("documents_count", "SELECT COUNT(*) AS cnt FROM documents WHERE user_id = %s"),
+        (
+            "esl_decisions_7d",
+            "SELECT COUNT(*) AS cnt FROM esl_audit_log WHERE user_id = %s AND created_at > NOW() - INTERVAL '7 days'",
+        ),
+        (
+            "notifications_unread",
+            "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = %s AND read = FALSE",
+        ),
     ]
 
     out: dict = {}
