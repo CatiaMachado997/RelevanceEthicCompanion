@@ -70,6 +70,8 @@ class ConnectorIndexer:
         embed = get_embedding_service()
         now = datetime.now(timezone.utc).isoformat()
 
+        last_error: Optional[Exception] = None
+
         for idx, chunk in enumerate(chunks):
             try:
                 vec = await embed.generate_embedding(chunk)
@@ -88,21 +90,50 @@ class ConnectorIndexer:
                     vec,
                 )
             except Exception as e:
+                last_error = e
                 logger.warning(
                     f"⚠️ index chunk {idx} of {item.source_type}:{item.external_id} failed: {e}"
                 )
                 # Continue with remaining chunks; partial coverage beats none.
 
-        try:
-            with get_db_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """UPDATE source_items SET embedding_status = 'indexed'
-                           WHERE user_id = %s AND source_type = %s AND external_id = %s""",
-                        (item.user_id, item.source_type, item.external_id),
-                    )
-                conn.commit()
-        except Exception as e:
-            logger.warning(f"⚠️ embedding_status update failed: {e}")
+        if last_error is not None:
+            # Surface the failure on the row + emit telemetry so the user can
+            # see it in the connectors panel. Data_ingestion's success-update
+            # will not run because we re-raise below.
+            err_msg = str(last_error)[:1000]
+            try:
+                with get_db_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """UPDATE source_items
+                                  SET embedding_status = 'failed',
+                                      embedding_error = %s
+                                WHERE user_id = %s
+                                  AND source_type = %s
+                                  AND external_id = %s""",
+                            (err_msg, item.user_id, item.source_type, item.external_id),
+                        )
+                    conn.commit()
+            except Exception as db_exc:
+                logger.warning(f"⚠️ embedding_status=failed update failed: {db_exc}")
+
+            try:
+                from services.tool_telemetry import ToolTelemetryService
+
+                ToolTelemetryService().record_tool_call(
+                    user_id=str(item.user_id),
+                    tool_name="connector_indexer",
+                    source="scheduled",
+                    source_ref=item.source_type,
+                    input={"external_id": item.external_id},
+                    output=None,
+                    status="error",
+                    error_message=err_msg,
+                )
+            except Exception as tele_exc:  # noqa: BLE001
+                logger.warning(f"⚠️ telemetry record_tool_call failed: {tele_exc}")
+
+            # Re-raise so data_ingestion's success-update path is skipped.
+            raise last_error
 
         return len(chunks)

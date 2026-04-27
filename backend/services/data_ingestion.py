@@ -283,6 +283,26 @@ class DataIngestionService:
             indexer = ConnectorIndexer()
             n = await indexer.index(item)
             logger.debug(f"indexed {n} chunk(s) for {item.source_type}:{item.external_id}")
+            # Sprint F Task 1: record success on the row so the connectors
+            # panel can show indexed counts. Failure path is owned by
+            # ConnectorIndexer (it writes 'failed' + error before raising).
+            try:
+                with get_db_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """UPDATE source_items
+                                  SET embedding_status = 'completed',
+                                      embedding_error = NULL
+                                WHERE user_id = %s
+                                  AND source_type = %s
+                                  AND external_id = %s""",
+                            (item.user_id, item.source_type, item.external_id),
+                        )
+                    conn.commit()
+            except Exception as db_exc:
+                logger.warning(
+                    f"⚠️ embedding_status=completed update failed for {item.external_id}: {db_exc}"
+                )
         except Exception as e:
             logger.warning(f"⚠️ ConnectorIndexer failed for {item.external_id}: {e}")
 
