@@ -8,6 +8,25 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timedelta
 
+
+@pytest.fixture(autouse=True)
+def _default_patch_esl_gate_and_telemetry():
+    """Default-patch the ESL proactive gate to APPROVED, and stub the
+    telemetry service to a no-op, so existing scheduler tests don't need
+    to mock these directly. Tests that want different behaviour patch
+    explicitly inside their own bodies.
+    """
+    async def _approve(user_id, notification_type, content, urgency="low", metadata=None):
+        return (True, content)
+
+    with patch(
+        "services.scheduler.gate_proactive_notification", side_effect=_approve
+    ), patch(
+        "services.scheduler.ToolTelemetryService"
+    ) as mock_telemetry_cls:
+        mock_telemetry_cls.return_value.record_tool_call = MagicMock(return_value="")
+        yield
+
 # ─────────────────────────────────────────────
 # Helper: build a minimal BackgroundScheduler without starting APScheduler
 # ─────────────────────────────────────────────
@@ -539,3 +558,196 @@ class TestRelatedItemsClustering:
         assert "meeting" in result
         assert "the" not in result
         assert "for" not in result
+
+
+# ─────────────────────────────────────────────
+# Sprint C Task 4: ESL gating in scheduler
+# ─────────────────────────────────────────────
+
+
+class TestSchedulerESLGating:
+    @pytest.mark.asyncio
+    async def test_daily_focus_plan_respects_veto(self):
+        """When ESL vetoes, create_notification must NOT be called."""
+        sched = make_scheduler()
+
+        snapshot = {
+            "computed_at": datetime.utcnow().isoformat(),
+            "tasks_due_soon": [{"title": "Task A", "due_date": "2026-04-26", "priority": 7}],
+            "overdue_count": 0,
+            "active_projects": [],
+            "upcoming_events": [{"title": "Standup", "start_time": "2026-04-26T10:00"}],
+            "active_goals": [{"title": "Ship Sprint C"}],
+            "calendar_pressure": "moderate",
+        }
+
+        def db_side_effect():
+            ctx = MagicMock()
+            conn = MagicMock()
+            cur = MagicMock()
+            cur.__enter__ = MagicMock(return_value=cur)
+            cur.__exit__ = MagicMock(return_value=False)
+            conn.__enter__ = MagicMock(return_value=conn)
+            conn.__exit__ = MagicMock(return_value=False)
+            conn.cursor = MagicMock(return_value=cur)
+            cur.fetchall.return_value = [{"id": "user-veto-1"}]
+            cur.fetchone.return_value = None  # no dedup
+            ctx.__enter__ = MagicMock(return_value=conn)
+            ctx.__exit__ = MagicMock(return_value=False)
+            return ctx
+
+        mock_response = MagicMock()
+        mock_response.content = "Plan: do A, then B."
+
+        async def _veto(user_id, notification_type, content, urgency="low", metadata=None):
+            return (False, content)
+
+        with patch(
+            "services.scheduler.get_db_connection", side_effect=db_side_effect
+        ), patch(
+            "services.context_snapshot.ContextSnapshotService.compute",
+            return_value=snapshot,
+        ), patch(
+            "services.context_manager.ContextManager"
+        ), patch("langchain_groq.ChatGroq") as mock_llm_cls, patch(
+            "services.scheduler.gate_proactive_notification", side_effect=_veto
+        ), patch(
+            "routes.notifications.create_notification"
+        ) as mock_create_notification:
+            mock_llm_cls.return_value.ainvoke = AsyncMock(return_value=mock_response)
+            await sched._generate_daily_focus_plan()
+
+        # create_notification must NOT be called when ESL vetoes
+        assert mock_create_notification.call_count == 0
+
+    @pytest.mark.asyncio
+    async def test_pre_meeting_brief_uses_modified_content(self):
+        """When ESL MODIFIES, create_notification must use the modified text."""
+        sched = make_scheduler()
+        now = datetime.utcnow()
+        event_start = now + timedelta(minutes=30)
+
+        call_count = {"n": 0}
+
+        def db_side_effect():
+            ctx = MagicMock()
+            conn = MagicMock()
+            cur = MagicMock()
+            cur.__enter__ = MagicMock(return_value=cur)
+            cur.__exit__ = MagicMock(return_value=False)
+            conn.__enter__ = MagicMock(return_value=conn)
+            conn.__exit__ = MagicMock(return_value=False)
+            conn.cursor = MagicMock(return_value=cur)
+            call_count["n"] += 1
+            n = call_count["n"]
+            if n == 1:
+                cur.fetchall.return_value = [
+                    {
+                        "user_id": "user-mod-1",
+                        "title": "Strategy Meeting",
+                        "start_time": event_start,
+                        "location": "Room 1",
+                        "description": None,
+                    }
+                ]
+            else:
+                cur.fetchone.return_value = None  # no dedup
+            ctx.__enter__ = MagicMock(return_value=conn)
+            ctx.__exit__ = MagicMock(return_value=False)
+            return ctx
+
+        mock_response = MagicMock()
+        mock_response.content = "Original LLM brief text."
+
+        modified_text = "ESL modified safer text."
+
+        async def _modify(user_id, notification_type, content, urgency="low", metadata=None):
+            return (True, modified_text)
+
+        captured = {}
+
+        def fake_create_notification(conn, **kwargs):
+            captured.update(kwargs)
+            return None
+
+        # Patch the active goals call on the ContextManager so it returns []
+        ctx_mgr_inst = MagicMock()
+        ctx_mgr_inst.get_active_goals = AsyncMock(return_value=[])
+
+        with patch(
+            "services.scheduler.get_db_connection", side_effect=db_side_effect
+        ), patch(
+            "services.context_manager.ContextManager", return_value=ctx_mgr_inst
+        ), patch("langchain_groq.ChatGroq") as mock_llm_cls, patch(
+            "services.scheduler.gate_proactive_notification", side_effect=_modify
+        ), patch(
+            "routes.notifications.create_notification", side_effect=fake_create_notification
+        ):
+            mock_llm_cls.return_value.ainvoke = AsyncMock(return_value=mock_response)
+            await sched._generate_pre_meeting_briefs()
+
+        assert captured.get("message") == modified_text[:500]
+        assert captured.get("message") != "Original LLM brief text."
+
+    @pytest.mark.asyncio
+    async def test_deadline_warning_records_telemetry_row(self):
+        """deadline_warning flow must call record_tool_call with correct fields."""
+        sched = make_scheduler()
+        now = datetime.utcnow()
+        task_row = {
+            "id": "task-tele-1",
+            "user_id": "user-tele-1",
+            "title": "File taxes",
+            "due_date": now + timedelta(hours=2),
+            "priority": 9,
+            "project_title": "Personal",
+        }
+
+        call_count = {"n": 0}
+
+        def db_side_effect():
+            ctx = MagicMock()
+            conn = MagicMock()
+            cur = MagicMock()
+            cur.__enter__ = MagicMock(return_value=cur)
+            cur.__exit__ = MagicMock(return_value=False)
+            conn.__enter__ = MagicMock(return_value=conn)
+            conn.__exit__ = MagicMock(return_value=False)
+            conn.cursor = MagicMock(return_value=cur)
+            call_count["n"] += 1
+            n = call_count["n"]
+            if n == 1:
+                cur.fetchall.return_value = [task_row]
+            else:
+                cur.fetchone.return_value = None
+            ctx.__enter__ = MagicMock(return_value=conn)
+            ctx.__exit__ = MagicMock(return_value=False)
+            return ctx
+
+        record_calls = []
+
+        def fake_record_tool_call(**kwargs):
+            record_calls.append(kwargs)
+            return ""
+
+        telemetry_inst = MagicMock()
+        telemetry_inst.record_tool_call = MagicMock(side_effect=fake_record_tool_call)
+
+        async def _approve(user_id, notification_type, content, urgency="low", metadata=None):
+            return (True, content)
+
+        with patch(
+            "services.scheduler.get_db_connection", side_effect=db_side_effect
+        ), patch(
+            "services.scheduler.gate_proactive_notification", side_effect=_approve
+        ), patch(
+            "services.scheduler.ToolTelemetryService", return_value=telemetry_inst
+        ), patch(
+            "routes.notifications.create_notification"
+        ):
+            await sched._generate_deadline_warnings()
+
+        assert len(record_calls) >= 1
+        first = record_calls[0]
+        assert first.get("tool_name") == "deadline_warning"
+        assert first.get("source") == "scheduled"

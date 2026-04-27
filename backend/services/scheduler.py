@@ -11,6 +11,8 @@ from apscheduler.triggers.cron import CronTrigger
 from datetime import datetime
 
 from services.data_ingestion import DataIngestionService
+from services.proactive_gate import gate_proactive_notification
+from services.tool_telemetry import ToolTelemetryService
 from utils.db import get_db_connection
 
 logger = logging.getLogger(__name__)
@@ -387,16 +389,52 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                     response = await llm.ainvoke([HumanMessage(content=prompt)])
                     content = (response.content or "").strip()
 
-                    if content:
-                        with get_db_connection() as conn:
-                            create_notification(
-                                conn,
-                                user_id=user_id,
-                                type="info",
-                                title="Your weekly companion check-in",
-                                message=content[:500],
-                                metadata={"source": "weekly_digest"},
-                            )
+                    if not content:
+                        continue
+
+                    brief_content = content
+                    should_send, final_content = await gate_proactive_notification(
+                        user_id=user_id,
+                        notification_type="weekly_digest",
+                        content=brief_content,
+                        urgency="low",
+                        metadata={"source": "weekly_digest"},
+                    )
+                    esl_decision = (
+                        "VETOED"
+                        if not should_send
+                        else (
+                            "MODIFIED"
+                            if final_content != brief_content
+                            else "APPROVED"
+                        )
+                    )
+                    ToolTelemetryService().record_tool_call(
+                        user_id=user_id,
+                        tool_name="weekly_digest",
+                        source="scheduled",
+                        source_ref="weekly_digest",
+                        input={"prompt_inputs": {"goals": goal_text, "values": value_text}},
+                        output={"content": final_content},
+                        status="success" if should_send else "vetoed",
+                        esl_decision=esl_decision,
+                        latency_ms=None,
+                    )
+                    if not should_send:
+                        logger.info(
+                            f"⛔ ESL vetoed weekly_digest for user {user_id}"
+                        )
+                        continue
+                    content = final_content
+                    with get_db_connection() as conn:
+                        create_notification(
+                            conn,
+                            user_id=user_id,
+                            type="info",
+                            title="Your weekly companion check-in",
+                            message=content[:500],
+                            metadata={"source": "weekly_digest"},
+                        )
 
                 except Exception as e:
                     logger.warning(
@@ -502,22 +540,65 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                     response = await llm.ainvoke([HumanMessage(content=prompt)])
                     brief_text = (response.content or "").strip()
 
-                    if brief_text:
-                        with get_db_connection() as conn:
-                            create_notification(
-                                conn,
-                                user_id=user_id,
-                                type="brief",
-                                title=f"Pre-meeting brief: {event_title}",
-                                message=brief_text[:500],
-                                metadata={
-                                    "subtype": "pre_meeting_brief",
-                                    "event_title": event_title,
-                                    "event_start": event_start_iso,
-                                    "source": "scheduler",
-                                },
-                            )
-                        briefs_created += 1
+                    if not brief_text:
+                        continue
+
+                    brief_content = brief_text
+                    meta = {
+                        "subtype": "pre_meeting_brief",
+                        "event_title": event_title,
+                        "event_start": event_start_iso,
+                        "source": "scheduler",
+                    }
+                    should_send, final_content = await gate_proactive_notification(
+                        user_id=user_id,
+                        notification_type="pre_meeting_brief",
+                        content=brief_content,
+                        urgency="medium",
+                        metadata=meta,
+                    )
+                    esl_decision = (
+                        "VETOED"
+                        if not should_send
+                        else (
+                            "MODIFIED"
+                            if final_content != brief_content
+                            else "APPROVED"
+                        )
+                    )
+                    ToolTelemetryService().record_tool_call(
+                        user_id=user_id,
+                        tool_name="pre_meeting_brief",
+                        source="scheduled",
+                        source_ref="pre_meeting_brief",
+                        input={
+                            "prompt_inputs": {
+                                "event_title": event_title,
+                                "minutes_until": minutes_until,
+                                "goals": goal_text,
+                            }
+                        },
+                        output={"content": final_content},
+                        status="success" if should_send else "vetoed",
+                        esl_decision=esl_decision,
+                        latency_ms=None,
+                    )
+                    if not should_send:
+                        logger.info(
+                            f"⛔ ESL vetoed pre_meeting_brief for user {user_id}"
+                        )
+                        continue
+                    brief_text = final_content
+                    with get_db_connection() as conn:
+                        create_notification(
+                            conn,
+                            user_id=user_id,
+                            type="brief",
+                            title=f"Pre-meeting brief: {event_title}",
+                            message=brief_text[:500],
+                            metadata=meta,
+                        )
+                    briefs_created += 1
 
                 except Exception as e:
                     logger.warning(
@@ -620,19 +701,60 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                     response = await llm.ainvoke([HumanMessage(content=prompt)])
                     plan_text = (response.content or "").strip()
 
-                    if plan_text:
-                        with get_db_connection() as conn:
-                            create_notification(
-                                conn,
-                                user_id=user_id,
-                                type="info",
-                                title="Your focus for today",
-                                message=plan_text[:500],
-                                metadata={
-                                    "subtype": "daily_focus",
-                                    "source": "scheduler",
-                                },
-                            )
+                    if not plan_text:
+                        continue
+
+                    brief_content = plan_text
+                    meta = {"subtype": "daily_focus", "source": "scheduler"}
+                    should_send, final_content = await gate_proactive_notification(
+                        user_id=user_id,
+                        notification_type="daily_focus_plan",
+                        content=brief_content,
+                        urgency="low",
+                        metadata=meta,
+                    )
+                    esl_decision = (
+                        "VETOED"
+                        if not should_send
+                        else (
+                            "MODIFIED"
+                            if final_content != brief_content
+                            else "APPROVED"
+                        )
+                    )
+                    ToolTelemetryService().record_tool_call(
+                        user_id=user_id,
+                        tool_name="daily_focus_plan",
+                        source="scheduled",
+                        source_ref="daily_focus_plan",
+                        input={
+                            "prompt_inputs": {
+                                "events": events_text,
+                                "tasks": tasks_text,
+                                "goals": goals_text,
+                                "pressure": pressure,
+                            }
+                        },
+                        output={"content": final_content},
+                        status="success" if should_send else "vetoed",
+                        esl_decision=esl_decision,
+                        latency_ms=None,
+                    )
+                    if not should_send:
+                        logger.info(
+                            f"⛔ ESL vetoed daily_focus_plan for user {user_id}"
+                        )
+                        continue
+                    plan_text = final_content
+                    with get_db_connection() as conn:
+                        create_notification(
+                            conn,
+                            user_id=user_id,
+                            type="info",
+                            title="Your focus for today",
+                            message=plan_text[:500],
+                            metadata=meta,
+                        )
 
                 except Exception as e:
                     logger.warning(
@@ -708,6 +830,52 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                 context_note = f" ({project_title})" if project_title else ""
                 message = f"Due at {due_str}{context_note}. Don't let it slip through."
 
+                brief_content = message
+                meta = {
+                    "subtype": "deadline_warning",
+                    "task_id": task_id,
+                    "source": "scheduler",
+                }
+                should_send, final_content = await gate_proactive_notification(
+                    user_id=user_id,
+                    notification_type="deadline_warning",
+                    content=brief_content,
+                    urgency="medium",
+                    metadata=meta,
+                )
+                esl_decision = (
+                    "VETOED"
+                    if not should_send
+                    else (
+                        "MODIFIED"
+                        if final_content != brief_content
+                        else "APPROVED"
+                    )
+                )
+                ToolTelemetryService().record_tool_call(
+                    user_id=user_id,
+                    tool_name="deadline_warning",
+                    source="scheduled",
+                    source_ref="deadline_warning",
+                    input={
+                        "prompt_inputs": {
+                            "task_title": task_title,
+                            "task_id": task_id,
+                            "due_str": due_str,
+                        }
+                    },
+                    output={"content": final_content},
+                    status="success" if should_send else "vetoed",
+                    esl_decision=esl_decision,
+                    latency_ms=None,
+                )
+                if not should_send:
+                    logger.info(
+                        f"⛔ ESL vetoed deadline_warning for user {user_id}"
+                    )
+                    continue
+                message = final_content
+
                 with get_db_connection() as conn:
                     create_notification(
                         conn,
@@ -715,11 +883,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                         type="warning",
                         title=f"Due soon: {task_title}",
                         message=message,
-                        metadata={
-                            "subtype": "deadline_warning",
-                            "task_id": task_id,
-                            "source": "scheduler",
-                        },
+                        metadata=meta,
                     )
                 warnings_created += 1
 
@@ -826,21 +990,58 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                     response = await llm.ainvoke([HumanMessage(content=prompt)])
                     summary = (response.content or "").strip()
 
-                    if summary:
-                        with get_db_connection() as conn:
-                            create_notification(
-                                conn,
-                                user_id=user_id,
-                                type="info",
-                                title="Weekly project snapshot",
-                                message=summary[:500],
-                                metadata={
-                                    "subtype": "project_status_snapshot",
-                                    "project_count": len(user_projects),
-                                    "source": "scheduler",
-                                },
-                            )
-                        snapshots_created += 1
+                    if not summary:
+                        continue
+
+                    brief_content = summary
+                    meta = {
+                        "subtype": "project_status_snapshot",
+                        "project_count": len(user_projects),
+                        "source": "scheduler",
+                    }
+                    should_send, final_content = await gate_proactive_notification(
+                        user_id=user_id,
+                        notification_type="project_status_snapshot",
+                        content=brief_content,
+                        urgency="low",
+                        metadata=meta,
+                    )
+                    esl_decision = (
+                        "VETOED"
+                        if not should_send
+                        else (
+                            "MODIFIED"
+                            if final_content != brief_content
+                            else "APPROVED"
+                        )
+                    )
+                    ToolTelemetryService().record_tool_call(
+                        user_id=user_id,
+                        tool_name="project_status_snapshot",
+                        source="scheduled",
+                        source_ref="project_status_snapshot",
+                        input={"prompt_inputs": {"project_lines": project_lines}},
+                        output={"content": final_content},
+                        status="success" if should_send else "vetoed",
+                        esl_decision=esl_decision,
+                        latency_ms=None,
+                    )
+                    if not should_send:
+                        logger.info(
+                            f"⛔ ESL vetoed project_status_snapshot for user {user_id}"
+                        )
+                        continue
+                    summary = final_content
+                    with get_db_connection() as conn:
+                        create_notification(
+                            conn,
+                            user_id=user_id,
+                            type="info",
+                            title="Weekly project snapshot",
+                            message=summary[:500],
+                            metadata=meta,
+                        )
+                    snapshots_created += 1
 
                 except Exception as e:
                     logger.warning(
@@ -1007,6 +1208,46 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                         + "\nConsider linking them or reviewing them together."
                     )
 
+                    brief_content = message
+                    meta = {
+                        "subtype": "related_items_cluster",
+                        "cluster_keywords": [kw for kw, _ in top],
+                        "source": "scheduler",
+                    }
+                    should_send, final_content = await gate_proactive_notification(
+                        user_id=user_id,
+                        notification_type="related_items_cluster",
+                        content=brief_content,
+                        urgency="low",
+                        metadata=meta,
+                    )
+                    esl_decision = (
+                        "VETOED"
+                        if not should_send
+                        else (
+                            "MODIFIED"
+                            if final_content != brief_content
+                            else "APPROVED"
+                        )
+                    )
+                    ToolTelemetryService().record_tool_call(
+                        user_id=user_id,
+                        tool_name="related_items_cluster",
+                        source="scheduled",
+                        source_ref="related_items_cluster",
+                        input={"prompt_inputs": {"cluster_keywords": [kw for kw, _ in top]}},
+                        output={"content": final_content},
+                        status="success" if should_send else "vetoed",
+                        esl_decision=esl_decision,
+                        latency_ms=None,
+                    )
+                    if not should_send:
+                        logger.info(
+                            f"⛔ ESL vetoed related_items_cluster for user {user_id}"
+                        )
+                        continue
+                    message = final_content
+
                     with get_db_connection() as conn:
                         create_notification(
                             conn,
@@ -1014,11 +1255,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                             type="info",
                             title="Connected items this week",
                             message=message[:500],
-                            metadata={
-                                "subtype": "related_items_cluster",
-                                "cluster_keywords": [kw for kw, _ in top],
-                                "source": "scheduler",
-                            },
+                            metadata=meta,
                         )
                     notifications_created += 1
 
