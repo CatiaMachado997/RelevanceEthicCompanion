@@ -97,7 +97,8 @@ async def create_folder(
                     "SELECT COALESCE(MAX(position), -1) + 1 AS next_pos FROM folders WHERE user_id = %s",
                     (user_id,),
                 )
-                next_pos = cur.fetchone()["next_pos"]
+                row = cur.fetchone()
+                next_pos = row["next_pos"] if row else 0
             else:
                 next_pos = body.position
 
@@ -127,8 +128,8 @@ async def update_folder(
 ) -> dict:
     """Rename, recolour, or reorder a folder."""
     # Build dynamic SET clause from provided fields.
-    updates = []
-    params = []
+    updates: list[str] = []
+    params: list = []
     if body.name is not None:
         updates.append("name = %s")
         params.append(body.name.strip())
