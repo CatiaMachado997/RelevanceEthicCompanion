@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 import { ToolsLauncher } from '@/components/tools-launcher'
 import { DashboardHero, RecentConversations } from '@/components/dashboard-hero'
+import { WeeklyReviewCard } from '@/components/dashboard/WeeklyReviewCard'
 
 interface ESLLog {
   id?: string
@@ -97,6 +98,9 @@ export default function DashboardPage() {
 
       {/* ── Hero: greeting + quick actions ─────────────────────── */}
       <DashboardHero />
+
+      {/* ── Weekly review summary ──────────────────────────────── */}
+      <WeeklyReviewCard />
 
       {/* ── Tools launcher ─────────────────────────────────────── */}
       <ToolsLauncher />
