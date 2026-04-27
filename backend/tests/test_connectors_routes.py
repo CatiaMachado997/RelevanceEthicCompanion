@@ -19,15 +19,17 @@ from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 TEST_USER_ID = "00000000-0000-0000-0000-000000000000"
 
 
-def make_app(ingestion_mock):
+def make_app(ingestion_mock, indexer_mock=None):
     """Build a FastAPI app with the connectors router and overridden auth+DI."""
-    from routes.connectors import router, get_data_ingestion
+    from routes.connectors import router, get_data_ingestion, get_connector_indexer
 
     app = FastAPI()
     app.include_router(router, prefix="/api/connectors", tags=["connectors"])
     app.dependency_overrides[get_current_user_id] = lambda: TEST_USER_ID
     app.dependency_overrides[get_current_read_user_id] = lambda: TEST_USER_ID
     app.dependency_overrides[get_data_ingestion] = lambda: ingestion_mock
+    if indexer_mock is not None:
+        app.dependency_overrides[get_connector_indexer] = lambda: indexer_mock
     return app
 
 
@@ -152,3 +154,110 @@ def test_disconnect_calls_disconnect_data_source():
     ingestion_mock.disconnect_data_source.assert_awaited_once_with(
         TEST_USER_ID, "slack"
     )
+
+
+# ── Sprint F Task 2: reindex endpoint ────────────────────────────────────
+
+
+def _reindex_db_mock(stuck_rows):
+    """Mock get_db_connection; first cursor.fetchall() returns `stuck_rows`,
+    subsequent execute() calls (the per-row UPDATE) are no-ops."""
+    cursor = MagicMock()
+    cursor.fetchall.return_value = stuck_rows
+
+    conn = MagicMock()
+    conn.__enter__ = MagicMock(return_value=conn)
+    conn.__exit__ = MagicMock(return_value=False)
+    conn.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
+    conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+    return conn, cursor
+
+
+def test_reindex_returns_processed_succeeded_failed():
+    """POST /api/connectors/gmail/reindex calls indexer.index for each stuck
+    row and returns processed/succeeded/failed counts."""
+    stuck = [
+        {
+            "id": "row-1",
+            "user_id": TEST_USER_ID,
+            "source_type": "gmail",
+            "source_item_type": "email",
+            "external_id": "msg_1",
+            "title": "subj 1",
+            "body": "body 1",
+            "metadata": {},
+            "item_at": None,
+            "embedding_status": "failed",
+            "sensitivity": 0,
+        },
+        {
+            "id": "row-2",
+            "user_id": TEST_USER_ID,
+            "source_type": "gmail",
+            "source_item_type": "email",
+            "external_id": "msg_2",
+            "title": "subj 2",
+            "body": "body 2",
+            "metadata": {},
+            "item_at": None,
+            "embedding_status": None,
+            "sensitivity": 0,
+        },
+    ]
+    conn, _cur = _reindex_db_mock(stuck)
+
+    indexer_mock = MagicMock()
+    # First succeeds, second raises — exercises the failed-counter branch.
+    indexer_mock.index = AsyncMock(side_effect=[1, RuntimeError("weaviate down")])
+
+    app = make_app(MagicMock(), indexer_mock=indexer_mock)
+
+    with patch("routes.connectors.get_db_connection", return_value=conn):
+        with TestClient(app) as client:
+            resp = client.post("/api/connectors/gmail/reindex")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body == {"processed": 2, "succeeded": 1, "failed": 1}
+    assert indexer_mock.index.await_count == 2
+
+
+def test_reindex_excludes_completed_items():
+    """The SQL filter must skip rows where embedding_status='completed'.
+    We verify the SELECT contains the filter and that rows the mock returns
+    are the only ones the indexer sees."""
+    # Mock returns ZERO stuck rows (because all are 'completed' upstream).
+    conn, cur = _reindex_db_mock([])
+
+    indexer_mock = MagicMock()
+    indexer_mock.index = AsyncMock(return_value=1)
+
+    app = make_app(MagicMock(), indexer_mock=indexer_mock)
+
+    with patch("routes.connectors.get_db_connection", return_value=conn):
+        with TestClient(app) as client:
+            resp = client.post("/api/connectors/gmail/reindex")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"processed": 0, "succeeded": 0, "failed": 0}
+    # No items → indexer never called.
+    indexer_mock.index.assert_not_awaited()
+
+    # Verify the SQL filters out completed rows.
+    select_call = cur.execute.call_args_list[0]
+    sql = select_call.args[0]
+    assert "embedding_status" in sql
+    assert "!= 'completed'" in sql
+    assert "LIMIT 200" in sql
+
+
+def test_reindex_rejects_unsupported_source():
+    indexer_mock = MagicMock()
+    indexer_mock.index = AsyncMock()
+    app = make_app(MagicMock(), indexer_mock=indexer_mock)
+
+    with TestClient(app) as client:
+        resp = client.post("/api/connectors/notion/reindex")
+
+    assert resp.status_code == 400
+    indexer_mock.index.assert_not_awaited()

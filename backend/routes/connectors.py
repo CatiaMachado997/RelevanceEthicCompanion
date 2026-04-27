@@ -17,6 +17,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from services.data_ingestion import DataIngestionService
+from services.connector_indexer import ConnectorIndexer
+from services.connectors.base import SourceItem
 from services.context_manager import ContextManager
 from services.embedding_service import EmbeddingService
 from utils.db import get_db_connection
@@ -134,6 +136,103 @@ async def trigger_backfill(
         # raw exception text in production. The job_id is unrecoverable here
         # because start_backfill only returns it on success.
         return {"job_id": "", "status": "failed"}
+
+
+def get_connector_indexer() -> ConnectorIndexer:
+    """FastAPI dependency for ConnectorIndexer; tests override with a mock."""
+    return ConnectorIndexer()
+
+
+@router.post("/{source_type}/reindex")
+async def reindex_source(
+    source_type: str,
+    user_id: str = Depends(get_current_user_id),
+    indexer: ConnectorIndexer = Depends(get_connector_indexer),
+) -> Dict[str, Any]:
+    """Retry indexing for items where embedding_status != 'completed'.
+
+    Pulls up to 200 stuck rows for `(user_id, source_type)`, calls
+    `ConnectorIndexer.index()` directly on each (so per-item failures count
+    rather than being silently swallowed by `_maybe_embed`), and on success
+    flips the row to 'completed'.
+
+    No ESL gate — this is operational/internal, matching the
+    `tool_telemetry.record_tool_call` precedent.
+    """
+    if source_type not in SUPPORTED:
+        raise HTTPException(status_code=400, detail=f"unsupported source: {source_type}")
+
+    rows: list[dict] = []
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, user_id, source_type, source_item_type, external_id,
+                       title, body, metadata, item_at, embedding_status, sensitivity
+                FROM source_items
+                WHERE user_id = %s
+                  AND source_type = %s
+                  AND (embedding_status IS NULL OR embedding_status != 'completed')
+                LIMIT 200
+                """,
+                (user_id, source_type),
+            )
+            rows = list(cur.fetchall() or [])
+
+    processed = 0
+    succeeded = 0
+    for row in rows:
+        processed += 1
+        try:
+            metadata = row.get("metadata") or {}
+            if isinstance(metadata, str):
+                # Defensive: psycopg may return JSONB as text in some configs.
+                import json as _json
+                try:
+                    metadata = _json.loads(metadata)
+                except Exception:
+                    metadata = {}
+            item_at = row.get("item_at")
+            item = SourceItem(
+                user_id=str(row.get("user_id")),
+                source_type=row.get("source_type"),
+                source_item_type=row.get("source_item_type"),
+                external_id=row.get("external_id"),
+                title=row.get("title") or "",
+                body=row.get("body"),
+                metadata=metadata,
+                item_at=item_at.isoformat() if hasattr(item_at, "isoformat") else item_at,
+                embedding_status=row.get("embedding_status") or "pending",
+                sensitivity=row.get("sensitivity") or 0,
+            )
+            await indexer.index(item)
+            # Mirror data_ingestion._maybe_embed: mark completed + clear error.
+            try:
+                with get_db_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """UPDATE source_items
+                                  SET embedding_status = 'completed',
+                                      embedding_error = NULL
+                                WHERE user_id = %s
+                                  AND source_type = %s
+                                  AND external_id = %s""",
+                            (item.user_id, item.source_type, item.external_id),
+                        )
+                    conn.commit()
+            except Exception as db_exc:
+                logger.warning(f"⚠️ reindex completed-update failed for {item.external_id}: {db_exc}")
+            succeeded += 1
+        except Exception as e:
+            # ConnectorIndexer already wrote 'failed' + embedding_error and
+            # emitted telemetry before re-raising. Just keep the batch going.
+            logger.info(f"reindex item failed ({source_type}/{row.get('external_id')}): {e}")
+
+    return {
+        "processed": processed,
+        "succeeded": succeeded,
+        "failed": processed - succeeded,
+    }
 
 
 @router.delete("/{source_type}")
