@@ -28,7 +28,8 @@ def _db(fetchone_seq):
 
 def test_overview_returns_all_counts():
     client = _client()
-    # One fetchone per COUNT query, in the order: goals, tasks, projects, values, documents, transparency, notifications.
+    # One fetchone per COUNT query, in order:
+    # goals, tasks, projects, values, documents, transparency, notifications.
     counts = [
         {"cnt": 3},
         {"cnt": 8},

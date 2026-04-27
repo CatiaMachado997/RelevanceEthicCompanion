@@ -1,7 +1,6 @@
 # backend/tests/test_context_snapshot.py
 """Tests for ContextSnapshotService and GET /api/context/snapshot."""
 
-import pytest
 from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
