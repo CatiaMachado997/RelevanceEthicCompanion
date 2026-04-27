@@ -18,6 +18,7 @@ import { api } from "@/lib/api"
 import type { Folder } from "@/lib/api"
 import { toast } from "@/lib/toast"
 import { UserStatus } from "@/components/UserStatus"
+import { SetupNudge } from "@/components/onboarding/SetupNudge"
 
 interface Conversation {
   id: string
@@ -304,6 +305,9 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
           Ethic Companion
         </span>
       </div>
+
+      {/* First-run nudge (renders nothing once user has completed setup or dismissed) */}
+      <SetupNudge />
 
       {/* Primary nav */}
       <nav className="flex-1 flex flex-col gap-0.5 px-2 py-3 overflow-y-auto">
