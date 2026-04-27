@@ -46,8 +46,11 @@ async def lifespan(app: FastAPI):
     open_pool()
 
     try:
-        run_migrations()
-        logger.info("Database migrations up to date")
+        n_applied = run_migrations()
+        if n_applied:
+            logger.info(f"applied {n_applied} migration(s)")
+        else:
+            logger.info("schema up to date")
     except Exception:
         logger.exception("Migration failed on startup; refusing to serve traffic")
         raise
