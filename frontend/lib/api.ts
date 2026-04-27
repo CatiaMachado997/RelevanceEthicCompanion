@@ -429,6 +429,14 @@ export const chatApi = {
 
 // ==================== Goals API ====================
 
+export interface GoalRollup {
+  milestones_total: number
+  milestones_hit: number
+  tasks_total: number
+  tasks_done: number
+  progress_pct: number
+}
+
 export interface Goal {
   id: string
   user_id: string
@@ -441,6 +449,7 @@ export interface Goal {
   created_at: string
   completed_at: string | null
   metadata?: Record<string, unknown>
+  rollup?: GoalRollup
 }
 
 export interface Milestone {
@@ -928,6 +937,14 @@ export const documentsApi = {
 
 // ==================== Projects API ====================
 
+export interface ProjectRollup {
+  tasks_total: number
+  tasks_done: number
+  tasks_open: number
+  at_risk_count: number
+  completion_pct: number
+}
+
 export interface Project {
   id: string;
   user_id: string;
@@ -937,6 +954,7 @@ export interface Project {
   goal_id: string | null;
   created_at: string | null;
   updated_at: string | null;
+  rollup?: ProjectRollup;
 }
 
 export const projectsApi = {
@@ -976,6 +994,7 @@ export interface Task {
   id: string;
   user_id: string;
   project_id: string | null;
+  goal_id?: string | null;
   title: string;
   description: string | null;
   status: 'todo' | 'in_progress' | 'done' | 'cancelled';
@@ -986,6 +1005,13 @@ export interface Task {
   user_confirmed: boolean;
   created_at: string | null;
   updated_at: string | null;
+}
+
+export interface TaskDependency {
+  task_id: string;
+  title: string;
+  status: string;
+  depth: number;
 }
 
 export interface ExtractedTask {
@@ -1049,6 +1075,7 @@ export const tasksApi = {
     title: string;
     description?: string;
     project_id?: string;
+    goal_id?: string | null;
     priority?: number;
     due_date?: string;
     source_origin?: string;
@@ -1060,7 +1087,7 @@ export const tasksApi = {
     })
   },
 
-  update: async (id: string, data: Partial<Pick<Task, 'title' | 'description' | 'status' | 'priority' | 'due_date' | 'project_id'>>): Promise<Task> => {
+  update: async (id: string, data: Partial<Pick<Task, 'title' | 'description' | 'status' | 'priority' | 'due_date' | 'project_id' | 'goal_id'>>): Promise<Task> => {
     return apiRequest<Task>(`/api/tasks/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
@@ -1077,6 +1104,23 @@ export const tasksApi = {
     return apiRequest<{ suggestions: ExtractedTask[] }>('/api/tasks/extract', {
       method: 'POST',
       body: JSON.stringify({ text }),
+    })
+  },
+
+  listDependencies: async (taskId: string): Promise<{ blockers: TaskDependency[]; blocked_by: TaskDependency[] }> => {
+    return apiRequest<{ blockers: TaskDependency[]; blocked_by: TaskDependency[] }>(`/api/tasks/${taskId}/dependencies`)
+  },
+
+  addDependency: async (taskId: string, dependsOnTaskId: string): Promise<{ ok: true }> => {
+    return apiRequest<{ ok: true }>(`/api/tasks/${taskId}/dependencies`, {
+      method: 'POST',
+      body: JSON.stringify({ depends_on_task_id: dependsOnTaskId }),
+    })
+  },
+
+  removeDependency: async (taskId: string, dependsOnTaskId: string): Promise<{ removed: boolean }> => {
+    return apiRequest<{ removed: boolean }>(`/api/tasks/${taskId}/dependencies/${dependsOnTaskId}`, {
+      method: 'DELETE',
     })
   },
 }
@@ -1254,6 +1298,24 @@ export const connectorsApi = {
     ),
 }
 
+// ==================== Weekly Review API (Sprint D) ====================
+
+export interface WeeklyReview {
+  period: { start: string; end: string }
+  completed_tasks: Array<{ id: string; title: string; completed_at: string; project_id?: string | null; goal_id?: string | null }>
+  completed_milestones: Array<{ id: string; title: string; goal_id: string; completed_at: string }>
+  carry_over_tasks: Array<{ id: string; title: string; due_date: string | null; status: string }>
+  upcoming_tasks: Array<{ id: string; title: string; due_date: string | null; status: string }>
+  upcoming_milestones: Array<{ id: string; title: string; goal_id: string; target_date: string }>
+}
+
+export const weeklyReviewApi = {
+  get: (weekStart?: string): Promise<WeeklyReview> => {
+    const query = weekStart ? `?week_start=${encodeURIComponent(weekStart)}` : ''
+    return apiRequest<WeeklyReview>(`/api/weekly-review${query}`)
+  },
+}
+
 export function listConnectors() {
   return connectorsApi.list()
 }
@@ -1287,6 +1349,7 @@ export const api = {
   profile: profileApi,
   dashboard: dashboardApi,
   connectors: connectorsApi,
+  weeklyReview: weeklyReviewApi,
 };
 
 export default api;
