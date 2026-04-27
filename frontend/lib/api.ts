@@ -1205,6 +1205,29 @@ export const foldersApi = {
   },
 }
 
+// ==================== AutoLab / Insights API ====================
+
+export interface InsightsResponse {
+  daily_insight: string
+  autolab: {
+    best_scores: Record<string, number | null>
+    total_trials: number
+    total_wins: number
+  }
+  recent_experiments: Array<{
+    track: string
+    trial: number | null
+    score: number | null
+    outcome: string | null
+    hypothesis: string
+  }>
+}
+
+export const autolabApi = {
+  insights: () => apiRequest<InsightsResponse>('/api/insights'),
+  status: () => apiRequest<Record<string, unknown>>('/api/autolab/status'),
+}
+
 // ==================== Dashboard API ====================
 
 export interface DashboardOverview {
@@ -1241,6 +1264,7 @@ export const api = {
   folders: foldersApi,
   profile: profileApi,
   dashboard: dashboardApi,
+  autolab: autolabApi,
 };
 
 export default api;

@@ -7,7 +7,7 @@ import {
   Plus, Pencil, Trash2, Check, X, FolderPlus, Folder as FolderIcon,
   ChevronRight, ChevronDown, Bell, Eye, UserCircle,
   LayoutDashboard, MoreHorizontal, Target, CheckSquare, FolderOpen,
-  Heart, FileText,
+  Heart, FileText, Zap,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/useAuth"
@@ -64,6 +64,7 @@ const MORE_ITEMS = [
   { href: "/dashboard/documents",     label: "Documents",     icon: FileText },
   { href: "/dashboard/transparency",  label: "Transparency",  icon: Eye },
   { href: "/dashboard/notifications", label: "Notifications", icon: Bell },
+  { href: "/dashboard/insights",      label: "Insights",      icon: Zap },
 ]
 
 interface SidebarNavProps {
