@@ -251,6 +251,46 @@ def test_reindex_excludes_completed_items():
     assert "LIMIT 200" in sql
 
 
+def test_status_returns_counts_and_last_error():
+    """GET /api/connectors/gmail/status returns the per-status counts and last
+    failure error from a single SQL round-trip."""
+    last_sync = datetime(2026, 4, 27, 10, 30, tzinfo=timezone.utc)
+    status_row = {
+        "total_items": 47,
+        "indexed": 44,
+        "failed": 3,
+        "pending": 0,
+        "last_sync_at": last_sync,
+        "last_error": "Weaviate connection refused",
+    }
+    conn, _cur = _make_db_mock([status_row])
+
+    app = make_app(MagicMock())
+
+    with patch("routes.connectors.get_db_connection", return_value=conn):
+        with TestClient(app) as client:
+            resp = client.get("/api/connectors/gmail/status")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body == {
+        "source": "gmail",
+        "last_sync_at": last_sync.isoformat(),
+        "total_items": 47,
+        "indexed": 44,
+        "failed": 3,
+        "pending": 0,
+        "last_error": "Weaviate connection refused",
+    }
+
+
+def test_status_rejects_unsupported_source():
+    app = make_app(MagicMock())
+    with TestClient(app) as client:
+        resp = client.get("/api/connectors/notion/status")
+    assert resp.status_code == 400
+
+
 def test_reindex_rejects_unsupported_source():
     indexer_mock = MagicMock()
     indexer_mock.index = AsyncMock()

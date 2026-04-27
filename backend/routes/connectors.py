@@ -143,6 +143,59 @@ def get_connector_indexer() -> ConnectorIndexer:
     return ConnectorIndexer()
 
 
+@router.get("/{source_type}/status")
+async def connector_status(
+    source_type: str,
+    user_id: str = Depends(get_current_read_user_id),
+) -> Dict[str, Any]:
+    """Per-connector indexing health (Sprint F Task 3).
+
+    Returns counts by `embedding_status` plus the most recent failure message,
+    so the connectors panel can show users what's actually flowing through the
+    sync→index pipeline.
+    """
+    if source_type not in SUPPORTED:
+        raise HTTPException(status_code=400, detail=f"unsupported source: {source_type}")
+
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    COUNT(*) AS total_items,
+                    COUNT(*) FILTER (WHERE embedding_status = 'completed') AS indexed,
+                    COUNT(*) FILTER (WHERE embedding_status = 'failed') AS failed,
+                    COUNT(*) FILTER (WHERE embedding_status = 'pending' OR embedding_status IS NULL) AS pending,
+                    MAX(created_at) AS last_sync_at,
+                    (
+                        SELECT embedding_error
+                        FROM source_items
+                        WHERE user_id = %s
+                          AND source_type = %s
+                          AND embedding_status = 'failed'
+                          AND embedding_error IS NOT NULL
+                        ORDER BY created_at DESC
+                        LIMIT 1
+                    ) AS last_error
+                FROM source_items
+                WHERE user_id = %s AND source_type = %s
+                """,
+                (user_id, source_type, user_id, source_type),
+            )
+            row = cur.fetchone() or {}
+
+    last_sync_at = row.get("last_sync_at")
+    return {
+        "source": source_type,
+        "last_sync_at": last_sync_at.isoformat() if hasattr(last_sync_at, "isoformat") and last_sync_at else None,
+        "total_items": int(row.get("total_items") or 0),
+        "indexed": int(row.get("indexed") or 0),
+        "failed": int(row.get("failed") or 0),
+        "pending": int(row.get("pending") or 0),
+        "last_error": row.get("last_error"),
+    }
+
+
 @router.post("/{source_type}/reindex")
 async def reindex_source(
     source_type: str,

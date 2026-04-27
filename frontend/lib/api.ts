@@ -1330,6 +1330,26 @@ export interface ConnectorStatus {
   error: string | null
 }
 
+/**
+ * Per-connector indexing health (Sprint F Task 3).
+ * Returned from `GET /api/connectors/{source}/status`.
+ */
+export interface ConnectorIndexStatus {
+  source: string
+  last_sync_at: string | null
+  total_items: number
+  indexed: number
+  failed: number
+  pending: number
+  last_error: string | null
+}
+
+export interface ReindexResult {
+  processed: number
+  succeeded: number
+  failed: number
+}
+
 export const connectorsApi = {
   list: (): Promise<{ connectors: ConnectorStatus[] }> =>
     apiRequest<{ connectors: ConnectorStatus[] }>('/api/connectors'),
@@ -1357,6 +1377,14 @@ export const connectorsApi = {
       `/api/connectors/${sourceType}`,
       { method: 'DELETE' },
     ),
+
+  getStatus: (sourceType: string): Promise<ConnectorIndexStatus> =>
+    apiRequest<ConnectorIndexStatus>(`/api/connectors/${sourceType}/status`),
+
+  reindex: (sourceType: string): Promise<ReindexResult> =>
+    apiRequest<ReindexResult>(`/api/connectors/${sourceType}/reindex`, {
+      method: 'POST',
+    }),
 }
 
 // ==================== Weekly Review API (Sprint D) ====================
