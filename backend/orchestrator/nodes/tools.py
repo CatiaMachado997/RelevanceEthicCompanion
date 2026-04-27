@@ -200,6 +200,12 @@ def _build_system_prompt(state: AgentState) -> str:
     if context_block:
         prompt += f"\n\n{context_block}"
     prompt += "\n\nAnswer helpfully and concisely. Use tools when you need live data beyond what's shown above."
+    prompt += (
+        "\n\nWhen the user asks a knowledge-recall question about their own "
+        "workspace — e.g. what someone said, decisions made, past emails or "
+        "threads, or 'the latest on' a topic — prefer calling `search_documents` "
+        "first rather than answering from training or memory."
+    )
 
     return prompt
 

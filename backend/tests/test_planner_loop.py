@@ -232,6 +232,82 @@ async def test_max_planner_steps_caps_loop(
     assert state["planner_step"] == 3
 
 
+# ===== Sprint F Task 7: bias toward search_documents on knowledge queries =====
+
+
+def test_system_prompt_biases_toward_search_documents():
+    """The orchestrator system prompt must explicitly nudge the planner to
+    call `search_documents` for knowledge-recall questions. Catches drift."""
+    from orchestrator.nodes.tools import _build_system_prompt
+
+    state = _base_state()
+    prompt = _build_system_prompt(state)
+
+    assert "search_documents" in prompt
+    assert "knowledge-recall" in prompt or "knowledge recall" in prompt.lower()
+
+
+def test_search_documents_tool_description_lists_sample_queries():
+    """The tool description must enumerate the trigger phrasings so
+    tool-call-trained models pick it up reliably."""
+    from services.langchain_tools import SearchDocumentsTool
+
+    desc = SearchDocumentsTool.model_fields["description"].default
+    # Sample-query bullets must be present.
+    assert "what did" in desc
+    assert "find the" in desc
+    assert "summarize discussions" in desc
+    assert "remind me what we decided" in desc
+    assert "latest on" in desc
+
+
+@pytest.mark.asyncio
+@patch("services.langchain_tools.create_langchain_tools")
+@patch("langchain_groq.ChatGroq")
+@patch("orchestrator.nodes.tools.get_context_manager")
+@pytest.mark.parametrize(
+    "user_message",
+    [
+        "what did the team say about Project Atlas last week",
+        "find that email about the Q3 budget",
+        "summarize what we decided about onboarding",
+    ],
+)
+async def test_planner_emits_search_documents_for_knowledge_queries(
+    mock_cm, mock_groq_cls, mock_create_tools, user_message
+):
+    """With a stub LLM that follows tool-call instructions, the planner
+    should emit a `search_documents` tool call for these query shapes.
+    Asserts prompt + tool description pass through to state correctly."""
+    from orchestrator.nodes.tools import tool_planner_node
+
+    mock_cm.return_value = MagicMock()
+    tool_search = _mock_tool("search_documents", "results")
+    mock_create_tools.return_value = [tool_search]
+
+    planner_with_tools = MagicMock()
+    planner_with_tools.ainvoke = AsyncMock(
+        return_value=_planner_response(
+            tool_calls=[
+                {
+                    "name": "search_documents",
+                    "args": {"query": user_message, "k": 5},
+                    "id": "kq_1",
+                }
+            ]
+        )
+    )
+    llm = MagicMock()
+    llm.bind_tools = MagicMock(return_value=planner_with_tools)
+    mock_groq_cls.return_value = llm
+
+    state = _base_state(message=user_message)
+    out = await tool_planner_node(state)
+
+    assert len(out["tool_calls"]) == 1
+    assert out["tool_calls"][0]["name"] == "search_documents"
+
+
 @pytest.mark.asyncio
 @patch("services.langchain_tools.create_langchain_tools")
 @patch("langchain_groq.ChatGroq")

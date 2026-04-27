@@ -419,12 +419,18 @@ class SearchDocumentsTool(BaseTool):
 
     name: str = "search_documents"
     description: str = (
-        "Search the user's indexed knowledge — uploaded documents, recent emails "
-        "(Gmail), and Slack messages — for passages relevant to the query. Use "
-        "this whenever the user asks a question that could plausibly be answered "
-        "by their own files, inbox, or conversations. Returns ranked excerpts "
-        "with attribution (source_type indicates whether each result came from a "
-        "document, an email, or a Slack message)."
+        "Search the user's indexed documents and connector content (Gmail, Slack, "
+        "uploaded docs) for passages relevant to the query. Use this whenever the "
+        "user asks about specific past events, decisions, or content from their "
+        "workspace — including phrasings like:\n"
+        "  • \"what did <person/team> say about <topic>\"\n"
+        "  • \"find the <email/thread/doc> about <topic>\"\n"
+        "  • \"summarize discussions about <topic>\"\n"
+        "  • \"remind me what we decided about <topic>\"\n"
+        "  • \"what's the latest on <topic>\"\n"
+        "Returns up to k ranked excerpts with source citations (source_type "
+        "indicates document, email, or Slack message). Prefer this over guessing "
+        "from memory."
     )
     args_schema: Type[BaseModel] = SearchDocumentsInput
 
