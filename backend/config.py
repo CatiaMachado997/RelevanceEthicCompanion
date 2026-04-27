@@ -144,6 +144,11 @@ class Settings(BaseSettings):
     # Get your key free at https://app.composio.dev/settings (API Keys tab)
     COMPOSIO_API_KEY: str = ""
 
+    # Jina reranker (Sprint G Task 3) — optional cross-encoder rerank pass
+    # over hybrid-search results. Empty key → graceful no-op fallback.
+    JINA_API_KEY: str = ""
+    RERANK_MODEL: str = "jina-reranker-v2-base-multilingual"
+
     # Backend URL for OAuth redirects
     BACKEND_URL: str = "http://localhost:8000"
 

@@ -138,7 +138,9 @@ async def test_retrieve_passes_user_id_and_query_to_hybrid_search():
     assert kwargs["user_id"] == USER_ID
     assert kwargs["query"] == "policies"
     assert kwargs["query_vector"] == [0.7]
-    assert kwargs["limit"] == 5
+    # Sprint G Task 3: hybrid search now pulls a wider pool (floor 20) so the
+    # cross-encoder reranker has meaningful candidates; rerank trims back to k.
+    assert kwargs["limit"] == 20
     # 2026 best practice: alpha=0.7 favors dense vector but keeps BM25 contribution
     assert kwargs["alpha"] == 0.7
 
