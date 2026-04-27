@@ -9,13 +9,11 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
-import json
 import logging
 import os
-import sys
 from pathlib import Path
 from types import ModuleType
-from typing import Optional
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +78,7 @@ def _judge_response(
     assistant_response: str,
     expected_theme: str,
     judge_prompt: str,
-    groq_client,
+    groq_client: Any,
     judge_model: str,
     judge_temperature: float,
 ) -> float:
@@ -168,7 +166,7 @@ def evaluate_prompts(surface_path: Path) -> Optional[float]:
             assistant_text = response.choices[0].message.content or ""
         except Exception as e:
             logger.warning(f"Groq API call failed for '{user_message}': {e}")
-            return None
+            continue  # skip this conversation; partial scores still returned
 
         score = _judge_response(
             user_message=user_message,

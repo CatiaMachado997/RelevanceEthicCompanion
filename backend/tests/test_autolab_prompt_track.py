@@ -19,8 +19,9 @@ EVALUATOR_PATH = (
 
 def _load_module(path: Path, name: str):
     spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None, f"Could not load module from {path}"
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    spec.loader.exec_module(module)  # type: ignore[union-attr]
     return module
 
 
@@ -56,9 +57,6 @@ def test_evaluate_prompts_returns_none_without_api_key(tmp_path):
     evaluator = _load_module(EVALUATOR_PATH, "prompt_opt_evaluator_nokey")
 
     with patch.dict("os.environ", {}, clear=True):
-        # Remove GROQ_API_KEY if present
-        import os
-        os.environ.pop("GROQ_API_KEY", None)
         result = evaluator.evaluate_prompts(tmp_path / "surface.py")
 
     assert result is None
@@ -79,3 +77,43 @@ def test_evaluate_prompts_returns_none_on_bad_surface(tmp_path):
             result = evaluator.evaluate_prompts(bad_surface)
 
     assert result is None
+
+
+def test_evaluate_prompts_returns_float_in_range(tmp_path):
+    """evaluate_prompts returns a float in [0.0, 1.0] when Groq is mocked."""
+    import shutil
+    shutil.copy(SURFACE_PATH, tmp_path / "surface.py")
+
+    evaluator = _load_module(EVALUATOR_PATH, "prompt_opt_evaluator_happy")
+
+    # Build a mock Groq client that returns deterministic text for any call
+    def _make_completion(content: str):
+        msg = MagicMock()
+        msg.content = content
+        choice = MagicMock()
+        choice.message = msg
+        completion = MagicMock()
+        completion.choices = [choice]
+        return completion
+
+    mock_client = MagicMock()
+    # First call (assistant response) returns "Helpful response."
+    # Second call (judge) returns "0.8"
+    mock_client.chat.completions.create.side_effect = [
+        _make_completion("Helpful response.")
+        if i % 2 == 0
+        else _make_completion("0.8")
+        for i in range(60)  # 30 conversations × 2 calls each
+    ]
+
+    mock_groq_class = MagicMock(return_value=mock_client)
+    mock_groq_module = MagicMock()
+    mock_groq_module.Groq = mock_groq_class
+
+    with patch.dict("os.environ", {"GROQ_API_KEY": "test-key"}):
+        with patch.dict("sys.modules", {"groq": mock_groq_module}):
+            result = evaluator.evaluate_prompts(tmp_path / "surface.py")
+
+    assert result is not None
+    assert isinstance(result, float)
+    assert 0.0 <= result <= 1.0
