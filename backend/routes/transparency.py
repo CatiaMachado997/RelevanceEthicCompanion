@@ -5,12 +5,14 @@ Critical for trust: Users can see ALL ESL decisions and reasoning.
 No hidden behavior, complete transparency.
 """
 
+from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends
-from typing import Optional
+from typing import Any, Dict, Optional
 from pydantic import BaseModel
 
 # OrchestratorV2 imported lazily inside get_orchestrator() below
 from services.context_manager import ContextManager
+from services.tool_telemetry import ToolTelemetryService
 from esl.audit import ESLAuditLogger
 from utils.db import get_db_connection
 from utils.supabase_auth import get_current_read_user_id
@@ -72,6 +74,11 @@ def get_orchestrator():
 
     context_manager = ContextManager()
     return OrchestratorV2(context_manager)
+
+
+def get_tool_telemetry_service() -> ToolTelemetryService:
+    """Factory for ``ToolTelemetryService`` (overridable in tests)."""
+    return ToolTelemetryService()
 
 
 @router.get("/logs", response_model=ESLLogsResponse)
@@ -265,3 +272,55 @@ async def get_esl_insights(
         raise HTTPException(
             status_code=500, detail=f"Error generating insights: {str(e)}"
         )
+
+
+@router.get("/tool-calls")
+async def list_tool_calls(
+    tool_name: Optional[str] = None,
+    source: Optional[str] = None,
+    since: Optional[str] = None,
+    limit: int = 50,
+    user_id: str = Depends(get_current_read_user_id),
+    telemetry: ToolTelemetryService = Depends(get_tool_telemetry_service),
+) -> Dict[str, Any]:
+    """Return recent tool-call events for the current user.
+
+    Sprint C Task 8: surfaces every tool invocation captured in
+    ``tool_call_events`` (chat + scheduled flows) to power the
+    transparency UI.
+    """
+    since_dt: Optional[datetime] = None
+    if since is not None:
+        try:
+            # Accept both ISO date (YYYY-MM-DD) and full ISO datetime.
+            since_dt = datetime.fromisoformat(since)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid 'since' value (expected ISO-8601): {since!r}",
+            )
+
+    capped_limit = min(max(int(limit), 1), 200)
+
+    rows = telemetry.list_tool_calls(
+        user_id,
+        tool_name=tool_name,
+        source=source,
+        since=since_dt,
+        limit=capped_limit,
+    )
+
+    events = []
+    for r in rows:
+        event = dict(r)
+        # Normalize values for JSON output: UUIDs and datetimes → strings.
+        if "id" in event and event["id"] is not None:
+            event["id"] = str(event["id"])
+        if "user_id" in event and event["user_id"] is not None:
+            event["user_id"] = str(event["user_id"])
+        created = event.get("created_at")
+        if created is not None and hasattr(created, "isoformat"):
+            event["created_at"] = created.isoformat()
+        events.append(event)
+
+    return {"events": events}

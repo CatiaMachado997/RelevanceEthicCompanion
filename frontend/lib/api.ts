@@ -570,6 +570,20 @@ export const goalsApi = {
 
 // ==================== Transparency API ====================
 
+export interface ToolCallEvent {
+  id: string
+  tool_name: string
+  source: 'chat' | 'scheduled' | string
+  source_ref: string | null
+  input: Record<string, unknown>
+  output: unknown
+  status: 'success' | 'error' | 'vetoed' | 'pending_confirmation' | string
+  error_message: string | null
+  esl_decision: 'APPROVED' | 'MODIFIED' | 'VETOED' | null
+  latency_ms: number | null
+  created_at: string
+}
+
 export const transparencyApi = {
   /**
    * Get ESL transparency report
@@ -627,6 +641,21 @@ export const transparencyApi = {
       period: string
       insights: string[]
     }>('/api/transparency/insights'),
+
+  /**
+   * List recent tool-call events (Sprint C Task 8).
+   */
+  listToolCalls: (params?: { tool_name?: string; source?: string; since?: string; limit?: number }) => {
+    const search = new URLSearchParams()
+    if (params?.tool_name) search.set('tool_name', params.tool_name)
+    if (params?.source) search.set('source', params.source)
+    if (params?.since) search.set('since', params.since)
+    if (params?.limit !== undefined) search.set('limit', String(params.limit))
+    const qs = search.toString()
+    return apiRequest<{ events: ToolCallEvent[] }>(
+      `/api/transparency/tool-calls${qs ? `?${qs}` : ''}`,
+    )
+  },
 }
 
 // ==================== Feedback API ====================
