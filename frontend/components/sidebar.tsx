@@ -99,6 +99,17 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null)
   const [editFolderName, setEditFolderName] = useState('')
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null) // null = ungrouped target; string = folder id
+  // Right-click context menu for conversation rows. Acts as a
+  // keyboard/touch-friendly alternative to drag-and-drop: any user
+  // who can't (or doesn't want to) drag still has a way to move a
+  // chat between folders. Positioned at the click coordinates with
+  // edge-snapping so it never clips out of the viewport.
+  const [convCtxMenu, setConvCtxMenu] = useState<{
+    x: number
+    y: number
+    convId: string
+    currentFolderId: string | null
+  } | null>(null)
   // Power-user "More" disclosure — persisted across sessions so users
   // who use these pages regularly aren't forced to re-open the section
   // on every reload. We default to closed (the SSR/first-render output)
@@ -257,6 +268,53 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
     await api.chat.conversations.rename(id, editTitle).catch(() => {})
     qc.invalidateQueries({ queryKey: ["conversations"] })
     setEditingId(null)
+  }
+
+  // ─── Conversation context menu ─────────────────────────────────────
+  const handleConvContextMenu = (
+    e: React.MouseEvent,
+    convId: string,
+    currentFolderId: string | null,
+  ) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setConvCtxMenu({ x: e.clientX, y: e.clientY, convId, currentFolderId })
+  }
+
+  const closeCtxMenu = useCallback(() => setConvCtxMenu(null), [])
+
+  // Close on Escape, outside-click, scroll, or route change.
+  useEffect(() => {
+    if (!convCtxMenu) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeCtxMenu()
+    }
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('[data-conv-ctx-menu]')) closeCtxMenu()
+    }
+    const onScroll = () => closeCtxMenu()
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('mousedown', onClick)
+    window.addEventListener('scroll', onScroll, true)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('mousedown', onClick)
+      window.removeEventListener('scroll', onScroll, true)
+    }
+  }, [convCtxMenu, closeCtxMenu])
+  useEffect(() => {
+    closeCtxMenu()
+  }, [pathname, closeCtxMenu])
+
+  const handleMoveConv = async (convId: string, folderId: string | null) => {
+    closeCtxMenu()
+    if (folderId) setExpandedFolders(prev => new Set(prev).add(folderId))
+    try {
+      await api.folders.moveConversation(convId, folderId)
+    } finally {
+      qc.invalidateQueries({ queryKey: ["conversations"] })
+    }
   }
 
   // ─── Folder CRUD ────────────────────────────────────────────────────
@@ -688,6 +746,7 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
                             key={conv.id}
                             draggable={!isEditing}
                             onDragStart={e => handleDragStart(e, conv.id)}
+                            onContextMenu={e => !isEditing && handleConvContextMenu(e, conv.id, conv.folder_id)}
                             className="group flex items-center gap-1 rounded-lg px-2 py-1 text-xs cursor-pointer transition-colors"
                             style={{
                               background: isActive ? 'var(--ec-sidebar-active)' : 'transparent',
@@ -782,6 +841,7 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
                         key={conv.id}
                         draggable={!isEditing}
                         onDragStart={e => handleDragStart(e, conv.id)}
+                        onContextMenu={e => !isEditing && handleConvContextMenu(e, conv.id, conv.folder_id)}
                         className="group flex items-center gap-1 rounded-lg px-2 py-1 text-xs cursor-pointer transition-colors"
                         style={{
                           background: isActive ? 'var(--ec-sidebar-active)' : 'transparent',
@@ -978,6 +1038,111 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
           </button>
         </div>
       </div>
+
+      {/* ─── Conversation right-click menu ─────────────────────────── */}
+      {convCtxMenu && (() => {
+        // Edge-snap so the menu never clips off the right/bottom of the
+        // viewport. We approximate the menu size from the folder count
+        // (header + "No folder" + each folder + separator + 2 actions).
+        const MENU_W = 220
+        const ROW_H = 32
+        const HEADER_H = 26
+        const SEPARATOR_H = 9
+        const itemCount = 1 /* No folder */ + folders.length + 2 /* rename/delete */
+        const approxH = HEADER_H + itemCount * ROW_H + SEPARATOR_H + 8
+        const x =
+          typeof window !== 'undefined'
+            ? Math.min(convCtxMenu.x, window.innerWidth - MENU_W - 8)
+            : convCtxMenu.x
+        const y =
+          typeof window !== 'undefined'
+            ? Math.min(convCtxMenu.y, window.innerHeight - approxH - 8)
+            : convCtxMenu.y
+        const conv = conversations.find(c => c.id === convCtxMenu.convId)
+        return (
+          <div
+            data-conv-ctx-menu
+            role="menu"
+            aria-label="Conversation actions"
+            className="fixed z-50 rounded-xl overflow-hidden text-xs"
+            style={{
+              left: Math.max(x, 8),
+              top: Math.max(y, 8),
+              width: MENU_W,
+              background: 'var(--ec-card-bg)',
+              border: '1px solid var(--ec-card-border)',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+              color: 'var(--ec-text)',
+            }}
+          >
+            <div
+              className="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider"
+              style={{ color: 'var(--ec-text-subtle)' }}
+            >
+              Move to folder
+            </div>
+            <button
+              role="menuitem"
+              disabled={convCtxMenu.currentFolderId === null}
+              onClick={() => handleMoveConv(convCtxMenu.convId, null)}
+              className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-[rgba(0,0,0,0.04)] disabled:opacity-40 disabled:cursor-default"
+            >
+              <FolderIcon size={11} style={{ color: 'var(--ec-text-subtle)' }} />
+              <span className="italic" style={{ color: 'var(--ec-text-muted)' }}>
+                No folder
+              </span>
+              {convCtxMenu.currentFolderId === null && (
+                <Check size={10} className="ml-auto" style={{ color: 'var(--ec-text-subtle)' }} />
+              )}
+            </button>
+            {folders.map(f => {
+              const isCurrent = convCtxMenu.currentFolderId === f.id
+              return (
+                <button
+                  key={f.id}
+                  role="menuitem"
+                  disabled={isCurrent}
+                  onClick={() => handleMoveConv(convCtxMenu.convId, f.id)}
+                  className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-[rgba(0,0,0,0.04)] disabled:opacity-50 disabled:cursor-default"
+                >
+                  <FolderIcon size={11} style={{ color: f.color ?? 'var(--ec-text-subtle)' }} />
+                  <span className="truncate flex-1">{f.name}</span>
+                  {isCurrent && (
+                    <Check size={10} className="shrink-0" style={{ color: 'var(--ec-text-subtle)' }} />
+                  )}
+                </button>
+              )
+            })}
+            <div role="separator" className="h-px my-1" style={{ background: 'var(--ec-card-border)' }} />
+            <button
+              role="menuitem"
+              onClick={() => {
+                if (conv) {
+                  setEditingId(conv.id)
+                  setEditTitle(conv.title)
+                }
+                closeCtxMenu()
+              }}
+              className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-[rgba(0,0,0,0.04)]"
+            >
+              <Pencil size={11} style={{ color: 'var(--ec-text-subtle)' }} />
+              Rename
+            </button>
+            <button
+              role="menuitem"
+              onClick={() => {
+                handleDelete(convCtxMenu.convId)
+                closeCtxMenu()
+              }}
+              className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-[rgba(0,0,0,0.04)]"
+              style={{ color: '#B04A3A' }}
+            >
+              <Trash2 size={11} />
+              Delete
+            </button>
+          </div>
+        )
+      })()}
     </aside>
   )
 }
