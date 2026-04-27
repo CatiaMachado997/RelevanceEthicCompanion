@@ -99,14 +99,42 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null)
   const [editFolderName, setEditFolderName] = useState('')
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null) // null = ungrouped target; string = folder id
-  // Power-user "More" disclosure
+  // Power-user "More" disclosure — persisted across sessions so users
+  // who use these pages regularly aren't forced to re-open the section
+  // on every reload. We default to closed (the SSR/first-render output)
+  // and hydrate from localStorage after mount, keeping the server and
+  // first client render identical.
   const [moreOpen, setMoreOpen] = useState(false)
-  // Auto-open if the user is on one of the hidden pages
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('ec:sidebar:moreOpen') === '1') setMoreOpen(true)
+    } catch {
+      // localStorage may be unavailable (SSR-edge, privacy mode) — ignore.
+    }
+  }, [])
+  // Auto-open if the user is on one of the hidden pages. This wins over
+  // the persisted preference: if a user deep-links into /goals we should
+  // always reveal where it lives in the nav, not leave them stranded.
   useEffect(() => {
     if (MORE_ITEMS.some(m => pathname === m.href || pathname.startsWith(m.href + '/'))) {
       setMoreOpen(true)
     }
   }, [pathname])
+  // Persist whenever the user toggles. Skipped during the initial paint
+  // (the value still equals the default `false`), so we don't clobber
+  // a `'1'` already in storage with a false write before hydration.
+  const moreOpenInitialized = useRef(false)
+  useEffect(() => {
+    if (!moreOpenInitialized.current) {
+      moreOpenInitialized.current = true
+      return
+    }
+    try {
+      localStorage.setItem('ec:sidebar:moreOpen', moreOpen ? '1' : '0')
+    } catch {
+      // Same as above — silently ignore storage failures.
+    }
+  }, [moreOpen])
 
   // Avatar menu (dropdown)
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false)
