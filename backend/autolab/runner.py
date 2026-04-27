@@ -41,6 +41,12 @@ class HillClimbingRunner:
         budget_secs: Wall-clock seconds allowed per evaluator run (unused in
             unit tests since evaluate_fn is a mock).
         anthropic_api_key: Key for Claude API calls in _propose_diff.
+
+    Note:
+        evaluate_fn is called twice per trial: once before proposing a diff
+        (to detect infrastructure unavailability before spending an API call)
+        and once after applying the diff (to measure the new score). If the
+        pre-diff call returns None, the trial is skipped without calling Claude.
     """
 
     def __init__(
@@ -104,13 +110,14 @@ class HillClimbingRunner:
 
         if new_score > self.baseline_score:
             outcome = TrialOutcome.WIN
+            old_baseline = self.baseline_score          # capture before updating
             self.baseline_score = new_score
             result = ExperimentResult(
                 track=self.track_name,
                 trial=trial_num,
                 score=new_score,
-                baseline=self.baseline_score,
-                delta=delta,
+                baseline=old_baseline,                  # pre-update baseline
+                delta=new_score - old_baseline,         # correct delta
                 outcome=outcome.value,
                 hypothesis=hypothesis,
             )
@@ -118,7 +125,7 @@ class HillClimbingRunner:
             self.obsidian.update_best(result)
             logger.info(
                 f"[{self.track_name}] Trial {trial_num}: WIN "
-                f"{new_score:.4f} (+{delta:.4f}) — {hypothesis}"
+                f"{new_score:.4f} (+{new_score - old_baseline:.4f}) — {hypothesis}"
             )
         else:
             # Revert
@@ -192,20 +199,25 @@ class HillClimbingRunner:
 
     def _apply_diff(self, diff: str) -> None:
         """Apply a unified diff to surface_path using the `patch` CLI tool."""
+        import os
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".patch", delete=False
         ) as f:
             f.write(diff)
             patch_file = f.name
-        result = subprocess.run(
-            ["patch", str(self.surface_path), patch_file],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"patch failed: {result.stderr}"
+        try:
+            result = subprocess.run(
+                ["patch", str(self.surface_path), patch_file],
+                capture_output=True,
+                text=True,
             )
+            if result.returncode != 0:
+                raise RuntimeError(f"patch failed: {result.stderr}")
+        finally:
+            try:
+                os.unlink(patch_file)
+            except OSError:
+                pass
 
     def _extract_hypothesis(self, diff: str) -> str:
         """Extract a one-line description from the first +/- lines of a diff."""

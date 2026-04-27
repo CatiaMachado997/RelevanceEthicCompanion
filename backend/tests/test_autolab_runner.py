@@ -86,3 +86,17 @@ def test_runner_skips_on_none_score(tmp_path):
 
     assert outcome == TrialOutcome.SKIP
     obsidian.log_result.assert_not_called()
+
+
+def test_runner_win_result_has_correct_baseline_and_delta(tmp_path):
+    """ExperimentResult logged on WIN should have pre-update baseline and correct delta."""
+    runner, obsidian = _make_runner(tmp_path, [0.80, 0.85])
+    runner.baseline_score = 0.80
+
+    with patch.object(runner, "_propose_diff", return_value="--- a/surface.py\n+++ b/surface.py\n@@ -1,2 +1,2 @@\n # surface\n-VALUE = 1\n+VALUE = 2\n"):
+        runner.run_one_trial(trial_num=1)
+
+    call_args = obsidian.log_result.call_args[0][0]
+    assert call_args.baseline == pytest.approx(0.80)   # pre-update baseline
+    assert call_args.delta == pytest.approx(0.05)       # 0.85 - 0.80
+    assert call_args.score == pytest.approx(0.85)
