@@ -339,6 +339,11 @@ from routes import tool_marketplace
 
 app.include_router(tool_marketplace.router)
 
+from routes.autolab import router as autolab_router, insights_router as autolab_insights_router
+
+app.include_router(autolab_router)
+app.include_router(autolab_insights_router)
+
 # Sprint 2a: Expose all routes as MCP tools
 from fastapi_mcp import FastApiMCP
 
