@@ -169,6 +169,17 @@ class BackgroundScheduler:
             max_instances=1,
         )
 
+        # Sprint E Task 5: weekly review brief — every Monday at 7 AM UTC
+        self.scheduler.add_job(
+            func=self._generate_weekly_review_brief,
+            trigger=CronTrigger(day_of_week="mon", hour=7, minute=0),
+            id="weekly_review_brief",
+            name="Generate Monday weekly-review brief for all users",
+            replace_existing=True,
+            max_instances=1,
+        )
+        logger.info("Weekly review brief job scheduled (Mon 07:00 UTC)")
+
         # Sprint E Task 1: daily prune of tool_call_events + esl_audit_log
         self.scheduler.add_job(
             func=self._prune_old_telemetry,
@@ -1297,6 +1308,143 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
 
         except Exception as e:
             logger.error(f"[Scheduler] Related-items clustering job failed: {e}")
+
+    async def _summarize_weekly_review(self, review: dict) -> str:
+        """LLM helper for the Monday weekly-review brief.
+
+        Mirrors the client/prompt convention from `_generate_daily_focus_plan`.
+        Returns a 2–3 sentence summary, or empty string on error.
+        """
+        try:
+            from langchain_core.messages import HumanMessage
+            from langchain_groq import ChatGroq
+            from config import settings
+
+            completed_tasks = review.get("completed_tasks") or []
+            completed_milestones = review.get("completed_milestones") or []
+            carry_over = review.get("carry_over_tasks") or []
+            upcoming_tasks = review.get("upcoming_tasks") or []
+            upcoming_milestones = review.get("upcoming_milestones") or []
+
+            prompt = (
+                "Weekly review summary.\n"
+                f"Last week: {len(completed_tasks)} task(s) completed, "
+                f"{len(completed_milestones)} milestone(s) hit, "
+                f"{len(carry_over)} carry-over task(s).\n"
+                f"This week: {len(upcoming_tasks)} task(s) due, "
+                f"{len(upcoming_milestones)} milestone(s) coming up.\n\n"
+                "Write a 2–3 sentence summary acknowledging last week's progress "
+                "and framing the week ahead. Be direct and specific, not motivational."
+            )
+
+            llm = ChatGroq(
+                model="llama-3.1-8b-instant",
+                groq_api_key=settings.GROQ_API_KEY,
+                temperature=0.6,
+            )
+            response = await llm.ainvoke([HumanMessage(content=prompt)])
+            return (response.content or "").strip()
+        except Exception as e:
+            logger.warning(f"[Scheduler] _summarize_weekly_review failed: {e}")
+            return ""
+
+    async def _generate_weekly_review_brief(self):
+        """Sprint E Task 5: Monday 07:00 UTC weekly-review brief.
+
+        For each user: build the weekly review via WorkRollupsService,
+        summarise via LLM, gate through ESL, write notification + telemetry.
+        """
+        logger.info("[Scheduler] Generating weekly review briefs…")
+        try:
+            from routes.notifications import create_notification
+            from services.work_rollups import WorkRollupsService
+
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT id FROM users LIMIT 100")
+                    users = cur.fetchall()
+
+            rollup_service = WorkRollupsService()
+            briefs_created = 0
+
+            for user_row in users:
+                user_id = str(user_row["id"])
+                try:
+                    review = rollup_service.get_weekly_review(user_id)
+                except Exception as e:
+                    logger.warning(
+                        f"[Scheduler] weekly_review_brief skipped {user_id}: {e}"
+                    )
+                    continue
+
+                empty = (
+                    not review.get("completed_tasks")
+                    and not review.get("completed_milestones")
+                    and not review.get("carry_over_tasks")
+                    and not review.get("upcoming_tasks")
+                    and not review.get("upcoming_milestones")
+                )
+                if empty:
+                    continue
+
+                brief_text = await self._summarize_weekly_review(review)
+                if not brief_text:
+                    continue
+
+                meta = {
+                    "subtype": "weekly_review_brief",
+                    "period": review.get("period"),
+                    "source": "scheduler",
+                }
+                should_send, final_content = await gate_proactive_notification(
+                    user_id=user_id,
+                    notification_type="weekly_review_brief",
+                    content=brief_text,
+                    urgency="low",
+                    metadata={"period": review.get("period")},
+                )
+                esl_decision = (
+                    "VETOED"
+                    if not should_send
+                    else (
+                        "MODIFIED" if final_content != brief_text else "APPROVED"
+                    )
+                )
+                ToolTelemetryService().record_tool_call(
+                    user_id=user_id,
+                    tool_name="weekly_review_brief",
+                    source="scheduled",
+                    source_ref="weekly_review_brief",
+                    input={"period": review.get("period")},
+                    output={"content": final_content},
+                    status="success" if should_send else "vetoed",
+                    esl_decision=esl_decision,
+                    latency_ms=None,
+                )
+
+                if not should_send:
+                    logger.info(
+                        f"⛔ ESL vetoed weekly_review_brief for user {user_id}"
+                    )
+                    continue
+
+                with get_db_connection() as conn:
+                    create_notification(
+                        conn,
+                        user_id=user_id,
+                        type="info",
+                        title="Your weekly review",
+                        message=final_content[:500],
+                        metadata=meta,
+                    )
+                briefs_created += 1
+
+            logger.info(
+                f"[Scheduler] Weekly review briefs complete: {briefs_created} created."
+            )
+
+        except Exception as e:
+            logger.error(f"[Scheduler] Weekly review brief job failed: {e}")
 
     async def _prune_old_telemetry(self):
         """

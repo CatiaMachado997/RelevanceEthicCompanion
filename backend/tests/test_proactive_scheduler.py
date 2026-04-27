@@ -751,3 +751,149 @@ class TestSchedulerESLGating:
         first = record_calls[0]
         assert first.get("tool_name") == "deadline_warning"
         assert first.get("source") == "scheduled"
+
+    # ─────────────────────────────────────────────
+    # Sprint E Task 5: weekly_review_brief
+    # ─────────────────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_weekly_review_brief_sends_when_approved(self):
+        """When ESL approves and review is non-empty, create_notification fires."""
+        sched = make_scheduler()
+
+        review = {
+            "period": {"start": "2026-04-20T00:00:00+00:00", "end": "2026-04-27T00:00:00+00:00"},
+            "completed_tasks": [{"id": "t1", "title": "Wrote spec"}],
+            "completed_milestones": [],
+            "carry_over_tasks": [],
+            "upcoming_tasks": [{"id": "t2", "title": "Ship feature"}],
+            "upcoming_milestones": [],
+        }
+
+        def db_side_effect():
+            ctx = MagicMock()
+            conn = MagicMock()
+            cur = MagicMock()
+            cur.__enter__ = MagicMock(return_value=cur)
+            cur.__exit__ = MagicMock(return_value=False)
+            conn.__enter__ = MagicMock(return_value=conn)
+            conn.__exit__ = MagicMock(return_value=False)
+            conn.cursor = MagicMock(return_value=cur)
+            cur.fetchall.return_value = [{"id": "user-wr-1"}]
+            ctx.__enter__ = MagicMock(return_value=conn)
+            ctx.__exit__ = MagicMock(return_value=False)
+            return ctx
+
+        with patch(
+            "services.scheduler.get_db_connection", side_effect=db_side_effect
+        ), patch(
+            "services.work_rollups.WorkRollupsService.get_weekly_review",
+            return_value=review,
+        ), patch.object(
+            sched, "_summarize_weekly_review", new=AsyncMock(return_value="Last week was solid.")
+        ), patch(
+            "routes.notifications.create_notification"
+        ) as mock_create_notification:
+            await sched._generate_weekly_review_brief()
+
+        assert mock_create_notification.call_count == 1
+        kwargs = mock_create_notification.call_args.kwargs
+        assert kwargs.get("user_id") == "user-wr-1"
+        assert kwargs.get("message") == "Last week was solid."
+
+    @pytest.mark.asyncio
+    async def test_weekly_review_brief_respects_veto(self):
+        """When ESL vetoes, create_notification must NOT be called."""
+        sched = make_scheduler()
+
+        review = {
+            "period": {"start": "2026-04-20T00:00:00+00:00", "end": "2026-04-27T00:00:00+00:00"},
+            "completed_tasks": [{"id": "t1", "title": "Wrote spec"}],
+            "completed_milestones": [],
+            "carry_over_tasks": [],
+            "upcoming_tasks": [],
+            "upcoming_milestones": [],
+        }
+
+        def db_side_effect():
+            ctx = MagicMock()
+            conn = MagicMock()
+            cur = MagicMock()
+            cur.__enter__ = MagicMock(return_value=cur)
+            cur.__exit__ = MagicMock(return_value=False)
+            conn.__enter__ = MagicMock(return_value=conn)
+            conn.__exit__ = MagicMock(return_value=False)
+            conn.cursor = MagicMock(return_value=cur)
+            cur.fetchall.return_value = [{"id": "user-wr-2"}]
+            ctx.__enter__ = MagicMock(return_value=conn)
+            ctx.__exit__ = MagicMock(return_value=False)
+            return ctx
+
+        async def _veto(user_id, notification_type, content, urgency="low", metadata=None):
+            return (False, content)
+
+        with patch(
+            "services.scheduler.get_db_connection", side_effect=db_side_effect
+        ), patch(
+            "services.work_rollups.WorkRollupsService.get_weekly_review",
+            return_value=review,
+        ), patch.object(
+            sched, "_summarize_weekly_review", new=AsyncMock(return_value="Hi.")
+        ), patch(
+            "services.scheduler.gate_proactive_notification", side_effect=_veto
+        ), patch(
+            "routes.notifications.create_notification"
+        ) as mock_create_notification:
+            await sched._generate_weekly_review_brief()
+
+        assert mock_create_notification.call_count == 0
+
+    @pytest.mark.asyncio
+    async def test_weekly_review_brief_skips_empty_user(self):
+        """If get_weekly_review returns all empty lists: no LLM, no notification, no telemetry."""
+        sched = make_scheduler()
+
+        empty_review = {
+            "period": {"start": "2026-04-20T00:00:00+00:00", "end": "2026-04-27T00:00:00+00:00"},
+            "completed_tasks": [],
+            "completed_milestones": [],
+            "carry_over_tasks": [],
+            "upcoming_tasks": [],
+            "upcoming_milestones": [],
+        }
+
+        def db_side_effect():
+            ctx = MagicMock()
+            conn = MagicMock()
+            cur = MagicMock()
+            cur.__enter__ = MagicMock(return_value=cur)
+            cur.__exit__ = MagicMock(return_value=False)
+            conn.__enter__ = MagicMock(return_value=conn)
+            conn.__exit__ = MagicMock(return_value=False)
+            conn.cursor = MagicMock(return_value=cur)
+            cur.fetchall.return_value = [{"id": "user-wr-3"}]
+            ctx.__enter__ = MagicMock(return_value=conn)
+            ctx.__exit__ = MagicMock(return_value=False)
+            return ctx
+
+        summarize_mock = AsyncMock(return_value="should not be called")
+        telemetry_inst = MagicMock()
+        telemetry_inst.record_tool_call = MagicMock(return_value="")
+
+        with patch(
+            "services.scheduler.get_db_connection", side_effect=db_side_effect
+        ), patch(
+            "services.work_rollups.WorkRollupsService.get_weekly_review",
+            return_value=empty_review,
+        ), patch.object(
+            sched, "_summarize_weekly_review", new=summarize_mock
+        ), patch(
+            "services.scheduler.ToolTelemetryService", return_value=telemetry_inst
+        ), patch(
+            "routes.notifications.create_notification"
+        ) as mock_create_notification:
+            await sched._generate_weekly_review_brief()
+
+        assert summarize_mock.await_count == 0
+        assert mock_create_notification.call_count == 0
+        assert telemetry_inst.record_tool_call.call_count == 0
