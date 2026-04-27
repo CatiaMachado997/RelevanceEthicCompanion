@@ -1,6 +1,7 @@
 """Labelled benchmark scenarios for ESL evaluation.
 
-200 labelled ProposedAction scenarios with known correct outcomes.
+180 labelled ProposedAction scenarios with known correct outcomes:
+  100 APPROVED, 40 VETOED, 40 MODIFIED.
 Used by the evaluator to compute macro F1.
 """
 
