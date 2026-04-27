@@ -33,6 +33,20 @@ def _route_after_tools(state: AgentState) -> str:
     return "esl_gateway"
 
 
+def _route_after_execution(state: AgentState) -> str:
+    """Loop back to the planner so the agent can chain tools within a turn.
+
+    `planner_step` is incremented inside `tool_planner_node` on every call.
+    Once it reaches `max_planner_steps` we stop replanning regardless of
+    what the LLM might want to do next — this is the kill-switch. If the
+    planner returns no new tool_calls on its next pass, the existing
+    `_route_after_tools` edge already routes it to `esl_gateway`.
+    """
+    if state.get("planner_step", 0) >= state.get("max_planner_steps", 3):
+        return "esl_gateway"
+    return "tool_planner"
+
+
 def build_graph():
     g = StateGraph(AgentState)
     g.add_node("context_builder", context_builder_node)
@@ -56,7 +70,11 @@ def build_graph():
         _route_after_tools,
         {"tool_execution": "tool_execution", "esl_gateway": "esl_gateway"},
     )
-    g.add_edge("tool_execution", "esl_gateway")
+    g.add_conditional_edges(
+        "tool_execution",
+        _route_after_execution,
+        {"tool_planner": "tool_planner", "esl_gateway": "esl_gateway"},
+    )
     g.add_edge("deep_research", "esl_gateway")
     g.add_conditional_edges(
         "esl_gateway",
@@ -123,6 +141,8 @@ async def stream_langgraph(
         "pending_tool_confirmation": None,
         "source_context": [],
         "force_retrieval": force_retrieval,
+        "planner_step": 0,
+        "max_planner_steps": 3,
     }
     graph = get_graph()
 

@@ -53,3 +53,10 @@ class AgentState(TypedDict):
     # When True, planner injects a search_documents tool call regardless of
     # the LLM's judgement. Set by the `/ask` slash command in the UI.
     force_retrieval: bool
+
+    # Multi-step planner loop bookkeeping. The planner increments
+    # `planner_step` on each invocation. The conditional router after
+    # `tool_execution_node` short-circuits to ESL once
+    # `planner_step >= max_planner_steps`, preventing runaway loops.
+    planner_step: int
+    max_planner_steps: int
