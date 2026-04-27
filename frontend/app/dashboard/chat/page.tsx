@@ -289,10 +289,18 @@ const markdownComponents: Components = {
 }
 
 /* ═══════════════════════════════════════════════════ */
-export default function ChatPage({ conversationId }: { conversationId?: string } = {}) {
+export default function ChatPage({ conversationId: conversationIdProp }: { conversationId?: string } = {}) {
   const { user } = useAuth()
   const router = useRouter()
   const initials = user?.email?.split('@')[0].substring(0, 2).toUpperCase() ?? 'U'
+
+  // Local conversation id, seeded from the route prop. We update this in-place
+  // after creating a conversation on first send (we use window.history.replaceState
+  // there, which doesn't re-render the route so the prop never refreshes). Without
+  // this, every subsequent send sees `conversationId === undefined` and spawns
+  // yet another conversation — the "clicking anywhere starts a new chat" bug.
+  const [conversationId, setConversationId] = useState<string | undefined>(conversationIdProp)
+  useEffect(() => { setConversationId(conversationIdProp) }, [conversationIdProp])
 
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput]       = useState('')
@@ -397,8 +405,16 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
       setInput('')
       setAttachedFile(null)
       setConversationTitle('')
-      // If we're on a conversation page, navigate to root chat so conversationId becomes undefined.
-      if (conversationId) router.replace('/dashboard/chat')
+      // Clear local id and URL so the next send creates a fresh conversation.
+      setConversationId(undefined)
+      if (conversationId) {
+        // If route prop is set, use router so the segment unwinds cleanly.
+        router.replace('/dashboard/chat')
+      } else if (typeof window !== 'undefined' && window.location.pathname !== '/dashboard/chat') {
+        // We're on the base /dashboard/chat route in React, but the URL still
+        // shows /dashboard/chat/<id> because we used replaceState earlier.
+        window.history.replaceState(null, '', '/dashboard/chat')
+      }
     }
     window.addEventListener('ec:new-chat', onNew)
     return () => window.removeEventListener('ec:new-chat', onNew)
@@ -512,6 +528,10 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
       if (!activeConvId) {
         const conv = await api.chat.conversations.create()
         activeConvId = conv.id
+        // Update local state so subsequent sends reuse this conversation. The
+        // route prop won't refresh because we use replaceState (not router.push)
+        // to avoid unmounting this component mid-stream.
+        setConversationId(activeConvId)
         window.history.replaceState(null, '', `/dashboard/chat/${activeConvId}`)
         window.dispatchEvent(new Event('ec:conversation-created'))
       }
