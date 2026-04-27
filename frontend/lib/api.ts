@@ -1437,6 +1437,22 @@ export const todayApi = {
   getFeed: (): Promise<TodayFeed> => apiRequest<TodayFeed>('/api/today/feed'),
 }
 
+// ==================== Onboarding API (Sprint H) ====================
+
+export interface OnboardingState {
+  onboarded_at: string | null
+  has_data_source: boolean
+  has_value: boolean
+  has_goal: boolean
+}
+
+export const onboardingApi = {
+  state: (): Promise<OnboardingState> =>
+    apiRequest<OnboardingState>('/api/onboarding/state'),
+  complete: (): Promise<{ onboarded_at: string }> =>
+    apiRequest<{ onboarded_at: string }>('/api/onboarding/complete', { method: 'POST' }),
+}
+
 export function listConnectors() {
   return connectorsApi.list()
 }
@@ -1472,6 +1488,7 @@ export const api = {
   connectors: connectorsApi,
   weeklyReview: weeklyReviewApi,
   today: todayApi,
+  onboarding: onboardingApi,
 };
 
 export default api;

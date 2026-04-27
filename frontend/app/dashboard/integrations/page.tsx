@@ -239,6 +239,19 @@ function IntegrationsContent() {
   const [syncing, setSyncing] = useState<SourceType | null>(null)
   const [flash, setFlash] = useState<SourceType | null>(null)
   const [errorFlash, setErrorFlash] = useState<string | null>(null)
+  // Sprint H Task 2: when OAuth bounces a user from /onboarding back here,
+  // we surface a "Continue setup" banner that links them to step 1. The
+  // marker is set in StepConnect before redirecting to OAuth.
+  const [resumeOnboarding, setResumeOnboarding] = useState(false)
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('ec_onboarding_in_progress') === '1') {
+        setResumeOnboarding(true)
+      }
+    } catch {
+      // localStorage may be disabled — non-fatal.
+    }
+  }, [])
   const [stats, setStats] = useState<Record<string, number>>({})
   const [catalogue, setCatalogue] = useState<ToolDefinition[]>([])
   const [connectedTools, setConnectedTools] = useState<ConnectedTool[]>([])
@@ -427,6 +440,27 @@ function IntegrationsContent() {
           </div>
         )}
       </div>
+
+      {/* Sprint H — onboarding resume banner */}
+      {resumeOnboarding && (
+        <div
+          className="flex items-center justify-between gap-2 px-4 py-3 rounded-xl text-sm"
+          style={{
+            background: 'rgba(74,124,89,0.08)',
+            border: '1px solid rgba(74,124,89,0.25)',
+            color: '#2d6a4f',
+          }}
+        >
+          <span>Almost done with setup — pick up where you left off.</span>
+          <a
+            href="/onboarding?step=1"
+            className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-opacity hover:opacity-90"
+            style={{ background: '#4A7C59', color: '#ffffff' }}
+          >
+            Continue setup →
+          </a>
+        </div>
+      )}
 
       {/* Flash success banner */}
       {flash && (
