@@ -1405,6 +1405,38 @@ export const weeklyReviewApi = {
   },
 }
 
+// ==================== Today Feed API (Sprint F Task 6) ====================
+
+export interface TodayTaskItem {
+  id: string
+  title: string
+  status: string | null
+  priority: number | null
+  due_date: string | null
+  project_id: string | null
+}
+
+export interface TodaySourceItem {
+  id: string
+  title: string
+  snippet: string
+  timestamp: string | null
+  source_ref: string | null
+  url: string | null
+}
+
+export interface TodayFeed {
+  tasks_due_today: TodayTaskItem[]
+  tasks_overdue: TodayTaskItem[]
+  recent_emails: TodaySourceItem[]
+  recent_slack: TodaySourceItem[]
+  calendar_today: TodaySourceItem[]
+}
+
+export const todayApi = {
+  getFeed: (): Promise<TodayFeed> => apiRequest<TodayFeed>('/api/today/feed'),
+}
+
 export function listConnectors() {
   return connectorsApi.list()
 }
@@ -1439,6 +1471,7 @@ export const api = {
   dashboard: dashboardApi,
   connectors: connectorsApi,
   weeklyReview: weeklyReviewApi,
+  today: todayApi,
 };
 
 export default api;

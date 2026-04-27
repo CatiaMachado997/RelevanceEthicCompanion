@@ -309,6 +309,7 @@ from routes import (
     dashboard,
     connectors,
     weekly_review,
+    today,
 )
 from routes import settings as settings_router
 from routes.insight import router as insight_router
@@ -339,6 +340,7 @@ app.include_router(dashboard.router)
 app.include_router(status_router)
 app.include_router(connectors.router, prefix="/api/connectors", tags=["connectors"])
 app.include_router(weekly_review.router, prefix="/api/weekly-review", tags=["weekly-review"])
+app.include_router(today.router, prefix="/api/today", tags=["today"])
 
 from routes import tool_marketplace
 
