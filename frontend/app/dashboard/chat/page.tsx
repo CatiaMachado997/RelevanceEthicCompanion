@@ -503,12 +503,16 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
     try {
       setRateLimitExceeded(null)
 
-      // Create a conversation if one doesn't exist yet, then redirect
+      // Create a conversation if one doesn't exist yet, then update the URL.
+      // We use window.history.replaceState rather than router.replace so the
+      // current ChatPage instance keeps streaming — router.replace would unmount
+      // the component on its way to /chat/[id]/page.tsx, dropping the in-flight
+      // stream and leaving the user staring at a blank "new chat".
       let activeConvId = conversationId
       if (!activeConvId) {
         const conv = await api.chat.conversations.create()
         activeConvId = conv.id
-        router.replace(`/dashboard/chat/${activeConvId}`)
+        window.history.replaceState(null, '', `/dashboard/chat/${activeConvId}`)
         window.dispatchEvent(new Event('ec:conversation-created'))
       }
 
