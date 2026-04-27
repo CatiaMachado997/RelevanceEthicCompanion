@@ -6,7 +6,7 @@ Tests use mocking so no live DB, Groq, or scheduler is required.
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 @pytest.fixture(autouse=True)
@@ -65,7 +65,7 @@ class TestDeadlineWarnings:
     @pytest.mark.asyncio
     async def test_creates_warning_for_task_not_yet_warned(self):
         sched = make_scheduler()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         task_row = {
             "id": "task-uuid-1",
             "user_id": "user-uuid-1",
@@ -114,7 +114,7 @@ class TestDeadlineWarnings:
     @pytest.mark.asyncio
     async def test_skips_task_already_warned_today(self):
         sched = make_scheduler()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         task_row = {
             "id": "task-uuid-2",
             "user_id": "user-uuid-2",
@@ -165,7 +165,7 @@ class TestDailyFocusPlan:
         sched = make_scheduler()
 
         empty_snapshot = {
-            "computed_at": datetime.utcnow().isoformat(),
+            "computed_at": datetime.now(timezone.utc).isoformat(),
             "tasks_due_soon": [],
             "overdue_count": 0,
             "active_projects": [],
@@ -403,7 +403,7 @@ class TestPreMeetingBriefs:
     async def test_skips_event_already_briefed(self):
         """If a brief notification already exists for the event start, skip it."""
         sched = make_scheduler()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         event_start = now + timedelta(minutes=30)
 
         call_count = {"n": 0}
@@ -572,7 +572,7 @@ class TestSchedulerESLGating:
         sched = make_scheduler()
 
         snapshot = {
-            "computed_at": datetime.utcnow().isoformat(),
+            "computed_at": datetime.now(timezone.utc).isoformat(),
             "tasks_due_soon": [{"title": "Task A", "due_date": "2026-04-26", "priority": 7}],
             "overdue_count": 0,
             "active_projects": [],
@@ -624,7 +624,7 @@ class TestSchedulerESLGating:
     async def test_pre_meeting_brief_uses_modified_content(self):
         """When ESL MODIFIES, create_notification must use the modified text."""
         sched = make_scheduler()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         event_start = now + timedelta(minutes=30)
 
         call_count = {"n": 0}
@@ -693,7 +693,7 @@ class TestSchedulerESLGating:
     async def test_deadline_warning_records_telemetry_row(self):
         """deadline_warning flow must call record_tool_call with correct fields."""
         sched = make_scheduler()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         task_row = {
             "id": "task-tele-1",
             "user_id": "user-tele-1",

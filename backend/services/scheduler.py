@@ -8,7 +8,7 @@ import logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
-from datetime import datetime
+from datetime import datetime, timezone
 
 from services.data_ingestion import DataIngestionService
 from services.proactive_gate import gate_proactive_notification
@@ -495,7 +495,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
             from langchain_groq import ChatGroq
             from config import settings
 
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             window_end = datetime(
                 now.year, now.month, now.day, now.hour, now.minute
             ).__class__(now.year, now.month, now.day, now.hour, now.minute)
@@ -562,8 +562,13 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                         for g in goals[:3]
                     )
 
+                    event_start_aware = (
+                        event_start
+                        if event_start.tzinfo is not None
+                        else event_start.replace(tzinfo=timezone.utc)
+                    )
                     minutes_until = int(
-                        (event_start.replace(tzinfo=None) - now).total_seconds() / 60
+                        (event_start_aware - now).total_seconds() / 60
                     )
                     location_note = f" at {event_location}" if event_location else ""
 
@@ -664,7 +669,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
             from langchain_groq import ChatGroq
             from config import settings
 
-            today_str = datetime.utcnow().strftime("%Y-%m-%d")
+            today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
@@ -814,7 +819,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
             from routes.notifications import create_notification
             import datetime as dt_module
 
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             in_24h = now + dt_module.timedelta(hours=24)
 
             with get_db_connection() as conn:
@@ -1148,7 +1153,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
             from routes.notifications import create_notification
             import datetime as dt_module
 
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             in_7_days = now + dt_module.timedelta(days=7)
 
             with get_db_connection() as conn:
