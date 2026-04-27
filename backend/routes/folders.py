@@ -20,7 +20,6 @@ from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 from utils.db import get_db_connection
 from utils.rate_limit import limiter
 
-
 router = APIRouter(prefix="/api/folders", tags=["Folders"])
 
 

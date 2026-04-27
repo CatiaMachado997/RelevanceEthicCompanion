@@ -10,7 +10,6 @@ from fastapi import APIRouter, Depends
 from utils.supabase_auth import get_current_read_user_id
 from utils.db import get_db_connection
 
-
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
 

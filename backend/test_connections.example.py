@@ -7,6 +7,7 @@ with real credentials. See backend/.env.example for required env vars.
 
 Tests connections to PostgreSQL and Weaviate.
 """
+
 import os
 import sys
 import psycopg2
