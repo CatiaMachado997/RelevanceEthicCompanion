@@ -1,5 +1,6 @@
 """ToolPlanner and ToolExecution — LLM-driven tool selection and execution."""
 
+import asyncio
 import json
 import logging
 import time
@@ -13,6 +14,36 @@ from orchestrator.nodes.context import get_context_manager
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+
+async def _execute_with_retry(tool: Any, params: dict) -> dict:
+    """Run one tool invocation; retry once on exception with 200 ms backoff.
+
+    Returns a structured observation dict — never raises.
+
+    Sprint I Task 9.
+    """
+    t0 = time.perf_counter()
+    last_error: Optional[str] = None
+    for attempt in (1, 2):
+        try:
+            result = await tool.ainvoke(params)
+            return {
+                "status": "ok",
+                "result": result,
+                "latency_ms": int((time.perf_counter() - t0) * 1000),
+                "attempts": attempt,
+            }
+        except Exception as exc:  # noqa: BLE001
+            last_error = str(exc)
+            if attempt == 1:
+                await asyncio.sleep(0.2)
+    return {
+        "status": "error",
+        "error": last_error or "unknown error",
+        "latency_ms": int((time.perf_counter() - t0) * 1000),
+        "attempts": 2,
+    }
 
 
 async def _audit_tool_action(
