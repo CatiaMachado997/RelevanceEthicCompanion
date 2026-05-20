@@ -176,6 +176,9 @@ async def test_trace_is_recorded_into_tool_call_events_output():
     fake_llm = MagicMock()
     fake_llm.ainvoke = AsyncMock(return_value=MagicMock(content="ok"))
 
+    # Sprint I: the executor reads actions from plan_steps[-1]["actions"]
+    # instead of legacy tool_calls. We populate both for backward
+    # compatibility with any code that still reads tool_calls.
     state = {
         "user_id": USER_ID,
         "message": "what is project atlas?",
@@ -192,6 +195,21 @@ async def test_trace_is_recorded_into_tool_call_events_output():
         "active_sources": [],
         "document_sources": [],
         "proposed_content": "",
+        "plan_steps": [
+            {
+                "step": 1,
+                "thought": "Need to search docs.",
+                "actions": [
+                    {
+                        "tool": "search_documents",
+                        "params": {"query": "what is project atlas?", "k": 5},
+                    }
+                ],
+                "observations": [],
+                "started_at": "2026-05-20T12:00:00+00:00",
+            }
+        ],
+        "planner_run_id": "run-test-1",
     }
 
     captured: dict = {}
