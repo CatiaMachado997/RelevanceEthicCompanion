@@ -16,6 +16,21 @@ export interface CitationSource {
   icon: string
 }
 
+/**
+ * Per-chunk citation row from the search_documents (RAG) tool.
+ * Surfaced in the chat `done` event and persisted in turn metadata.
+ */
+export interface DocumentSource {
+  chunk_uuid: string
+  document_id: string
+  filename: string
+  chunk_index: number
+  snippet: string
+  score: number
+  /** Origin of the chunk: "document" (uploaded), "gmail", "slack", etc. */
+  source_type?: string
+}
+
 const authConfig: {
   getAccessToken: AccessTokenProvider | null
   onUnauthorized: UnauthorizedHandler | null
@@ -260,10 +275,11 @@ export const chatApi = {
           onToolPendingConfirmation?: (data: { tool_id: string; tool_name: string; action_name: string; preview: string }) => void
           onRateLimitWarning?: (level: string, message: string) => void
           onRateLimitExceeded?: (retryAfter: string, message: string) => void
-          onDone?: (data: { esl_decision?: Record<string, unknown>; citations?: CitationSource[] }) => void
+          onDone?: (data: { esl_decision?: Record<string, unknown>; citations?: CitationSource[]; document_sources?: DocumentSource[] }) => void
           model?: string
           conversation_id?: string
           active_sources?: string[]
+          force_retrieval?: boolean
         },
   ): Promise<void> & { cancel: () => void } => {
     const callbacks =
@@ -281,7 +297,8 @@ export const chatApi = {
       const convParam = callbacks.conversation_id ? `&conversation_id=${encodeURIComponent(callbacks.conversation_id)}` : ''
       const sourcesParam = callbacks.active_sources?.length
         ? `&active_sources=${encodeURIComponent(callbacks.active_sources.join(','))}` : ''
-      const url = `${API_URL}/api/chat/stream?message=${encodeURIComponent(message)}${modelParam}${convParam}${sourcesParam}`
+      const forceParam = callbacks.force_retrieval ? '&force_retrieval=true' : ''
+      const url = `${API_URL}/api/chat/stream?message=${encodeURIComponent(message)}${modelParam}${convParam}${sourcesParam}${forceParam}`
       es = new EventSource(url, { withCredentials: true })
 
       es.onmessage = (e) => {
@@ -316,7 +333,7 @@ export const chatApi = {
             return
           }
           if (data.event === 'done') {
-            callbacks.onDone?.({ esl_decision: data.esl_decision, citations: data.citations })
+            callbacks.onDone?.({ esl_decision: data.esl_decision, citations: data.citations, document_sources: data.document_sources })
             es!.close()
             if (!settled) { settled = true; resolve() }
             return
@@ -334,7 +351,7 @@ export const chatApi = {
             return
           }
           if (data.done) {
-            callbacks.onDone?.({ esl_decision: data.esl_decision, citations: data.citations })
+            callbacks.onDone?.({ esl_decision: data.esl_decision, citations: data.citations, document_sources: data.document_sources })
             es!.close()
             if (!settled) { settled = true; resolve() }
             return
@@ -382,6 +399,7 @@ export const chatApi = {
         role: string
         content: string
         timestamp: string
+        metadata?: { document_sources?: DocumentSource[]; citations?: CitationSource[] } & Record<string, unknown>
       }>
       total_count: number
     }>(`/api/chat/history?limit=${limit}&offset=${offset}${conversationId ? `&conversation_id=${conversationId}` : ''}`),
@@ -411,6 +429,14 @@ export const chatApi = {
 
 // ==================== Goals API ====================
 
+export interface GoalRollup {
+  milestones_total: number
+  milestones_hit: number
+  tasks_total: number
+  tasks_done: number
+  progress_pct: number
+}
+
 export interface Goal {
   id: string
   user_id: string
@@ -423,6 +449,7 @@ export interface Goal {
   created_at: string
   completed_at: string | null
   metadata?: Record<string, unknown>
+  rollup?: GoalRollup
 }
 
 export interface Milestone {
@@ -543,6 +570,46 @@ export const goalsApi = {
 
 // ==================== Transparency API ====================
 
+export interface ToolHealth {
+  tool_name: string
+  source: string
+  calls_24h: number
+  success_rate: number
+  p50_latency_ms: number
+  p95_latency_ms: number
+}
+
+export interface EslSummaryRow {
+  count_24h: number
+  count_7d: number
+}
+
+export interface SchedulerJob {
+  job_id: string
+  next_run_time: string | null
+  trigger: string
+}
+
+export interface SystemHealth {
+  tool_health: ToolHealth[]
+  esl_summary: Record<string, EslSummaryRow>
+  scheduler: SchedulerJob[]
+}
+
+export interface ToolCallEvent {
+  id: string
+  tool_name: string
+  source: 'chat' | 'scheduled' | string
+  source_ref: string | null
+  input: Record<string, unknown>
+  output: unknown
+  status: 'success' | 'error' | 'vetoed' | 'pending_confirmation' | string
+  error_message: string | null
+  esl_decision: 'APPROVED' | 'MODIFIED' | 'VETOED' | null
+  latency_ms: number | null
+  created_at: string
+}
+
 export const transparencyApi = {
   /**
    * Get ESL transparency report
@@ -600,6 +667,27 @@ export const transparencyApi = {
       period: string
       insights: string[]
     }>('/api/transparency/insights'),
+
+  /**
+   * List recent tool-call events (Sprint C Task 8).
+   */
+  listToolCalls: (params?: { tool_name?: string; source?: string; since?: string; limit?: number }) => {
+    const search = new URLSearchParams()
+    if (params?.tool_name) search.set('tool_name', params.tool_name)
+    if (params?.source) search.set('source', params.source)
+    if (params?.since) search.set('since', params.since)
+    if (params?.limit !== undefined) search.set('limit', String(params.limit))
+    const qs = search.toString()
+    return apiRequest<{ events: ToolCallEvent[] }>(
+      `/api/transparency/tool-calls${qs ? `?${qs}` : ''}`,
+    )
+  },
+
+  /**
+   * Get aggregated system health (Sprint E Task 3).
+   */
+  getSystemHealth: (): Promise<SystemHealth> =>
+    apiRequest<SystemHealth>('/api/transparency/system-health'),
 }
 
 // ==================== Feedback API ====================
@@ -910,6 +998,14 @@ export const documentsApi = {
 
 // ==================== Projects API ====================
 
+export interface ProjectRollup {
+  tasks_total: number
+  tasks_done: number
+  tasks_open: number
+  at_risk_count: number
+  completion_pct: number
+}
+
 export interface Project {
   id: string;
   user_id: string;
@@ -919,6 +1015,7 @@ export interface Project {
   goal_id: string | null;
   created_at: string | null;
   updated_at: string | null;
+  rollup?: ProjectRollup;
 }
 
 export const projectsApi = {
@@ -958,6 +1055,7 @@ export interface Task {
   id: string;
   user_id: string;
   project_id: string | null;
+  goal_id?: string | null;
   title: string;
   description: string | null;
   status: 'todo' | 'in_progress' | 'done' | 'cancelled';
@@ -968,6 +1066,13 @@ export interface Task {
   user_confirmed: boolean;
   created_at: string | null;
   updated_at: string | null;
+}
+
+export interface TaskDependency {
+  task_id: string;
+  title: string;
+  status: string;
+  depth: number;
 }
 
 export interface ExtractedTask {
@@ -1031,6 +1136,7 @@ export const tasksApi = {
     title: string;
     description?: string;
     project_id?: string;
+    goal_id?: string | null;
     priority?: number;
     due_date?: string;
     source_origin?: string;
@@ -1042,7 +1148,7 @@ export const tasksApi = {
     })
   },
 
-  update: async (id: string, data: Partial<Pick<Task, 'title' | 'description' | 'status' | 'priority' | 'due_date' | 'project_id'>>): Promise<Task> => {
+  update: async (id: string, data: Partial<Pick<Task, 'title' | 'description' | 'status' | 'priority' | 'due_date' | 'project_id' | 'goal_id'>>): Promise<Task> => {
     return apiRequest<Task>(`/api/tasks/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
@@ -1059,6 +1165,23 @@ export const tasksApi = {
     return apiRequest<{ suggestions: ExtractedTask[] }>('/api/tasks/extract', {
       method: 'POST',
       body: JSON.stringify({ text }),
+    })
+  },
+
+  listDependencies: async (taskId: string): Promise<{ blockers: TaskDependency[]; blocked_by: TaskDependency[] }> => {
+    return apiRequest<{ blockers: TaskDependency[]; blocked_by: TaskDependency[] }>(`/api/tasks/${taskId}/dependencies`)
+  },
+
+  addDependency: async (taskId: string, dependsOnTaskId: string): Promise<{ ok: true }> => {
+    return apiRequest<{ ok: true }>(`/api/tasks/${taskId}/dependencies`, {
+      method: 'POST',
+      body: JSON.stringify({ depends_on_task_id: dependsOnTaskId }),
+    })
+  },
+
+  removeDependency: async (taskId: string, dependsOnTaskId: string): Promise<{ removed: boolean }> => {
+    return apiRequest<{ removed: boolean }>(`/api/tasks/${taskId}/dependencies/${dependsOnTaskId}`, {
+      method: 'DELETE',
     })
   },
 }
@@ -1221,6 +1344,151 @@ export const dashboardApi = {
   overview: () => apiRequest<DashboardOverview>('/api/dashboard/overview'),
 }
 
+// ==================== Connectors API (Sprint B) ====================
+
+export interface ConnectorStatus {
+  source_type: string
+  connected: boolean
+  last_sync: string | null
+  items_count: number
+  error: string | null
+}
+
+/**
+ * Per-connector indexing health (Sprint F Task 3).
+ * Returned from `GET /api/connectors/{source}/status`.
+ */
+export interface ConnectorIndexStatus {
+  source: string
+  last_sync_at: string | null
+  total_items: number
+  indexed: number
+  failed: number
+  pending: number
+  last_error: string | null
+}
+
+export interface ReindexResult {
+  processed: number
+  succeeded: number
+  failed: number
+}
+
+export const connectorsApi = {
+  list: (): Promise<{ connectors: ConnectorStatus[] }> =>
+    apiRequest<{ connectors: ConnectorStatus[] }>('/api/connectors'),
+
+  backfill: (
+    sourceType: string,
+    since?: string,
+  ): Promise<{ job_id: string; status: string }> => {
+    // Backend (routes/connectors.py) expects { since: ISO-8601 | null }.
+    const body: { since?: string } = {}
+    if (since) body.since = since
+    return apiRequest<{ job_id: string; status: string }>(
+      `/api/connectors/${sourceType}/backfill`,
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+      },
+    )
+  },
+
+  disconnect: (
+    sourceType: string,
+  ): Promise<{ vectors_deleted: number; items_deleted: number; tokens_deleted: number; success?: boolean }> =>
+    apiRequest<{ vectors_deleted: number; items_deleted: number; tokens_deleted: number; success?: boolean }>(
+      `/api/connectors/${sourceType}`,
+      { method: 'DELETE' },
+    ),
+
+  getStatus: (sourceType: string): Promise<ConnectorIndexStatus> =>
+    apiRequest<ConnectorIndexStatus>(`/api/connectors/${sourceType}/status`),
+
+  reindex: (sourceType: string): Promise<ReindexResult> =>
+    apiRequest<ReindexResult>(`/api/connectors/${sourceType}/reindex`, {
+      method: 'POST',
+    }),
+}
+
+// ==================== Weekly Review API (Sprint D) ====================
+
+export interface WeeklyReview {
+  period: { start: string; end: string }
+  completed_tasks: Array<{ id: string; title: string; completed_at: string; project_id?: string | null; goal_id?: string | null }>
+  completed_milestones: Array<{ id: string; title: string; goal_id: string; completed_at: string }>
+  carry_over_tasks: Array<{ id: string; title: string; due_date: string | null; status: string }>
+  upcoming_tasks: Array<{ id: string; title: string; due_date: string | null; status: string }>
+  upcoming_milestones: Array<{ id: string; title: string; goal_id: string; target_date: string }>
+}
+
+export const weeklyReviewApi = {
+  get: (weekStart?: string): Promise<WeeklyReview> => {
+    const query = weekStart ? `?week_start=${encodeURIComponent(weekStart)}` : ''
+    return apiRequest<WeeklyReview>(`/api/weekly-review${query}`)
+  },
+}
+
+// ==================== Today Feed API (Sprint F Task 6) ====================
+
+export interface TodayTaskItem {
+  id: string
+  title: string
+  status: string | null
+  priority: number | null
+  due_date: string | null
+  project_id: string | null
+}
+
+export interface TodaySourceItem {
+  id: string
+  title: string
+  snippet: string
+  timestamp: string | null
+  source_ref: string | null
+  url: string | null
+}
+
+export interface TodayFeed {
+  tasks_due_today: TodayTaskItem[]
+  tasks_overdue: TodayTaskItem[]
+  recent_emails: TodaySourceItem[]
+  recent_slack: TodaySourceItem[]
+  calendar_today: TodaySourceItem[]
+}
+
+export const todayApi = {
+  getFeed: (): Promise<TodayFeed> => apiRequest<TodayFeed>('/api/today/feed'),
+}
+
+// ==================== Onboarding API (Sprint H) ====================
+
+export interface OnboardingState {
+  onboarded_at: string | null
+  has_data_source: boolean
+  has_value: boolean
+  has_goal: boolean
+}
+
+export const onboardingApi = {
+  state: (): Promise<OnboardingState> =>
+    apiRequest<OnboardingState>('/api/onboarding/state'),
+  complete: (): Promise<{ onboarded_at: string }> =>
+    apiRequest<{ onboarded_at: string }>('/api/onboarding/complete', { method: 'POST' }),
+}
+
+export function listConnectors() {
+  return connectorsApi.list()
+}
+
+export function backfillConnector(sourceType: string, since?: string) {
+  return connectorsApi.backfill(sourceType, since)
+}
+
+export function disconnectConnector(sourceType: string) {
+  return connectorsApi.disconnect(sourceType)
+}
+
 export const api = {
   values: valuesApi,
   chat: chatApi,
@@ -1241,6 +1509,10 @@ export const api = {
   folders: foldersApi,
   profile: profileApi,
   dashboard: dashboardApi,
+  connectors: connectorsApi,
+  weeklyReview: weeklyReviewApi,
+  today: todayApi,
+  onboarding: onboardingApi,
 };
 
 export default api;

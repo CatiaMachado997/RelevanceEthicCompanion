@@ -12,6 +12,7 @@ from datetime import datetime, UTC
 from utils.db import get_db
 from utils.serialization import serialize_row, serialize_rows
 from services.context_manager import ContextManager
+from services.work_rollups import WorkRollupsService
 from esl.engine import EthicalSafeguardLayer
 from esl.models import ProposedAction, ActionType, UrgencyLevel, ESLDecisionStatus
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
@@ -27,6 +28,20 @@ def get_esl(
 ) -> EthicalSafeguardLayer:
     """Get ESL instance"""
     return EthicalSafeguardLayer(context_manager)
+
+
+def get_work_rollups_service() -> WorkRollupsService:
+    """Get WorkRollupsService instance"""
+    return WorkRollupsService()
+
+
+_GOAL_ROLLUP_ZERO: Dict[str, int] = {
+    "milestones_total": 0,
+    "milestones_hit": 0,
+    "tasks_total": 0,
+    "tasks_done": 0,
+    "progress_pct": 0,
+}
 
 
 # Request/Response models
@@ -153,37 +168,66 @@ async def list_goals(
     try:
         with get_db() as conn:
             with conn.cursor() as cur:
-                query = "SELECT * FROM goals WHERE user_id = %s"
+                query = (
+                    "SELECT g.*, "
+                    "COALESCE(r.milestones_total, 0) AS milestones_total, "
+                    "COALESCE(r.milestones_hit,   0) AS milestones_hit, "
+                    "COALESCE(r.tasks_total,      0) AS tasks_total, "
+                    "COALESCE(r.tasks_done,       0) AS tasks_done, "
+                    "COALESCE(r.progress_pct,     0) AS progress_pct "
+                    "FROM goals g "
+                    "LEFT JOIN v_goal_rollup r ON r.goal_id = g.id "
+                    "WHERE g.user_id = %s"
+                )
                 params = [str(user_id)]
 
                 if status:
-                    query += " AND status = %s"
+                    query += " AND g.status = %s"
                     params.append(status)
                 elif active_only:
-                    query += " AND status = 'active'"
+                    query += " AND g.status = 'active'"
 
-                query += " ORDER BY priority"
+                query += " ORDER BY g.priority"
 
                 cur.execute(query, tuple(params))
                 goals = cur.fetchall()
 
-        return {"status": "success", "count": len(goals), "data": serialize_rows(goals)}
+        rollup_keys = (
+            "milestones_total",
+            "milestones_hit",
+            "tasks_total",
+            "tasks_done",
+            "progress_pct",
+        )
+        shaped: List[Dict[str, Any]] = []
+        for row in goals:
+            data = serialize_row(row)
+            rollup = {k: data.pop(k, 0) for k in rollup_keys}
+            data["rollup"] = rollup
+            shaped.append(data)
+
+        return {"status": "success", "count": len(shaped), "data": shaped}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching goals: {str(e)}")
 
 
 @router.get("/{goal_id}", response_model=dict)
-async def get_goal(goal_id: str, user_id: str = Depends(get_current_read_user_id)):
+async def get_goal(
+    goal_id: str,
+    user_id: str = Depends(get_current_read_user_id),
+    rollups: WorkRollupsService = Depends(get_work_rollups_service),
+):
     """
     Get a specific goal by ID
 
     Args:
         goal_id: Goal ID
         user_id: Current user ID
+        rollups: Work rollups service for inlined progress data
 
     Returns:
-        Goal data
+        Goal data with rollup
     """
     try:
         with get_db() as conn:
@@ -197,8 +241,18 @@ async def get_goal(goal_id: str, user_id: str = Depends(get_current_read_user_id
         if not goal:
             raise HTTPException(status_code=404, detail="Goal not found")
 
-        return {"status": "success", "data": serialize_row(goal)}
+        rollup_raw = rollups.get_goal_rollup(goal_id)
+        if rollup_raw:
+            rollup = {k: v for k, v in rollup_raw.items() if k not in ("goal_id", "user_id")}
+        else:
+            rollup = dict(_GOAL_ROLLUP_ZERO)
 
+        data = serialize_row(goal)
+        data["rollup"] = rollup
+        return {"status": "success", "data": data}
+
+    except HTTPException:
+        raise
     except Exception as e:
         if "not found" in str(e).lower():
             raise HTTPException(status_code=404, detail="Goal not found")

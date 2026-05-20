@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { DrawerShell } from './DrawerShell'
-import { api, Task, Project } from '@/lib/api'
-import { Trash2, AlertCircle } from 'lucide-react'
+import { api, Task, Project, Goal } from '@/lib/api'
+import { Trash2, AlertCircle, Plus } from 'lucide-react'
+import { DependencyChips } from '@/components/tasks/DependencyChips'
+import { AddDependencyDialog } from '@/components/tasks/AddDependencyDialog'
 
 interface TaskDrawerProps {
   task: Task | null
@@ -33,11 +35,15 @@ export function TaskDrawer({ task, open, onClose, onSaved }: TaskDrawerProps) {
   const [priority, setPriority] = useState(5)
   const [dueDate, setDueDate]   = useState('')
   const [projectId, setProjectId] = useState<string>('')
+  const [goalId, setGoalId]     = useState<string>('')
   const [projects, setProjects] = useState<Project[]>([])
+  const [goals, setGoals]       = useState<Goal[]>([])
   const [saving, setSaving]     = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError]       = useState<string | null>(null)
-  const [dirty, setDirty]       = useState(false)
+  const [, setDirty]            = useState(false)
+  const [addDepOpen, setAddDepOpen] = useState(false)
+  const [depRefreshKey, setDepRefreshKey] = useState(0)
 
   useEffect(() => {
     if (!task) return
@@ -47,6 +53,7 @@ export function TaskDrawer({ task, open, onClose, onSaved }: TaskDrawerProps) {
     setPriority(task.priority)
     setDueDate(task.due_date ? task.due_date.slice(0, 10) : '')
     setProjectId(task.project_id ?? '')
+    setGoalId(task.goal_id ?? '')
     setError(null)
     setDirty(false)
   }, [task])
@@ -54,6 +61,7 @@ export function TaskDrawer({ task, open, onClose, onSaved }: TaskDrawerProps) {
   useEffect(() => {
     if (!open) return
     api.projects.list().then(setProjects).catch(() => {})
+    api.goals.list().then(r => setGoals(r.goals)).catch(() => {})
   }, [open])
 
   const handleSave = async () => {
@@ -68,6 +76,7 @@ export function TaskDrawer({ task, open, onClose, onSaved }: TaskDrawerProps) {
         priority,
         due_date: dueDate || undefined,
         project_id: projectId || undefined,
+        goal_id: goalId || null,
       })
       onSaved()
       onClose()
@@ -205,6 +214,54 @@ export function TaskDrawer({ task, open, onClose, onSaved }: TaskDrawerProps) {
             <option value="">None</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
           </select>
+        </div>
+      )}
+
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium uppercase tracking-widest" style={{ color: 'var(--ec-text-subtle)' }}>Goal</label>
+        <select
+          className={field}
+          style={fieldStyle}
+          value={goalId}
+          onChange={e => { setGoalId(e.target.value); setDirty(true) }}
+        >
+          <option value="">None</option>
+          {goals.map(g => <option key={g.id} value={g.id}>{g.title}</option>)}
+        </select>
+      </div>
+
+      {task && (
+        <div
+          className="space-y-3 pt-3"
+          style={{ borderTop: '1px solid var(--ec-card-border)' }}
+        >
+          <div className="flex items-center justify-between">
+            <div
+              className="text-xs font-medium uppercase tracking-widest"
+              style={{ color: 'var(--ec-text-subtle)' }}
+            >
+              Dependencies
+            </div>
+            <button
+              type="button"
+              onClick={() => setAddDepOpen(true)}
+              className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg hover:bg-black/5 transition-colors"
+              style={{ color: 'var(--ec-text)' }}
+            >
+              <Plus size={12} /> Add dependency
+            </button>
+          </div>
+          <DependencyChips
+            taskId={task.id}
+            refreshKey={depRefreshKey}
+            onChange={() => setDepRefreshKey(k => k + 1)}
+          />
+          <AddDependencyDialog
+            taskId={task.id}
+            open={addDepOpen}
+            onOpenChange={setAddDepOpen}
+            onAdded={() => setDepRefreshKey(k => k + 1)}
+          />
         </div>
       )}
     </DrawerShell>

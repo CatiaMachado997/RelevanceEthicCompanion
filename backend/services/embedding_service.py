@@ -14,7 +14,7 @@ from google.genai import types
 from typing import List, Dict, Any, Optional
 import logging
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ class EmbeddingService:
         cache_key = self._get_cache_key(text)
         if cache_key in self._cache:
             embedding, timestamp = self._cache[cache_key]
-            if datetime.utcnow() - timestamp < self._cache_ttl:
+            if datetime.now(timezone.utc) - timestamp < self._cache_ttl:
                 logger.debug(f"✅ Cache hit for text (len={len(text)})")
                 return embedding
             else:
@@ -71,7 +71,7 @@ class EmbeddingService:
     def _store_in_cache(self, text: str, embedding: List[float]):
         """Store embedding in cache"""
         cache_key = self._get_cache_key(text)
-        self._cache[cache_key] = (embedding, datetime.utcnow())
+        self._cache[cache_key] = (embedding, datetime.now(timezone.utc))
 
     async def generate_embedding(self, text: str) -> List[float]:
         """

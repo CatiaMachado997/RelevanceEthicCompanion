@@ -222,3 +222,64 @@ async def test_sync_writes_to_source_items():
     assert result["items_synced"] == 1
     assert len(written_items) == 1
     assert written_items[0].external_id == "evt_1"
+
+
+@pytest.mark.asyncio
+async def test_gmail_connector_passes_since_to_sync():
+    from services.connectors.gmail import GmailConnector
+    from datetime import datetime, timezone
+
+    captured: dict = {}
+
+    class FakeSync:
+        def fetch_messages(self, access_token, refresh_token="", query=None):
+            captured["query"] = query
+            return []
+
+    c = GmailConnector(redirect_uri="http://x")
+    c._sync = FakeSync()  # type: ignore[assignment]
+
+    since = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    await c.fetch_raw_items(access_token="t", since=since)
+
+    assert captured["query"] == "after:2026/01/01"
+
+
+@pytest.mark.asyncio
+async def test_slack_connector_passes_since_as_oldest():
+    from services.connectors.slack import SlackConnector
+    from datetime import datetime, timezone
+
+    captured: dict = {}
+
+    class FakeSync:
+        def fetch_messages(self, access_token, oldest=None):
+            captured["oldest"] = oldest
+            return []
+
+    c = SlackConnector()
+    c._sync = FakeSync()  # type: ignore[assignment]
+
+    since = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    await c.fetch_raw_items(access_token="t", since=since)
+
+    # Slack uses unix timestamp string for `oldest`
+    assert captured["oldest"] == str(since.timestamp())
+
+
+@pytest.mark.asyncio
+async def test_gmail_connector_no_since_means_no_query():
+    from services.connectors.gmail import GmailConnector
+
+    captured: dict = {}
+
+    class FakeSync:
+        def fetch_messages(self, access_token, refresh_token="", query=None):
+            captured["query"] = query
+            return []
+
+    c = GmailConnector(redirect_uri="http://x")
+    c._sync = FakeSync()  # type: ignore[assignment]
+    await c.fetch_raw_items(access_token="t")
+
+    assert captured["query"] is None

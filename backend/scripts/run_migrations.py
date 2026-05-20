@@ -26,8 +26,11 @@ def get_db_connection():
     return _get()
 
 
-def run_migrations(migrations_dir: str | None = None) -> None:
-    """Apply all pending .sql files in migrations_dir."""
+def run_migrations(migrations_dir: str | None = None) -> int:
+    """Apply all pending .sql files in migrations_dir.
+
+    Returns the number of newly-applied migrations (0 if schema is up to date).
+    """
     if migrations_dir is None:
         migrations_dir = str(Path(__file__).parent.parent / "migrations")
 
@@ -35,7 +38,7 @@ def run_migrations(migrations_dir: str | None = None) -> None:
 
     if not sql_files:
         logger.info("No migration files found in %s", migrations_dir)
-        return
+        return 0
 
     # Ensure the tracking table exists and get already-applied set.
     with get_db_connection() as conn:
@@ -49,6 +52,7 @@ def run_migrations(migrations_dir: str | None = None) -> None:
             cur.execute("SELECT filename FROM schema_migrations")
             applied = {row["filename"] for row in cur.fetchall()}
 
+    applied_count = 0
     # Each migration runs in its own connection so it commits atomically.
     # If a migration fails, only that migration is rolled back; earlier ones
     # already committed and will not be re-run.
@@ -73,8 +77,10 @@ def run_migrations(migrations_dir: str | None = None) -> None:
             logger.exception("  failed while applying: %s", filename)
             raise
         logger.info("  done: %s", filename)
+        applied_count += 1
 
     logger.info("Migrations complete.")
+    return applied_count
 
 
 if __name__ == "__main__":

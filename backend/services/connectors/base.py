@@ -5,6 +5,7 @@ BaseConnector — abstract interface for all data source connectors.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 
@@ -44,8 +45,14 @@ class BaseConnector(ABC):
         self,
         access_token: str,
         refresh_token: Optional[str] = None,
+        since: Optional[datetime] = None,
     ) -> List[Dict[str, Any]]:
-        """Fetch raw items from the external API using the provided tokens."""
+        """Fetch raw items from the external API.
+
+        `since` is a soft hint: connectors that support server-side filtering
+        use it to narrow the result set; others may ignore it. None means
+        "use the connector's default window" (typically last 7 days).
+        """
         ...
 
     @abstractmethod

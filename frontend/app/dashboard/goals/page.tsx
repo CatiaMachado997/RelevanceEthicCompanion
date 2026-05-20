@@ -6,6 +6,7 @@ import { Plus, MoreHorizontal, Check, X, ChevronDown, ChevronRight, Target } fro
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card } from '@/components/ui/card'
 import { FilterChips } from '@/components/ui/filter-chips'
+import { GoalProgressCard } from '@/components/goals/GoalProgressCard'
 
 type GoalStatus = 'active' | 'completed' | 'paused' | 'archived'
 
@@ -146,6 +147,7 @@ export default function GoalsPage() {
   function GoalRow({ goal }: { goal: Goal }) {
     const dotColor = PRIORITY_COLORS[Math.min(goal.priority - 1, 4)]
     const isCompleted = goal.status === 'completed'
+    const rollup = goal.rollup
     return (
       <div
         className="flex items-center gap-4 px-5 py-4 rounded-2xl transition-shadow duration-150 hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)]"
@@ -166,14 +168,9 @@ export default function GoalsPage() {
           {goal.description && (
             <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--ec-text-subtle)' }}>{goal.description}</p>
           )}
-          {goal.progress !== undefined && goal.progress > 0 && (
+          {rollup && (
             <div className="mt-2">
-              <div className="flex justify-between text-xs mb-1" style={{ color: 'var(--ec-text-subtle)' }}>
-                <span>Progress</span><span>{goal.progress}%</span>
-              </div>
-              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--ec-surface-2)' }}>
-                <div className="h-full rounded-full transition-all" style={{ width: `${goal.progress}%`, background: '#1a1a1a' }} />
-              </div>
+              <GoalProgressCard rollup={rollup} />
             </div>
           )}
           {/* Milestones */}

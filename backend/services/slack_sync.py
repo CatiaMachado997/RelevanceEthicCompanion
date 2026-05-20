@@ -60,6 +60,7 @@ class SlackSync:
         access_token: str,
         max_channels: int = 5,
         max_messages_per_channel: int = 20,
+        oldest: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Fetch recent messages from public channels"""
         headers = {"Authorization": f"Bearer {access_token}"}
@@ -80,10 +81,16 @@ class SlackSync:
             raise ValueError(f"Failed to fetch channels: {channels_data.get('error')}")
 
         for channel in channels_data.get("channels", []):
+            hist_params: Dict[str, Any] = {
+                "channel": channel["id"],
+                "limit": max_messages_per_channel,
+            }
+            if oldest is not None:
+                hist_params["oldest"] = oldest
             hist = httpx.get(
                 SLACK_HISTORY_URL,
                 headers=headers,
-                params={"channel": channel["id"], "limit": max_messages_per_channel},
+                params=hist_params,
             )
             hist.raise_for_status()
             hist_data = hist.json()

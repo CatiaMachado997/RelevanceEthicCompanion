@@ -3,6 +3,7 @@
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { ToolsLauncher } from '@/components/tools-launcher'
 import { DashboardHero, RecentConversations } from '@/components/dashboard-hero'
+import { WeeklyReviewCard } from '@/components/dashboard/WeeklyReviewCard'
 
 /**
  * Dashboard home — three sections only:
@@ -28,6 +29,7 @@ export default function DashboardPage() {
     <ErrorBoundary>
       <div className="p-6 max-w-4xl mx-auto space-y-8">
         <DashboardHero />
+        <WeeklyReviewCard />
         <ToolsLauncher />
         <RecentConversations />
       </div>

@@ -26,6 +26,17 @@ coverage/
 backend/.env
 frontend/.env.local
 frontend/.env.local.example
+# Env backups (produced by scripts/sync-env.sh when re-linking worktrees).
+# These contain real credentials and must never be committed.
+.env.bak.*
+*.env.bak
+*.bak
+
+# Other credentials
+*.pem
+*.key
+credentials*.json
+service_account*.json
 
 # General
 .DS_Store

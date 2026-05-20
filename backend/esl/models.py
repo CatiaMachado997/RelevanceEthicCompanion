@@ -7,7 +7,7 @@ These models define the core data structures for ethical decision-making
 
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Annotated, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 
@@ -160,7 +160,7 @@ class ESLDecision(BaseModel):
     confidence: float = Field(
         ..., ge=0.0, le=1.0, description="Confidence in the decision"
     )
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -186,7 +186,7 @@ class ESLAuditLog(BaseModel):
     """
 
     id: Optional[str] = None
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     user_id: str
     proposed_action: ProposedAction
     decision: ESLDecision
@@ -221,7 +221,7 @@ class UserContext(BaseModel):
     """
 
     user_id: str
-    current_time: datetime = Field(default_factory=datetime.utcnow)
+    current_time: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     focus_mode: bool = Field(default=False, description="Is user in focus mode?")
     active_goals: list[str] = Field(default_factory=list, description="Active goal IDs")
     recent_interactions: list[Dict[str, Any]] = Field(

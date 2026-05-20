@@ -16,9 +16,10 @@ from google.auth.transport.requests import Request
 
 from services.connectors import get_connector
 from services.connectors.base import SourceItem
+from services.connector_indexer import ConnectorIndexer
 from services.context_manager import ContextManager
-from models.context import SemanticMemoryEntry
 from utils.db import get_db_connection
+from utils.weaviate_client import get_weaviate_client
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -91,7 +92,12 @@ class DataIngestionService:
 
     # ── Sync ───────────────────────────────────────────────────────────────
 
-    async def sync_data_source(self, user_id: str, source_type: str) -> Dict[str, Any]:
+    async def sync_data_source(
+        self,
+        user_id: str,
+        source_type: str,
+        since: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
         logger.info(f"🔄 Starting sync: {source_type} for user {user_id}")
 
         try:
@@ -104,6 +110,7 @@ class DataIngestionService:
             raw_items = await connector.fetch_raw_items(
                 access_token=access_token,
                 refresh_token=None,  # token is already fresh
+                since=since,
             )
 
             items_synced = 0
@@ -152,6 +159,83 @@ class DataIngestionService:
                 "source_type": source_type,
             }
 
+    # ── Backfill ───────────────────────────────────────────────────────────
+
+    async def start_backfill(
+        self,
+        user_id: str,
+        source_type: str,
+        since: Optional[datetime] = None,
+    ) -> str:
+        """Run a backfill sync, tracking lifecycle in connector_backfill_jobs.
+
+        Inserts a 'pending' row, transitions to 'running', invokes
+        sync_data_source(since=since), and finalizes to 'complete' or
+        'failed'. Re-raises on failure so callers can surface errors.
+        Returns the backfill job id (UUID string).
+        """
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO connector_backfill_jobs
+                        (user_id, source_type, status)
+                    VALUES (%s, %s, 'pending')
+                    RETURNING id
+                    """,
+                    (user_id, source_type),
+                )
+                job_id = str(cur.fetchone()["id"])
+            conn.commit()
+
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE connector_backfill_jobs
+                    SET status = 'running', started_at = NOW()
+                    WHERE id = %s
+                    """,
+                    (job_id,),
+                )
+            conn.commit()
+
+        try:
+            result = await self.sync_data_source(user_id, source_type, since=since)
+            items_processed = (
+                result.get("items_synced", 0) if isinstance(result, dict) else 0
+            )
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE connector_backfill_jobs
+                        SET status = 'complete',
+                            finished_at = NOW(),
+                            items_processed = %s
+                        WHERE id = %s
+                        """,
+                        (items_processed, job_id),
+                    )
+                conn.commit()
+            return job_id
+        except Exception as e:
+            error_msg = str(e)[:500]
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE connector_backfill_jobs
+                        SET status = 'failed',
+                            finished_at = NOW(),
+                            error_message = %s
+                        WHERE id = %s
+                        """,
+                        (error_msg, job_id),
+                    )
+                conn.commit()
+            raise
+
     # ── Storage helpers ────────────────────────────────────────────────────
 
     async def _store_normalized_item(self, item: SourceItem):
@@ -188,23 +272,39 @@ class DataIngestionService:
             conn.commit()
 
     async def _maybe_embed(self, item: SourceItem, user_id: str):
-        """Store in M2 (Weaviate) if available — best-effort."""
-        if not (
-            self.context_manager.weaviate and self.context_manager.embedding_service
-        ):
-            return
+        """Index the item into DocumentMemory via ConnectorIndexer.
+
+        After Sprint B this is the only path connector content takes into
+        Weaviate — `store_semantic_memory` is no longer called for source
+        items because we want them to be cited by `search_documents` in chat.
+        Best-effort: failures log and continue (Weaviate may be offline).
+        """
         try:
-            content = f"{item.title}. {item.body or ''}"
-            memory_entry = SemanticMemoryEntry(
-                user_id=user_id,
-                content=content,
-                source=item.source_type,
-                timestamp=datetime.now(timezone.utc),
-                metadata={"external_id": item.external_id, **item.metadata},
-            )
-            await self.context_manager.store_semantic_memory(memory_entry)
+            indexer = ConnectorIndexer()
+            n = await indexer.index(item)
+            logger.debug(f"indexed {n} chunk(s) for {item.source_type}:{item.external_id}")
+            # Sprint F Task 1: record success on the row so the connectors
+            # panel can show indexed counts. Failure path is owned by
+            # ConnectorIndexer (it writes 'failed' + error before raising).
+            try:
+                with get_db_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """UPDATE source_items
+                                  SET embedding_status = 'indexed',
+                                      embedding_error = NULL
+                                WHERE user_id = %s
+                                  AND source_type = %s
+                                  AND external_id = %s""",
+                            (item.user_id, item.source_type, item.external_id),
+                        )
+                    conn.commit()
+            except Exception as db_exc:
+                logger.warning(
+                    f"⚠️ embedding_status=indexed update failed for {item.external_id}: {db_exc}"
+                )
         except Exception as e:
-            logger.warning(f"⚠️ M2 embed failed for {item.external_id}: {e}")
+            logger.warning(f"⚠️ ConnectorIndexer failed for {item.external_id}: {e}")
 
     async def _store_data_source(
         self,
@@ -519,6 +619,59 @@ class DataIngestionService:
             "gmail": counts.get("gmail", 0),
             "slack": counts.get("slack", 0),
             "total": sum(counts.values()),
+        }
+
+    async def disconnect_data_source(
+        self, user_id: str, source_type: str
+    ) -> Dict[str, Any]:
+        """Disconnect a connector and wipe everything associated with it.
+
+        Order matters:
+          1. Weaviate vectors (DocumentMemory matching user_id + source_type)
+          2. Postgres source_items rows
+          3. Postgres data_sources row (tokens + state)
+
+        Vectors are deleted first so that if the SQL DELETE fails the user
+        can retry — SQL still tells us there's cleanup to do. Conversely if
+        SQL is wiped first and vector deletion fails, we'd have orphan
+        vectors with no token to drive a retry from.
+
+        Returns a dict with counts:
+            {"vectors_deleted": int, "items_deleted": int, "tokens_deleted": int}
+        """
+        # Step 1: vectors first
+        vectors_deleted = 0
+        weav = get_weaviate_client()
+        if weav is not None:
+            vectors_deleted = weav.delete_by_filter(
+                "DocumentMemory",
+                {"user_id": str(user_id), "source_type": source_type},
+            )
+
+        # Steps 2 & 3: SQL
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM source_items WHERE user_id = %s AND source_type = %s",
+                    (user_id, source_type),
+                )
+                items_deleted = cur.rowcount or 0
+                cur.execute(
+                    "DELETE FROM data_sources WHERE user_id = %s AND source_type = %s",
+                    (user_id, source_type),
+                )
+                tokens_deleted = cur.rowcount or 0
+            conn.commit()
+
+        logger.info(
+            f"✅ disconnected {source_type} for {user_id}: "
+            f"{vectors_deleted} vectors, {items_deleted} items, "
+            f"{tokens_deleted} tokens"
+        )
+        return {
+            "vectors_deleted": vectors_deleted,
+            "items_deleted": items_deleted,
+            "tokens_deleted": tokens_deleted,
         }
 
     async def disconnect_source(self, user_id: str, source_type: str) -> bool:

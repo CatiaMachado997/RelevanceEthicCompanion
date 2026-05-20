@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { DrawerShell } from './DrawerShell'
-import { api, Project, Task } from '@/lib/api'
+import { api, Project, ProjectRollup, Task } from '@/lib/api'
 import { Trash2, AlertCircle, CheckSquare, Plus } from 'lucide-react'
+import { ProjectRollupCard } from '@/components/projects/ProjectRollupCard'
 
 interface ProjectDrawerProps {
   project: Project | null
@@ -26,6 +27,9 @@ export function ProjectDrawer({ project, open, onClose, onSaved }: ProjectDrawer
   const [deleting, setDeleting] = useState(false)
   const [error, setError]       = useState<string | null>(null)
 
+  // Rollup (fetched from detail endpoint, since list doesn't include it)
+  const [rollup, setRollup] = useState<ProjectRollup | undefined>(undefined)
+
   // Embedded task list
   const [tasks, setTasks]           = useState<Task[]>([])
   const [newTaskTitle, setNewTaskTitle] = useState('')
@@ -38,6 +42,7 @@ export function ProjectDrawer({ project, open, onClose, onSaved }: ProjectDrawer
     setDesc(project.description ?? '')
     setStatus(project.status)
     setError(null)
+    setRollup(project.rollup)
   }, [project])
 
   const projectId = project?.id
@@ -55,6 +60,16 @@ export function ProjectDrawer({ project, open, onClose, onSaved }: ProjectDrawer
   useEffect(() => {
     if (open && projectId) loadTasks()
   }, [open, projectId, loadTasks])
+
+  // Fetch detail to get rollup (list endpoint omits it)
+  useEffect(() => {
+    if (!open || !projectId) return
+    let cancelled = false
+    api.projects.get(projectId)
+      .then(p => { if (!cancelled) setRollup(p.rollup) })
+      .catch(() => { /* keep whatever rollup we already had */ })
+    return () => { cancelled = true }
+  }, [open, projectId, tasks.length])
 
   const handleSave = async () => {
     if (!project) return
@@ -159,6 +174,9 @@ export function ProjectDrawer({ project, open, onClose, onSaved }: ProjectDrawer
         </>
       }
     >
+      {/* Rollup card */}
+      {rollup && <ProjectRollupCard rollup={rollup} />}
+
       {/* Title */}
       <div className="space-y-1.5">
         <label htmlFor="project-name" className="text-xs font-medium uppercase tracking-widest" style={{ color: 'var(--ec-text-subtle)' }}>Name</label>
