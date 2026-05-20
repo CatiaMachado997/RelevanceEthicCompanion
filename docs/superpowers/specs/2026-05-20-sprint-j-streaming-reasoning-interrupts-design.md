@@ -45,13 +45,22 @@ that Sprint I made structurally possible.
 2. **Emit a structured `plan_step_actions` event** when the planner
    has committed to the step's actions, plus `action_start` /
    `action_complete` per action.
-3. **Pause the graph mid-turn for user-flagged tools** via LangGraph's
+3. **Pause the graph mid-turn for user-flagged actions** via LangGraph's
    `interrupt()`. The user sees the planned action with Approve /
    Skip / Cancel / Trust-from-now-on, and the resume continues from
    the checkpoint.
-4. **Per-user tool preferences** stored in a new `user_tool_preferences`
-   table. Settings UI lets the user toggle "always ask before X" per
-   tool. Default empty (no interrupts).
+4. **Layered safety controls** — three levels of confirmation
+   preferences the user can stack:
+   - **Master toggle** (`users.safe_mode_enabled`): when true, every
+     action pauses.
+   - **Category toggles** (`user_category_preferences`): tools belong
+     to one of four categories (`read-personal`, `read-external`,
+     `write-personal`, `write-external`); user toggles per category.
+   - **Per-tool list** (`user_tool_preferences`): finest grain;
+     overrides categories only if it ADDS a pause (resolution is
+     "pause if any layer says so").
+   All three default to off — Sprint J adds no friction unless the
+   user opts in.
 5. **Durable pauses.** A pause that takes the user 10 minutes to
    resolve must survive a backend restart. LangGraph's PostgresSaver
    checkpointer; 24h TTL prune via the existing retention job.
@@ -63,12 +72,18 @@ that Sprint I made structurally possible.
 - **Edit-the-params on pause.** Approving means "run with these
   params." If the user wants different params, they Skip and rephrase.
   (Out of scope; revisit if user feedback demands it.)
-- **Risk-level tagging on tools.** We considered a `risk_level='high'`
-  metadata flag that would auto-trigger pauses; rejected in favor of
-  per-user opt-in (the project's "user control non-negotiable"
-  principle outranks "smart defaults that take agency away").
-- **LLM-flagged risky actions.** Same reason — non-deterministic
-  judge; bad fit for a project framed around trust.
+- **Risk-level tagging on tools as a system-level default.** We
+  considered a `risk_level='high'` metadata flag that would auto-trigger
+  pauses; rejected in favor of per-user opt-in. (The project's "user
+  control non-negotiable" principle outranks "smart defaults that take
+  agency away." Tool *categories* are different — they're a routing
+  hint, not an automatic policy.)
+- **LLM-flagged risky actions.** Non-deterministic judge; bad fit for
+  a project framed around trust.
+- **Natural-language safety rules** (e.g. "never email anyone before
+  checking with me"). Worth doing, but it's an ESL-engine extension,
+  not a Sprint-J UI feature. Deferred to a future sprint that extends
+  the ESL evaluator.
 - **Replacing the marketplace `pending_tool_confirmation` path.**
   That mechanism remains. It serves a different need (ESL gate over
   third-party tool actions). Sprint J's interrupts and marketplace
@@ -109,11 +124,39 @@ frontend can choose to migrate to the new richer events over time.
 ### Interrupt mechanism
 
 **Where it fires:** inside `tool_execution_node`, before each action.
+
+**Resolution order (pause if ANY layer says so):**
+
+```python
+def _should_confirm(user_id: str, tool: ToolMetadata) -> bool:
+    # Layer 1: master toggle. If on, pause everything.
+    if users.safe_mode_enabled[user_id]:
+        return True
+    # Layer 2: category toggle.
+    if tool.category in user_category_preferences[user_id]:
+        return True
+    # Layer 3: per-tool list.
+    if tool.name in user_tool_preferences[user_id]:
+        return True
+    return False
+```
+
+The three layers are independent rows/columns; the executor reads
+them with one query (joined on user_id) at the start of the step
+and caches the result for the step's lifetime. No layer "overrides"
+another — they accumulate. Approving with "Trust this tool from now
+on" removes only the matching row at the per-tool layer (so master
+or category still apply if set).
+
 For each `action` in the step:
 
 ```python
-prefs = _load_user_tool_preferences(user_id)
-if action["tool"] in prefs and prefs[action["tool"]]["requires_confirmation"]:
+should_confirm = (
+    safe_mode_on
+    or action["category"] in confirmed_categories
+    or action["tool"] in confirmed_tools
+)
+if should_confirm:
     # LangGraph interrupt — pauses the graph, persists state via
     # the configured checkpointer, returns to stream_langgraph.
     decision = interrupt({
@@ -121,7 +164,9 @@ if action["tool"] in prefs and prefs[action["tool"]]["requires_confirmation"]:
         "step": step_index,
         "action_index": ai,
         "tool": action["tool"],
+        "category": action["category"],
         "params": action["params"],
+        "reason": _explain_reason(safe_mode_on, action),  # "safe mode is on" or "write-external category" or "tool query_calendar"
     })
     # On resume, `decision` is the value passed to Command(resume=...)
     if decision["action"] == "cancel":
@@ -200,9 +245,16 @@ for an `__interrupt__` field after astream_events drains). It emits:
   "step": 1,
   "action_index": 1,
   "tool": "query_calendar",
-  "params": { "days_back": 30 }
+  "category": "read-personal",
+  "params": { "days_back": 30 },
+  "reason": "category 'read-personal' is set to ask before running"
 }
 ```
+
+The `reason` string is human-readable; the frontend renders it under
+the action chip so the user understands *why* the pause happened
+(useful when they have multiple layers configured and want to know
+which one triggered).
 
 Then closes the SSE stream cleanly. The frontend renders Approve /
 Skip / Cancel / "Trust this tool from now on" under the paused action
@@ -225,12 +277,39 @@ SSE stream that re-enters the graph via
 remaining `action_complete`, possibly more `plan_step_actions`, then
 `done`.
 
-### User tool preferences
+### Safety preferences storage
 
-**Migration `019_user_tool_preferences.sql`:**
+Three storage targets, one per layer.
+
+**Migration `019_user_safe_mode.sql`** — the master toggle:
 
 ```sql
-CREATE TABLE public.user_tool_preferences (
+ALTER TABLE public.users
+    ADD COLUMN IF NOT EXISTS safe_mode_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+```
+
+**Migration `020_user_category_preferences.sql`** — the category layer:
+
+```sql
+CREATE TABLE IF NOT EXISTS public.user_category_preferences (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    category TEXT NOT NULL CHECK (category IN (
+        'read-personal', 'read-external', 'write-personal', 'write-external'
+    )),
+    requires_confirmation BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, category)
+);
+
+CREATE INDEX idx_user_category_preferences_user
+    ON public.user_category_preferences (user_id);
+```
+
+**Migration `021_user_tool_preferences.sql`** — the per-tool layer:
+
+```sql
+CREATE TABLE IF NOT EXISTS public.user_tool_preferences (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
     tool_name TEXT NOT NULL,
@@ -243,22 +322,61 @@ CREATE INDEX idx_user_tool_preferences_user
     ON public.user_tool_preferences (user_id);
 ```
 
-Defaults: empty for every user. No interrupts unless the user opts in.
+All three default to off (`safe_mode_enabled=false`, no rows in
+either preferences table). Sprint J adds zero friction until the
+user opts in.
+
+### Tool category metadata
+
+Every tool declares a `category` in its metadata. This lives next to
+the existing `tool_id` / `action_name` / `risk_level` keys used by
+the marketplace path:
+
+| Tool | Category |
+|---|---|
+| `query_memory` | `read-personal` |
+| `query_calendar` | `read-personal` |
+| `get_user_goals` | `read-personal` |
+| `search_documents` | `read-personal` |
+| `web_search` | `read-external` |
+| `create_note` | `write-personal` |
+| Marketplace tools (Gmail send, Slack send, Calendar write…) | `write-external` |
+
+The category lives in `services/langchain_tools.py` where each tool
+class is defined — one line per class. Unknown categories fall back
+to `write-external` (most conservative). The category is also
+included on every `plan_step_actions` SSE event and `tool_call_events`
+row so Transparency can color-code or filter by it later.
 
 ### Backend API
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `GET /api/settings/tool-preferences` | GET | List the user's tool preferences (tool_name, requires_confirmation). Includes all available tools so the UI can show toggles for tools the user hasn't yet configured. |
-| `PUT /api/settings/tool-preferences/{tool_name}` | PUT | Set `requires_confirmation` for one tool. Upsert. |
-| `DELETE /api/settings/tool-preferences/{tool_name}` | DELETE | Remove the row (equivalent to "don't ask"). |
+| `GET  /api/settings/safety` | GET | Return the full safety preferences shape: `{ safe_mode_enabled, categories: {...}, tools: {...}, available_tools: [{name, category}, ...] }`. One request hydrates the entire settings page. |
+| `PUT  /api/settings/safety/safe-mode` | PUT | Body `{ enabled: bool }`. Toggles the master switch. |
+| `PUT  /api/settings/safety/categories/{category}` | PUT | Body `{ requires_confirmation: bool }`. Upserts the category row. `requires_confirmation=false` deletes the row. |
+| `PUT  /api/settings/safety/tools/{tool_name}` | PUT | Body `{ requires_confirmation: bool }`. Upserts the per-tool row. `requires_confirmation=false` deletes the row. |
 | `POST /api/chat/resume` | POST | Resume a paused graph thread with the user's decision. |
 
 ### Frontend changes
 
-1. **`/dashboard/settings/tools` (new page).** Lists all registered
-   tools with a toggle per tool: "Always ask before this runs."
-   Reads from `GET /api/settings/tool-preferences`. Writes via PUT.
+1. **`/dashboard/settings/safety` (new page).** Three sections:
+   - **Top: master toggle.** A single Switch labeled "Ask me before any
+     action runs." Bound to `safe_mode_enabled`. When ON, the rest of
+     the page goes muted/disabled — the master overrides everything.
+   - **Middle: category grid.** 2×2 layout of toggles:
+     - Read · Personal (your calendar, memory, goals, documents)
+     - Read · External (web search)
+     - Write · Personal (notes you save)
+     - Write · External (emails, Slack messages, calendar writes)
+     Each toggle hits `PUT /api/settings/safety/categories/{category}`.
+   - **Bottom: per-tool list.** Existing list (per the original spec)
+     of every registered tool with an individual toggle. Each row also
+     shows the tool's category as a small tag so the user can see why
+     a category toggle would affect it. Toggle hits
+     `PUT /api/settings/safety/tools/{tool_name}`.
+
+   All three sections read from one initial `GET /api/settings/safety`.
 2. **Chat page** (`/dashboard/chat`):
    - New `<ReasoningPanel>` component that listens for `thought_token`,
      `plan_step_actions`, `action_start`, `action_complete` events
@@ -351,25 +469,30 @@ managed via the config dict, not state.
 
 | Path | Action |
 |---|---|
-| `backend/migrations/019_user_tool_preferences.sql` | CREATE |
-| `backend/services/tool_preferences.py` | CREATE — service for user_tool_preferences CRUD |
-| `backend/routes/tool_preferences.py` | CREATE — REST endpoints for /api/settings/tool-preferences |
+| `backend/migrations/019_user_safe_mode.sql` | CREATE — adds `users.safe_mode_enabled` column |
+| `backend/migrations/020_user_category_preferences.sql` | CREATE |
+| `backend/migrations/021_user_tool_preferences.sql` | CREATE |
+| `backend/services/safety_preferences.py` | CREATE — unified service for the three layers (load_for_user returns the combined shape used by the executor; per-layer CRUD methods used by the routes) |
+| `backend/routes/safety_preferences.py` | CREATE — REST endpoints for /api/settings/safety/* |
+| `backend/services/langchain_tools.py` | MODIFY — declare `category` on each tool's metadata |
 | `backend/orchestrator/graph.py` | MODIFY — add PostgresSaver, build_graph_async, thread-aware stream_langgraph; handle resume path |
-| `backend/orchestrator/nodes/tools.py` | MODIFY — `tool_execution_node` calls `interrupt()` for user-flagged tools |
-| `backend/orchestrator/state.py` | MODIFY — `pending_user_confirmation` field |
+| `backend/orchestrator/nodes/tools.py` | MODIFY — `tool_execution_node` checks layered preferences, calls `interrupt()` when any layer requires confirmation |
 | `backend/routes/chat.py` | MODIFY — new `POST /api/chat/resume` endpoint |
 | `backend/services/retention.py` | MODIFY — prune `checkpoints` + `checkpoint_writes` > 24h |
-| `backend/main.py` | MODIFY — register tool_preferences router |
-| `backend/tests/test_tool_preferences_service.py` | CREATE |
-| `backend/tests/test_tool_preferences_route.py` | CREATE |
-| `backend/tests/test_interrupt_flow.py` | CREATE — integration test for interrupt + resume |
-| `frontend/app/dashboard/settings/tools/page.tsx` | CREATE — settings UI |
+| `backend/main.py` | MODIFY — register safety_preferences router |
+| `backend/tests/test_safety_preferences_service.py` | CREATE — covers all three layers + the resolution-order logic |
+| `backend/tests/test_safety_preferences_route.py` | CREATE |
+| `backend/tests/test_interrupt_flow.py` | CREATE — integration test for interrupt + resume (tests every layer triggers a pause; tests the Trust action removes only the per-tool row) |
+| `frontend/app/dashboard/settings/safety/page.tsx` | CREATE — three-section settings UI |
 | `frontend/components/chat/ReasoningPanel.tsx` | CREATE — streamed thought + action chips |
-| `frontend/components/chat/PausedActionPrompt.tsx` | CREATE — Approve/Skip/Cancel/Trust UI |
+| `frontend/components/chat/PausedActionPrompt.tsx` | CREATE — Approve/Skip/Cancel/Trust UI; shows the `reason` string |
 | `frontend/app/dashboard/chat/page.tsx` | MODIFY — wire ReasoningPanel + handle plan_paused event |
-| `frontend/lib/api.ts` | MODIFY — `toolPreferencesApi` namespace + resume endpoint |
+| `frontend/lib/api.ts` | MODIFY — `safetyApi` namespace + resume endpoint |
 
-~17 files (10 new, 7 modified).
+~19 files (12 new, 7 modified). Slightly bigger than the original
+single-layer scope, but the layers all share the same execution
+plumbing — the additional cost is mostly UI surface and three
+extra migration files (which auto-apply on boot anyway).
 
 ---
 
@@ -401,7 +524,9 @@ managed via the config dict, not state.
 - **Interrupt + approve.** User has `query_calendar` in preferences with `requires_confirmation=true`. Turn 1: graph pauses, `plan_paused` event emitted, stream closes. POST /api/chat/resume with approve. New stream completes the turn. Assert the calendar tool DID execute (real `_execute_with_retry` call happened).
 - **Interrupt + skip.** Same setup, decision=skip. Assert the action observation is `{status: 'skipped', reason: 'user'}` and the planner sees it in the next step.
 - **Interrupt + cancel.** Decision=cancel. Assert `planner_runs.status = 'cancelled'`, no further actions execute, `done` event still fires.
-- **Interrupt + trust.** Decision=approve with `trust=true`. After resume, assert the row was deleted from `user_tool_preferences`. A second turn that calls the same tool does NOT pause.
+- **Interrupt + trust.** Decision=approve with `trust=true`. After resume, assert the row was deleted from `user_tool_preferences`. A second turn that calls the same tool does NOT pause — *as long as the master toggle is off and the category layer doesn't catch it*. If a higher layer is still on, "Trust this tool" does NOT magically silence it (we don't want one click to disable a category the user explicitly enabled).
+- **Layered resolution.** User has `safe_mode_enabled=true` AND a category toggle AND a per-tool toggle, all set to require confirmation. Assert one (and only one) pause fires per action; assert `reason` reflects the highest-priority layer (master > category > per-tool).
+- **Trust action with master on.** Master is on, user clicks Approve+Trust. Per-tool row deleted; next call still pauses (master still wins). UI should hint this — the PausedActionPrompt's Trust button is disabled (or marked "won't help — safe mode is on") when master is on.
 - **Resume on a turn whose checkpointed code differs.** Force a state shape mismatch; assert the route returns a usable error.
 
 ### End-to-end smoke
