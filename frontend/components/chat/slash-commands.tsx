@@ -281,9 +281,13 @@ export function SlashCommands({ input, setInput, onClearChat, onKeyDownRef }: Pr
   const argsMode = parsed?.args !== null && parsed?.args !== undefined
   const activeArgs = parsed?.args ?? ""
 
+  // Clamp cursor if results shrink. Intentional synchronous setState —
+  // produces at most one extra render when results shorten past the cursor.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (cursor >= results.length) setCursor(Math.max(0, results.length - 1))
   }, [results.length, cursor])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Expose a keydown handler via ref so the chat page's textarea can intercept
   // arrow keys / Enter / Escape without us owning focus.

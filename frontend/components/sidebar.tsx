@@ -100,14 +100,53 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null)
   const [editFolderName, setEditFolderName] = useState('')
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null) // null = ungrouped target; string = folder id
-  // Power-user "More" disclosure
+  // Right-click context menu for conversation rows. Acts as a
+  // keyboard/touch-friendly alternative to drag-and-drop: any user
+  // who can't (or doesn't want to) drag still has a way to move a
+  // chat between folders. Positioned at the click coordinates with
+  // edge-snapping so it never clips out of the viewport.
+  const [convCtxMenu, setConvCtxMenu] = useState<{
+    x: number
+    y: number
+    convId: string
+    currentFolderId: string | null
+  } | null>(null)
+  // Power-user "More" disclosure — persisted across sessions so users
+  // who use these pages regularly aren't forced to re-open the section
+  // on every reload. We default to closed (the SSR/first-render output)
+  // and hydrate from localStorage after mount, keeping the server and
+  // first client render identical.
   const [moreOpen, setMoreOpen] = useState(false)
-  // Auto-open if the user is on one of the hidden pages
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('ec:sidebar:moreOpen') === '1') setMoreOpen(true)
+    } catch {
+      // localStorage may be unavailable (SSR-edge, privacy mode) — ignore.
+    }
+  }, [])
+  // Auto-open if the user is on one of the hidden pages. This wins over
+  // the persisted preference: if a user deep-links into /goals we should
+  // always reveal where it lives in the nav, not leave them stranded.
   useEffect(() => {
     if (MORE_ITEMS.some(m => pathname === m.href || pathname.startsWith(m.href + '/'))) {
       setMoreOpen(true)
     }
   }, [pathname])
+  // Persist whenever the user toggles. Skipped during the initial paint
+  // (the value still equals the default `false`), so we don't clobber
+  // a `'1'` already in storage with a false write before hydration.
+  const moreOpenInitialized = useRef(false)
+  useEffect(() => {
+    if (!moreOpenInitialized.current) {
+      moreOpenInitialized.current = true
+      return
+    }
+    try {
+      localStorage.setItem('ec:sidebar:moreOpen', moreOpen ? '1' : '0')
+    } catch {
+      // Same as above — silently ignore storage failures.
+    }
+  }, [moreOpen])
 
   // Avatar menu (dropdown)
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false)
@@ -117,9 +156,48 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
       const target = e.target as HTMLElement
       if (!target.closest('[data-avatar-menu]')) setAvatarMenuOpen(false)
     }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setAvatarMenuOpen(false)
+    }
     window.addEventListener('mousedown', onClick)
-    return () => window.removeEventListener('mousedown', onClick)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', onClick)
+      window.removeEventListener('keydown', onKey)
+    }
   }, [avatarMenuOpen])
+
+  // Move focus into the menu when it opens so keyboard users land
+  // on the first item rather than staying on the trigger.
+  const avatarMenuRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!avatarMenuOpen) return
+    const first = avatarMenuRef.current?.querySelector<HTMLElement>(
+      '[role="menuitem"]'
+    )
+    first?.focus()
+  }, [avatarMenuOpen])
+
+  // Up/Down arrow + Home/End nav inside the avatar menu — completes
+  // the WAI-ARIA menu pattern (Esc-to-close + initial focus already
+  // wired above). Tab still works as a fallback because each menuitem
+  // is a real focusable Link/button.
+  const handleAvatarMenuKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return
+    const items = Array.from(
+      avatarMenuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [],
+    )
+    if (items.length === 0) return
+    e.preventDefault()
+    const active = document.activeElement as HTMLElement | null
+    const currentIdx = active ? items.indexOf(active) : -1
+    let nextIdx: number
+    if (e.key === 'Home') nextIdx = 0
+    else if (e.key === 'End') nextIdx = items.length - 1
+    else if (e.key === 'ArrowDown') nextIdx = (currentIdx + 1) % items.length
+    else nextIdx = currentIdx <= 0 ? items.length - 1 : currentIdx - 1
+    items[nextIdx]?.focus()
+  }
 
   // Unread notifications — polled once per minute + cleared on notifications page
   const [unreadNotifs, setUnreadNotifs] = useState(0)
@@ -193,6 +271,53 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
     setEditingId(null)
   }
 
+  // ─── Conversation context menu ─────────────────────────────────────
+  const handleConvContextMenu = (
+    e: React.MouseEvent,
+    convId: string,
+    currentFolderId: string | null,
+  ) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setConvCtxMenu({ x: e.clientX, y: e.clientY, convId, currentFolderId })
+  }
+
+  const closeCtxMenu = useCallback(() => setConvCtxMenu(null), [])
+
+  // Close on Escape, outside-click, scroll, or route change.
+  useEffect(() => {
+    if (!convCtxMenu) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeCtxMenu()
+    }
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('[data-conv-ctx-menu]')) closeCtxMenu()
+    }
+    const onScroll = () => closeCtxMenu()
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('mousedown', onClick)
+    window.addEventListener('scroll', onScroll, true)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('mousedown', onClick)
+      window.removeEventListener('scroll', onScroll, true)
+    }
+  }, [convCtxMenu, closeCtxMenu])
+  useEffect(() => {
+    closeCtxMenu()
+  }, [pathname, closeCtxMenu])
+
+  const handleMoveConv = async (convId: string, folderId: string | null) => {
+    closeCtxMenu()
+    if (folderId) setExpandedFolders(prev => new Set(prev).add(folderId))
+    try {
+      await api.folders.moveConversation(convId, folderId)
+    } finally {
+      qc.invalidateQueries({ queryKey: ["conversations"] })
+    }
+  }
+
   // ─── Folder CRUD ────────────────────────────────────────────────────
   const handleCreateFolder = async () => {
     const name = newFolderName.trim()
@@ -223,6 +348,50 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
     } catch (e) {
       console.error('rename folder failed', e)
       toast.error("Couldn't rename folder", e instanceof Error ? e.message : undefined)
+    }
+  }
+
+  // ─── Folder color ──────────────────────────────────────────────────
+  // 8-swatch palette + "no color". Backend already accepts {color: string|null}
+  // on PATCH /api/folders/:id; this just exposes it in the sidebar.
+  const FOLDER_COLORS: { name: string; value: string }[] = [
+    { name: "Red",    value: "#E5484D" },
+    { name: "Orange", value: "#E58E26" },
+    { name: "Yellow", value: "#D5AE2A" },
+    { name: "Green",  value: "#46A758" },
+    { name: "Teal",   value: "#12A594" },
+    { name: "Blue",   value: "#3D63DD" },
+    { name: "Purple", value: "#8E4EC6" },
+    { name: "Pink",   value: "#D6409F" },
+  ]
+  const [colorPickerFolderId, setColorPickerFolderId] = useState<string | null>(null)
+
+  // Close the color picker on outside-click — same pattern as the avatar menu.
+  useEffect(() => {
+    if (!colorPickerFolderId) return
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('[data-folder-color-picker]')) setColorPickerFolderId(null)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setColorPickerFolderId(null)
+    }
+    window.addEventListener('mousedown', onClick)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', onClick)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [colorPickerFolderId])
+
+  const handleSetFolderColor = async (id: string, color: string | null) => {
+    setColorPickerFolderId(null)
+    try {
+      await api.folders.update(id, { color })
+      qc.invalidateQueries({ queryKey: ["folders"] })
+    } catch (e) {
+      console.error('set folder color failed', e)
+      toast.error("Couldn't update folder color", e instanceof Error ? e.message : undefined)
     }
   }
 
@@ -263,6 +432,60 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
     setDragOverFolder(folderId ?? '__ungrouped__')
+  }
+
+  // ─── Folder reorder DnD ───────────────────────────────────────────
+  // Conversations and folders are both draggable, but the existing
+  // conversation handlers MUST stay decoupled — discriminate via
+  // separate `dataTransfer` types: `text/ec-conversation` vs
+  // `text/ec-folder`. A nice side-effect: dragging a folder over
+  // another folder won't trigger the conversation drop highlight.
+  const [draggingFolderId, setDraggingFolderId] = useState<string | null>(null)
+  // Index in the current `folders` array where the dragged folder
+  // would land if released right now. null = no active reorder.
+  const [folderDropIndex, setFolderDropIndex] = useState<number | null>(null)
+
+  const handleFolderDragStart = (e: React.DragEvent, folderId: string) => {
+    e.dataTransfer.setData('text/ec-folder', folderId)
+    e.dataTransfer.effectAllowed = 'move'
+    setDraggingFolderId(folderId)
+  }
+
+  const handleFolderDragOver = (e: React.DragEvent, hoverIdx: number) => {
+    if (!e.dataTransfer.types.includes('text/ec-folder')) return
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+    setFolderDropIndex(hoverIdx)
+  }
+
+  const handleFolderDragEnd = () => {
+    setDraggingFolderId(null)
+    setFolderDropIndex(null)
+  }
+
+  const handleFolderReorderDrop = async (e: React.DragEvent, hoverIdx: number) => {
+    if (!e.dataTransfer.types.includes('text/ec-folder')) return
+    e.preventDefault()
+    e.stopPropagation()
+    const draggedId = e.dataTransfer.getData('text/ec-folder')
+    setDraggingFolderId(null)
+    setFolderDropIndex(null)
+    if (!draggedId) return
+    const fromIdx = folders.findIndex(f => f.id === draggedId)
+    if (fromIdx === -1 || fromIdx === hoverIdx) return
+    // Build the reordered id list. Standard "remove from old index,
+    // insert at new index" splice; account for the post-removal shift
+    // when dragging downward.
+    const ids = folders.map(f => f.id)
+    ids.splice(fromIdx, 1)
+    const insertIdx = hoverIdx > fromIdx ? hoverIdx - 1 : hoverIdx
+    ids.splice(insertIdx, 0, draggedId)
+    try {
+      await api.folders.reorder(ids)
+    } finally {
+      qc.invalidateQueries({ queryKey: ["folders"] })
+    }
   }
 
   const handleDropOnFolder = async (e: React.DragEvent, folderId: string | null) => {
@@ -421,21 +644,53 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
             </p>
           )}
 
-          {folders.map(folder => {
+          {folders.map((folder, idx) => {
             const isExpanded = expandedFolders.has(folder.id)
             const isEditingFolder = editingFolderId === folder.id
             const isDropTarget = dragOverFolder === folder.id
             const convsInFolder = conversations.filter(c => c.folder_id === folder.id)
+            const isDragging = draggingFolderId === folder.id
+            // Only the row immediately above the drop position shows
+            // the indicator line — keeps the visual quiet.
+            const showDropIndicator =
+              folderDropIndex === idx && draggingFolderId !== folder.id
 
             return (
               <div
                 key={folder.id}
-                onDragOver={e => handleDragOverFolder(e, folder.id)}
+                draggable={!isEditingFolder}
+                onDragStart={e => handleFolderDragStart(e, folder.id)}
+                onDragEnd={handleFolderDragEnd}
+                onDragOver={e => {
+                  // Conversation drops still go to the existing handler;
+                  // folder reorder uses its own typed payload.
+                  if (e.dataTransfer.types.includes('text/ec-folder')) {
+                    handleFolderDragOver(e, idx)
+                  } else {
+                    handleDragOverFolder(e, folder.id)
+                  }
+                }}
                 onDragLeave={() => setDragOverFolder(null)}
-                onDrop={e => handleDropOnFolder(e, folder.id)}
-                className="rounded transition-colors"
-                style={{ background: isDropTarget ? 'var(--ec-sidebar-active)' : undefined }}
+                onDrop={e => {
+                  if (e.dataTransfer.types.includes('text/ec-folder')) {
+                    handleFolderReorderDrop(e, idx)
+                  } else {
+                    handleDropOnFolder(e, folder.id)
+                  }
+                }}
+                className="rounded transition-colors relative"
+                style={{
+                  background: isDropTarget ? 'var(--ec-sidebar-active)' : undefined,
+                  opacity: isDragging ? 0.4 : undefined,
+                }}
               >
+                {showDropIndicator && (
+                  <div
+                    aria-hidden
+                    className="absolute left-1 right-1 -top-px h-0.5 rounded-full"
+                    style={{ background: 'var(--ec-text)' }}
+                  />
+                )}
                 <div
                   className="group flex items-center gap-1 px-1 py-1 rounded cursor-pointer hover:bg-[rgba(0,0,0,0.04)]"
                   onClick={() => !isEditingFolder && toggleFolder(folder.id)}
@@ -472,7 +727,26 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
                   )}
 
                   {!isEditingFolder && (
-                    <div className="hidden group-hover:flex gap-0.5 shrink-0">
+                    <div className="relative hidden group-hover:flex gap-0.5 shrink-0" data-folder-color-picker={colorPickerFolderId === folder.id ? "" : undefined}>
+                      <button
+                        onClick={e => {
+                          e.stopPropagation()
+                          setColorPickerFolderId(prev => prev === folder.id ? null : folder.id)
+                        }}
+                        className="p-0.5 rounded hover:bg-[rgba(0,0,0,0.08)]"
+                        title="Folder color"
+                        aria-label="Change folder color"
+                        aria-haspopup="menu"
+                        aria-expanded={colorPickerFolderId === folder.id}
+                      >
+                        <span
+                          className="block w-2.5 h-2.5 rounded-full border"
+                          style={{
+                            background: folder.color ?? 'transparent',
+                            borderColor: folder.color ? folder.color : 'var(--ec-text-subtle)',
+                          }}
+                        />
+                      </button>
                       <button
                         onClick={e => {
                           e.stopPropagation()
@@ -491,6 +765,57 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
                       >
                         <Trash2 size={10} style={{ color: 'var(--ec-text-subtle)' }} />
                       </button>
+
+                      {colorPickerFolderId === folder.id && (
+                        <div
+                          role="menu"
+                          aria-label="Folder color"
+                          onClick={e => e.stopPropagation()}
+                          className="absolute right-0 top-full mt-1 z-20 rounded-lg p-2 shadow-lg"
+                          style={{
+                            background: 'var(--ec-card-bg)',
+                            border: '1px solid var(--ec-card-border)',
+                            boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
+                          }}
+                        >
+                          <div className="flex gap-1.5">
+                            {FOLDER_COLORS.map(c => (
+                              <button
+                                key={c.value}
+                                role="menuitem"
+                                onClick={() => handleSetFolderColor(folder.id, c.value)}
+                                title={c.name}
+                                aria-label={c.name}
+                                className="w-5 h-5 rounded-full transition-transform hover:scale-110"
+                                style={{
+                                  background: c.value,
+                                  outline: folder.color === c.value
+                                    ? `2px solid var(--ec-text)`
+                                    : 'none',
+                                  outlineOffset: '2px',
+                                }}
+                              />
+                            ))}
+                            <button
+                              role="menuitem"
+                              onClick={() => handleSetFolderColor(folder.id, null)}
+                              title="No color"
+                              aria-label="No color"
+                              className="w-5 h-5 rounded-full transition-transform hover:scale-110 flex items-center justify-center"
+                              style={{
+                                background: 'transparent',
+                                border: '1px dashed var(--ec-text-subtle)',
+                                outline: folder.color == null
+                                  ? `2px solid var(--ec-text)`
+                                  : 'none',
+                                outlineOffset: '2px',
+                              }}
+                            >
+                              <X size={10} style={{ color: 'var(--ec-text-subtle)' }} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -511,6 +836,7 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
                             key={conv.id}
                             draggable={!isEditing}
                             onDragStart={e => handleDragStart(e, conv.id)}
+                            onContextMenu={e => !isEditing && handleConvContextMenu(e, conv.id, conv.folder_id)}
                             className="group flex items-center gap-1 rounded-lg px-2 py-1 text-xs cursor-pointer transition-colors"
                             style={{
                               background: isActive ? 'var(--ec-sidebar-active)' : 'transparent',
@@ -605,6 +931,7 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
                         key={conv.id}
                         draggable={!isEditing}
                         onDragStart={e => handleDragStart(e, conv.id)}
+                        onContextMenu={e => !isEditing && handleConvContextMenu(e, conv.id, conv.folder_id)}
                         className="group flex items-center gap-1 rounded-lg px-2 py-1 text-xs cursor-pointer transition-colors"
                         style={{
                           background: isActive ? 'var(--ec-sidebar-active)' : 'transparent',
@@ -701,6 +1028,11 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
           {/* Dropdown — opens above the avatar */}
           {avatarMenuOpen && (
             <div
+              ref={avatarMenuRef}
+              role="menu"
+              aria-orientation="vertical"
+              aria-label="Account menu"
+              onKeyDown={handleAvatarMenuKey}
               className="absolute left-2 right-2 bottom-[52px] rounded-xl overflow-hidden z-10"
               style={{
                 background: "var(--ec-card-bg)",
@@ -710,6 +1042,7 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
             >
               <Link
                 href="/dashboard/profile"
+                role="menuitem"
                 onClick={() => { setAvatarMenuOpen(false); onClose?.() }}
                 className="flex items-center gap-2.5 px-3 h-9 text-xs transition-colors hover:bg-[rgba(0,0,0,0.04)]"
                 style={{ color: "var(--ec-text)" }}
@@ -719,6 +1052,7 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
               </Link>
               <Link
                 href="/dashboard/notifications"
+                role="menuitem"
                 onClick={() => { setAvatarMenuOpen(false); onClose?.() }}
                 className="flex items-center gap-2.5 px-3 h-9 text-xs transition-colors hover:bg-[rgba(0,0,0,0.04)]"
                 style={{ color: "var(--ec-text)" }}
@@ -736,6 +1070,7 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
               </Link>
               <Link
                 href="/dashboard/transparency"
+                role="menuitem"
                 onClick={() => { setAvatarMenuOpen(false); onClose?.() }}
                 className="flex items-center gap-2.5 px-3 h-9 text-xs transition-colors hover:bg-[rgba(0,0,0,0.04)]"
                 style={{ color: "var(--ec-text)" }}
@@ -743,8 +1078,9 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
                 <Eye size={14} style={{ color: "var(--ec-text-muted)" }} />
                 Transparency log
               </Link>
-              <div className="h-px" style={{ background: "var(--ec-card-border)" }} />
+              <div className="h-px" role="separator" style={{ background: "var(--ec-card-border)" }} />
               <button
+                role="menuitem"
                 onClick={() => { setAvatarMenuOpen(false); signOut().catch(console.error) }}
                 className="w-full flex items-center gap-2.5 px-3 h-9 text-xs transition-colors hover:bg-[rgba(0,0,0,0.04)]"
                 style={{ color: "#B04A3A" }}
@@ -792,6 +1128,111 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
           </button>
         </div>
       </div>
+
+      {/* ─── Conversation right-click menu ─────────────────────────── */}
+      {convCtxMenu && (() => {
+        // Edge-snap so the menu never clips off the right/bottom of the
+        // viewport. We approximate the menu size from the folder count
+        // (header + "No folder" + each folder + separator + 2 actions).
+        const MENU_W = 220
+        const ROW_H = 32
+        const HEADER_H = 26
+        const SEPARATOR_H = 9
+        const itemCount = 1 /* No folder */ + folders.length + 2 /* rename/delete */
+        const approxH = HEADER_H + itemCount * ROW_H + SEPARATOR_H + 8
+        const x =
+          typeof window !== 'undefined'
+            ? Math.min(convCtxMenu.x, window.innerWidth - MENU_W - 8)
+            : convCtxMenu.x
+        const y =
+          typeof window !== 'undefined'
+            ? Math.min(convCtxMenu.y, window.innerHeight - approxH - 8)
+            : convCtxMenu.y
+        const conv = conversations.find(c => c.id === convCtxMenu.convId)
+        return (
+          <div
+            data-conv-ctx-menu
+            role="menu"
+            aria-label="Conversation actions"
+            className="fixed z-50 rounded-xl overflow-hidden text-xs"
+            style={{
+              left: Math.max(x, 8),
+              top: Math.max(y, 8),
+              width: MENU_W,
+              background: 'var(--ec-card-bg)',
+              border: '1px solid var(--ec-card-border)',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+              color: 'var(--ec-text)',
+            }}
+          >
+            <div
+              className="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider"
+              style={{ color: 'var(--ec-text-subtle)' }}
+            >
+              Move to folder
+            </div>
+            <button
+              role="menuitem"
+              disabled={convCtxMenu.currentFolderId === null}
+              onClick={() => handleMoveConv(convCtxMenu.convId, null)}
+              className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-[rgba(0,0,0,0.04)] disabled:opacity-40 disabled:cursor-default"
+            >
+              <FolderIcon size={11} style={{ color: 'var(--ec-text-subtle)' }} />
+              <span className="italic" style={{ color: 'var(--ec-text-muted)' }}>
+                No folder
+              </span>
+              {convCtxMenu.currentFolderId === null && (
+                <Check size={10} className="ml-auto" style={{ color: 'var(--ec-text-subtle)' }} />
+              )}
+            </button>
+            {folders.map(f => {
+              const isCurrent = convCtxMenu.currentFolderId === f.id
+              return (
+                <button
+                  key={f.id}
+                  role="menuitem"
+                  disabled={isCurrent}
+                  onClick={() => handleMoveConv(convCtxMenu.convId, f.id)}
+                  className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-[rgba(0,0,0,0.04)] disabled:opacity-50 disabled:cursor-default"
+                >
+                  <FolderIcon size={11} style={{ color: f.color ?? 'var(--ec-text-subtle)' }} />
+                  <span className="truncate flex-1">{f.name}</span>
+                  {isCurrent && (
+                    <Check size={10} className="shrink-0" style={{ color: 'var(--ec-text-subtle)' }} />
+                  )}
+                </button>
+              )
+            })}
+            <div role="separator" className="h-px my-1" style={{ background: 'var(--ec-card-border)' }} />
+            <button
+              role="menuitem"
+              onClick={() => {
+                if (conv) {
+                  setEditingId(conv.id)
+                  setEditTitle(conv.title)
+                }
+                closeCtxMenu()
+              }}
+              className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-[rgba(0,0,0,0.04)]"
+            >
+              <Pencil size={11} style={{ color: 'var(--ec-text-subtle)' }} />
+              Rename
+            </button>
+            <button
+              role="menuitem"
+              onClick={() => {
+                handleDelete(convCtxMenu.convId)
+                closeCtxMenu()
+              }}
+              className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-[rgba(0,0,0,0.04)]"
+              style={{ color: '#B04A3A' }}
+            >
+              <Trash2 size={11} />
+              Delete
+            </button>
+          </div>
+        )
+      })()}
     </aside>
   )
 }

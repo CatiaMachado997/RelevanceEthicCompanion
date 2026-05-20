@@ -54,20 +54,23 @@ test('test_settings_loads_on_mount', async () => {
   })
 })
 
-test('test_save_button_disabled_when_clean', async () => {
+test('test_save_button_hidden_when_clean', async () => {
+  // The save bar is rendered only when the form is dirty — cleaner UX
+  // than "disabled button always visible".
   render(<SettingsPage />)
   await waitFor(() => expect(settingsApi.get).toHaveBeenCalled())
-  const saveButton = screen.getByRole('button', { name: /save settings/i })
-  expect(saveButton).toBeDisabled()
+  expect(
+    screen.queryByRole('button', { name: /save settings/i })
+  ).not.toBeInTheDocument()
 })
 
-test('test_save_button_enabled_after_toggle', async () => {
+test('test_save_button_appears_after_toggle', async () => {
   render(<SettingsPage />)
   await waitFor(() => expect(settingsApi.get).toHaveBeenCalled())
 
-  // Toggle the Email Notifications switch (first switch, index 0 — currently off)
-  const switches = screen.getAllByRole('switch')
-  await userEvent.click(switches[0])
+  await userEvent.click(
+    screen.getByRole('switch', { name: /email notifications/i })
+  )
 
   const saveButton = screen.getByRole('button', { name: /save settings/i })
   expect(saveButton).not.toBeDisabled()
@@ -77,9 +80,9 @@ test('test_save_calls_api', async () => {
   render(<SettingsPage />)
   await waitFor(() => expect(settingsApi.get).toHaveBeenCalled())
 
-  // Toggle the Email Notifications switch (first switch, index 0)
-  const switches = screen.getAllByRole('switch')
-  await userEvent.click(switches[0])
+  await userEvent.click(
+    screen.getByRole('switch', { name: /email notifications/i })
+  )
 
   const saveButton = screen.getByRole('button', { name: /save settings/i })
   await userEvent.click(saveButton)

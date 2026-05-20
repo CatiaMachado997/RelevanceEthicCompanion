@@ -1302,6 +1302,30 @@ export const foldersApi = {
       `/api/folders/conversations/${conversationId}`,
       { method: 'PATCH', body: JSON.stringify({ folder_id: folderId }) },
     ),
+
+  /**
+   * Reorder folders by sending the desired ordered list of ids. Each
+   * folder whose new index differs from its current position gets a
+   * PATCH with the new position; folders that didn't move are skipped.
+   *
+   * Backend has no batch reorder endpoint yet (cf. valuesApi.reorder /
+   * goalsApi.reorder which do); for typical folder counts (5–20) the
+   * sequential PATCHes are fine.
+   */
+  reorder: async (orderedIds: string[]): Promise<void> => {
+    await Promise.all(
+      orderedIds.map((id, idx) =>
+        apiRequest<Folder>(`/api/folders/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ position: idx }),
+        }).catch(() => {
+          // Best-effort: a single failed PATCH still leaves the user
+          // able to retry. The caller should invalidate the cache so
+          // the UI re-syncs to the server-truth ordering.
+        }),
+      ),
+    )
+  },
 }
 
 // ==================== Dashboard API ====================

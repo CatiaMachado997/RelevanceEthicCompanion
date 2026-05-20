@@ -60,6 +60,7 @@ SAMPLE_FOLDER_ROW = {
 
 # ─── GET /api/folders ──────────────────────────────────────────────────
 
+
 def test_list_folders_empty(client):
     mock_conn, _ = make_db_mock(fetchall_result=[])
     with patch("routes.folders.get_db_connection", return_value=mock_conn):
@@ -80,6 +81,7 @@ def test_list_folders_returns_rows(client):
 
 
 # ─── POST /api/folders ─────────────────────────────────────────────────
+
 
 def test_create_folder_success(client):
     # First execute() is the MAX(position) query returning next_pos = 0,
@@ -118,6 +120,7 @@ def test_create_folder_duplicate_name_returns_409(client):
         if "INSERT INTO folders" in sql:
             raise UniqueViolation("duplicate key value violates unique constraint")
         return None
+
     mock_cursor.execute.side_effect = execute_side_effect
 
     with patch("routes.folders.get_db_connection", return_value=mock_conn):
@@ -138,6 +141,7 @@ def test_create_folder_rejects_overlong_name(client):
 
 
 # ─── PATCH /api/folders/{id} ───────────────────────────────────────────
+
 
 def test_update_folder_rename(client):
     updated = dict(SAMPLE_FOLDER_ROW)
@@ -178,6 +182,7 @@ def test_update_folder_duplicate_name_returns_409(client):
         if "UPDATE folders" in sql:
             raise UniqueViolation("duplicate key value violates unique constraint")
         return None
+
     mock_cursor.execute.side_effect = execute_side_effect
 
     with patch("routes.folders.get_db_connection", return_value=mock_conn):
@@ -188,6 +193,7 @@ def test_update_folder_duplicate_name_returns_409(client):
 
 
 # ─── DELETE /api/folders/{id} ──────────────────────────────────────────
+
 
 def test_delete_folder_success(client):
     mock_conn, _ = make_db_mock(rowcount=1)
@@ -205,6 +211,7 @@ def test_delete_folder_not_found(client):
 
 
 # ─── PATCH /api/folders/conversations/{id} ─────────────────────────────
+
 
 def test_move_conversation_into_folder(client):
     # First fetchone(): folder-exists check → returns {"?column?": 1}

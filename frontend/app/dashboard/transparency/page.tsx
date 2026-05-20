@@ -266,7 +266,7 @@ export default function TransparencyPage() {
           {report && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
               <motion.div variants={itemVariants} className="h-full">
-                <Card className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)] h-full">
+                <Card className="rounded-2xl border border-[var(--ec-card-border)] bg-[var(--ec-card-bg)] shadow-[var(--ec-card-shadow)] h-full">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">
                       Total Decisions
@@ -282,7 +282,7 @@ export default function TransparencyPage() {
                 </Card>
               </motion.div>
               <motion.div variants={itemVariants} className="h-full">
-                <Card className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)] h-full">
+                <Card className="rounded-2xl border border-[var(--ec-card-border)] bg-[var(--ec-card-bg)] shadow-[var(--ec-card-shadow)] h-full">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">
                       Approval Rate
@@ -300,7 +300,7 @@ export default function TransparencyPage() {
                 </Card>
               </motion.div>
               <motion.div variants={itemVariants} className="h-full">
-                <Card className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)] h-full">
+                <Card className="rounded-2xl border border-[var(--ec-card-border)] bg-[var(--ec-card-bg)] shadow-[var(--ec-card-shadow)] h-full">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">Protected</CardTitle>
                     <div className="w-8 h-8 rounded-xl bg-[#f5f5f5] flex items-center justify-center">
@@ -314,7 +314,7 @@ export default function TransparencyPage() {
                 </Card>
               </motion.div>
               <motion.div variants={itemVariants} className="h-full">
-                <Card className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)] h-full">
+                <Card className="rounded-2xl border border-[var(--ec-card-border)] bg-[var(--ec-card-bg)] shadow-[var(--ec-card-shadow)] h-full">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">Modified</CardTitle>
                     <div className="w-8 h-8 rounded-xl bg-[#f5f5f5] flex items-center justify-center">
@@ -407,7 +407,7 @@ export default function TransparencyPage() {
 
       {/* Audit Log — always rendered so filter chips are accessible */}
       {activeTab === 'esl' && (
-      <Card className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+      <Card className="rounded-2xl border border-[var(--ec-card-border)] bg-[var(--ec-card-bg)] shadow-[var(--ec-card-shadow)]">
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>

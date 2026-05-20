@@ -19,7 +19,7 @@ import {
   ArrowRight, Brain, Target, CheckSquare, FolderOpen, Shield,
   Eye, Bell, FileText, UserCircle,
 } from "lucide-react"
-import { api, type Folder } from "@/lib/api"
+import { api, type Folder, type Goal, type Task, type Document } from "@/lib/api"
 
 interface Conversation {
   id: string
@@ -28,7 +28,14 @@ interface Conversation {
   updated_at: string
 }
 
-type ResultKind = "conversation" | "folder" | "action" | "semantic"
+type ResultKind =
+  | "conversation"
+  | "folder"
+  | "action"
+  | "semantic"
+  | "goal"
+  | "task"
+  | "document"
 
 interface Result {
   kind: ResultKind
@@ -55,8 +62,26 @@ export function CommandPalette() {
     queryKey: ["folders"],
     queryFn: () => api.folders.list(),
   })
+  // Active goals + open tasks + ready documents are the items most worth
+  // surfacing in the palette. Status filters here mirror what the
+  // dedicated listing pages show by default.
+  const { data: goalData } = useQuery({
+    queryKey: ["goals", "active"],
+    queryFn: () => api.goals.list("active"),
+  })
+  const { data: taskData } = useQuery({
+    queryKey: ["tasks", "open"],
+    queryFn: () => api.tasks.list(),
+  })
+  const { data: docData } = useQuery({
+    queryKey: ["documents"],
+    queryFn: () => api.documents.list(),
+  })
   const conversations: Conversation[] = convData?.conversations ?? []
   const folders: Folder[] = folderData?.folders ?? []
+  const goals: Goal[] = goalData?.goals ?? []
+  const tasks: Task[] = Array.isArray(taskData) ? taskData : []
+  const documents: Document[] = Array.isArray(docData) ? docData : []
 
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -81,12 +106,16 @@ export function CommandPalette() {
   }, [open])
 
   // ─── Reset query/cursor and autofocus each time the palette opens ─────
+  // Intentional synchronous setState — resets query/cursor whenever the
+  // palette is reopened. Runs at most once per open transition.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!open) return
     setQuery("")
     setCursor(0)
     requestAnimationFrame(() => inputRef.current?.focus())
   }, [open])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const close = useCallback(() => setOpen(false), [])
 
@@ -243,6 +272,51 @@ export function CommandPalette() {
       }
     }
 
+    // Goals — filter by title or description
+    for (const g of goals) {
+      const haystack = (g.title + " " + (g.description ?? "")).toLowerCase()
+      if (!q || haystack.includes(q)) {
+        out.push({
+          kind: "goal",
+          id: g.id,
+          label: g.title,
+          sublabel: "Goal",
+          icon: <Target size={14} />,
+          run: () => { router.push("/dashboard/goals"); close() },
+        })
+      }
+    }
+
+    // Tasks — filter by title (skip completed/cancelled to keep the list useful)
+    for (const t of tasks) {
+      if (t.status === "done" || t.status === "cancelled") continue
+      const haystack = (t.title + " " + (t.description ?? "")).toLowerCase()
+      if (!q || haystack.includes(q)) {
+        out.push({
+          kind: "task",
+          id: t.id,
+          label: t.title,
+          sublabel: t.status === "in_progress" ? "Task — in progress" : "Task",
+          icon: <CheckSquare size={14} />,
+          run: () => { router.push("/dashboard/tasks"); close() },
+        })
+      }
+    }
+
+    // Documents — filter by filename
+    for (const d of documents) {
+      if (!q || d.filename.toLowerCase().includes(q)) {
+        out.push({
+          kind: "document",
+          id: d.id,
+          label: d.filename,
+          sublabel: "Document",
+          icon: <FileText size={14} />,
+          run: () => { router.push("/dashboard/documents"); close() },
+        })
+      }
+    }
+
     // Semantic memory — only offered when the user has typed a query.
     // This is a hint card; selecting it runs a real search against /api/search.
     if (q) {
@@ -260,12 +334,15 @@ export function CommandPalette() {
     }
 
     return out.slice(0, 30)
-  }, [query, folders, conversations, router, close])
+  }, [query, folders, conversations, goals, tasks, documents, router, close])
 
-  // Clamp cursor if results shrink
+  // Clamp cursor if results shrink. Intentional synchronous setState —
+  // produces at most one extra render when results shorten past the cursor.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (cursor >= results.length) setCursor(Math.max(0, results.length - 1))
   }, [results.length, cursor])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const onKeyDownInput = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") {

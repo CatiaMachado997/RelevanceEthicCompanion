@@ -240,11 +240,14 @@ async def get_conversation(
     """Fetch a single conversation's metadata (no messages)."""
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT id, title, folder_id, created_at, updated_at
                 FROM conversations
                 WHERE id = %s AND user_id = %s
-            """, (conversation_id, user_id))
+            """,
+                (conversation_id, user_id),
+            )
             row = cur.fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Conversation not found")

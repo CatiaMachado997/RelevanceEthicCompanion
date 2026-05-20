@@ -113,11 +113,12 @@ export default function SearchPage() {
               if (e.key === "Enter") handleSearch(query)
             }}
             placeholder="Search your memories..."
-            className="h-11 w-full rounded-xl border border-[rgba(0,0,0,0.12)] bg-white pl-10 pr-10 text-sm text-[var(--ec-text)] placeholder:text-[var(--ec-text-subtle)] focus:border-[#0a0a0a] focus:outline-none focus:ring-1 focus:ring-[#0a0a0a]"
+            className="h-11 w-full rounded-xl border border-[var(--ec-card-border)] bg-[var(--ec-card-bg)] pl-10 pr-10 text-sm text-[var(--ec-text)] placeholder:text-[var(--ec-text-subtle)] focus:border-[var(--ec-text)] focus:outline-none focus:ring-1 focus:ring-[var(--ec-text)]"
           />
           {query && (
             <button
               onClick={handleClear}
+              aria-label="Clear search"
               className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-0.5 hover:bg-[var(--ec-page-bg)]"
             >
               <X className="h-4 w-4 text-[var(--ec-text-subtle)]" />
@@ -154,7 +155,7 @@ export default function SearchPage() {
             {[1, 2, 3].map((i) => (
               <div
                 key={i}
-                className="h-20 animate-pulse rounded-2xl border border-[rgba(0,0,0,0.08)] bg-[var(--ec-page-bg)]"
+                className="h-20 animate-pulse rounded-2xl border border-[var(--ec-card-border)] bg-[var(--ec-page-bg)]"
               />
             ))}
           </div>
@@ -167,7 +168,7 @@ export default function SearchPage() {
               {filteredResults.map((result) => (
                 <div
                   key={result.id}
-                  className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-shadow hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)]"
+                  className="rounded-2xl border border-[var(--ec-card-border)] bg-[var(--ec-card-bg)] p-4 shadow-[var(--ec-card-shadow)] transition-shadow hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)]"
                 >
                   <div className="flex items-start gap-3">
                     <div className="mt-0.5 text-[var(--ec-text-muted)]">
@@ -218,7 +219,7 @@ export default function SearchPage() {
                 <button
                   key={index}
                   onClick={() => handleRecentClick(search)}
-                  className="flex w-full items-center gap-3 rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white p-3 text-left shadow-[0_1px_3px_rgba(0,0,0,0.08)] transition-shadow hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)]"
+                  className="flex w-full items-center gap-3 rounded-2xl border border-[var(--ec-card-border)] bg-[var(--ec-card-bg)] p-3 text-left shadow-[var(--ec-card-shadow)] transition-shadow hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)]"
                 >
                   <Clock className="h-4 w-4 text-[var(--ec-text-subtle)]" />
                   <span className="text-sm text-[var(--ec-text)]">{search}</span>
