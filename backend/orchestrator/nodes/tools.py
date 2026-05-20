@@ -132,6 +132,30 @@ def _build_citations(results: list) -> list:
     return citations
 
 
+def _parse_planner_response(response: Any) -> dict:
+    """Convert an LLM response into our structured step shape.
+
+    The model's response will have:
+      - `content`: a free-form string (the thought, possibly empty)
+      - `tool_calls`: structured tool selections from bind_tools()
+
+    We treat any present tool_calls as the step's actions and the content
+    as the thought. If there are no tool_calls, this is the terminal
+    step — actions = [], and the content becomes proposed_content for
+    the response synthesizer (handled outside this fn).
+
+    Sprint I Task 10.
+    """
+    content = getattr(response, "content", "") or ""
+    thought = content if isinstance(content, str) else str(content)
+    tool_calls = list(getattr(response, "tool_calls", []) or [])
+    actions = [
+        {"tool": tc.get("name", ""), "params": tc.get("args", {}) or {}}
+        for tc in tool_calls
+    ]
+    return {"thought": thought.strip(), "actions": actions, "raw_tool_calls": tool_calls}
+
+
 def _build_system_prompt(state: AgentState) -> str:
     ctx = state.get("user_context", {})
     goals = ctx.get("active_goals", [])
@@ -242,7 +266,11 @@ def _build_system_prompt(state: AgentState) -> str:
 
 
 async def tool_planner_node(state: AgentState) -> dict:
-    """Ask the LLM which tools to call given the current message + context."""
+    """Sprint I: ask the LLM which tool(s) to call this step.
+
+    Emits {thought, actions: [...]} per step. Empty actions = exit loop.
+    Manages the planner_runs row lifecycle.
+    """
     from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
     from langchain_groq import ChatGroq
     from services.langchain_tools import create_langchain_tools
@@ -262,10 +290,6 @@ async def tool_planner_node(state: AgentState) -> dict:
 
     messages: List[BaseMessage] = [SystemMessage(content=_build_system_prompt(state))]
     for h in state.get("conversation_history", []):
-        # Prior assistant turns must be AIMessage so the LLM treats them as
-        # its own past replies (i.e. real conversational memory). Using
-        # SystemMessage here mixed prior replies with system instructions
-        # and prevented the model from following the conversation thread.
         messages.append(
             HumanMessage(content=h["content"])
             if h["role"] == "user"
@@ -273,32 +297,45 @@ async def tool_planner_node(state: AgentState) -> dict:
         )
     messages.append(HumanMessage(content=state["message"]))
 
-    # On a replan iteration, surface results from earlier tool calls so the
-    # planner can decide whether further tools are needed.
-    prior_results = state.get("tool_results") or []
-    if prior_results:
+    # On a replan iteration, surface the running plan trace so the
+    # planner can see prior thoughts + actions + observations.
+    plan_steps: list = list(state.get("plan_steps") or [])
+    if plan_steps:
         messages.append(
             SystemMessage(
                 content=(
-                    "Tools already executed this turn (results available "
-                    "for follow-up planning):\n"
-                    + json.dumps(prior_results)[:4000]
-                    + "\n\nIf you have everything you need, respond with no "
-                    "further tool calls."
+                    "Plan so far (your prior thoughts, actions, and what each tool returned):\n"
+                    + json.dumps(plan_steps, default=str)[:6000]
+                    + "\n\nIf you have everything you need, respond with no further tool calls."
                 )
             )
         )
 
-    response = await llm_with_tools.ainvoke(messages)
-    tool_calls = list(getattr(response, "tool_calls", []) or [])
-    proposed = response.content if not tool_calls else ""
+    # Lazy import to keep tests fast and avoid circulars
+    from services.planner_runs import PlannerRunsService
 
-    # `/ask` slash command: force a search_documents call so the user can audit
-    # which chunks the answer was grounded in regardless of the planner's choice.
-    if state.get("force_retrieval"):
-        already = any(tc.get("name") == "search_documents" for tc in tool_calls)
+    # First invocation: create the planner_runs parent row.
+    planner_run_id = state.get("planner_run_id") or ""
+    if not planner_run_id:
+        planner_run_id = PlannerRunsService().create(
+            user_id=user_id,
+            conversation_id=state.get("conversation_id"),
+            intent=state.get("intent") or "chat",
+        )
+
+    response = await llm_with_tools.ainvoke(messages)
+    parsed = _parse_planner_response(response)
+
+    # `/ask` slash command — force a search_documents action on step 1 only.
+    if state.get("force_retrieval") and not plan_steps:
+        already = any(a["tool"] == "search_documents" for a in parsed["actions"])
         if not already:
-            tool_calls.insert(
+            parsed["actions"].insert(
+                0,
+                {"tool": "search_documents", "params": {"query": state["message"], "k": 5}},
+            )
+            # Also reflect into raw_tool_calls so downstream legacy paths see it
+            parsed["raw_tool_calls"].insert(
                 0,
                 {
                     "name": "search_documents",
@@ -306,13 +343,27 @@ async def tool_planner_node(state: AgentState) -> dict:
                     "id": "forced_search_documents",
                 },
             )
-            proposed = ""
 
-    next_step = state.get("planner_step", 0) + 1
+    next_step_index = len(plan_steps) + 1
+    step = {
+        "step": next_step_index,
+        "thought": parsed["thought"],
+        "actions": parsed["actions"],
+        "observations": [],  # filled in by tool_execution_node
+        "started_at": datetime.now(UTC).isoformat(),
+    }
+    plan_steps.append(step)
+
+    # Maintain legacy tool_calls field so downstream code keeps working:
+    legacy_tool_calls = parsed["raw_tool_calls"]
+    proposed = parsed["thought"] if not parsed["actions"] else ""
+
     return {
-        "tool_calls": tool_calls,
+        "tool_calls": legacy_tool_calls,
         "proposed_content": proposed,
-        "planner_step": next_step,
+        "planner_step": next_step_index,
+        "plan_steps": plan_steps,
+        "planner_run_id": planner_run_id,
     }
 
 
