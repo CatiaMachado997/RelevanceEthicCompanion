@@ -243,7 +243,9 @@ async def get_goal(
 
         rollup_raw = rollups.get_goal_rollup(goal_id)
         if rollup_raw:
-            rollup = {k: v for k, v in rollup_raw.items() if k not in ("goal_id", "user_id")}
+            rollup = {
+                k: v for k, v in rollup_raw.items() if k not in ("goal_id", "user_id")
+            }
         else:
             rollup = dict(_GOAL_ROLLUP_ZERO)
 

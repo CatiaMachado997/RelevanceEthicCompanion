@@ -282,7 +282,9 @@ class DataIngestionService:
         try:
             indexer = ConnectorIndexer()
             n = await indexer.index(item)
-            logger.debug(f"indexed {n} chunk(s) for {item.source_type}:{item.external_id}")
+            logger.debug(
+                f"indexed {n} chunk(s) for {item.source_type}:{item.external_id}"
+            )
             # Sprint F Task 1: record success on the row so the connectors
             # panel can show indexed counts. Failure path is owned by
             # ConnectorIndexer (it writes 'failed' + error before raising).

@@ -44,12 +44,14 @@ def run_migrations(migrations_dir: str | None = None) -> int:
     # Ensure the tracking table exists and get already-applied set.
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 CREATE TABLE IF NOT EXISTS schema_migrations (
                     filename   TEXT PRIMARY KEY,
                     applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
-            """)
+            """
+            )
             cur.execute("SELECT filename FROM schema_migrations")
             applied = {row["filename"] for row in cur.fetchall()}
 
@@ -95,12 +97,14 @@ def dry_run_migrations(migrations_dir: str | None = None) -> list[tuple[str, str
 
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 CREATE TABLE IF NOT EXISTS schema_migrations (
                     filename TEXT PRIMARY KEY,
                     applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
-            """)
+            """
+            )
             cur.execute("SELECT filename FROM schema_migrations")
             applied = {row["filename"] for row in cur.fetchall()}
 
@@ -115,8 +119,11 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(description="Run pending SQL migrations")
     parser.add_argument("--migrations-dir", default=None)
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Print pending migrations without applying them")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print pending migrations without applying them",
+    )
     args = parser.parse_args()
     try:
         if args.dry_run:

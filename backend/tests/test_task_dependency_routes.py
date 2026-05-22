@@ -87,7 +87,8 @@ def test_create_task_with_goal_id():
 
     # Find the INSERT call and confirm goal_id was bound.
     insert_calls = [
-        c for c in cursor.execute.call_args_list
+        c
+        for c in cursor.execute.call_args_list
         if "INSERT INTO tasks" in str(c.args[0])
     ]
     assert insert_calls, "expected an INSERT INTO tasks execute call"

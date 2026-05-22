@@ -61,12 +61,14 @@ def main():
 
         # Verify tables were created
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT table_name
                 FROM information_schema.tables
                 WHERE table_schema = 'public'
                 ORDER BY table_name
-            """)
+            """
+            )
             tables = cur.fetchall()
 
         print("📊 Created tables:")

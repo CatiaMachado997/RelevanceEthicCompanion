@@ -70,9 +70,7 @@ def test_list_connectors_returns_status():
     ingestion_mock = MagicMock()
     app = make_app(ingestion_mock)
 
-    with patch(
-        "routes.connectors.get_db_connection", return_value=conn
-    ):
+    with patch("routes.connectors.get_db_connection", return_value=conn):
         with TestClient(app) as client:
             resp = client.get("/api/connectors")
 

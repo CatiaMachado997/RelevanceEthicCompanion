@@ -423,11 +423,11 @@ class SearchDocumentsTool(BaseTool):
         "uploaded docs) for passages relevant to the query. Use this whenever the "
         "user asks about specific past events, decisions, or content from their "
         "workspace — including phrasings like:\n"
-        "  • \"what did <person/team> say about <topic>\"\n"
-        "  • \"find the <email/thread/doc> about <topic>\"\n"
-        "  • \"summarize discussions about <topic>\"\n"
-        "  • \"remind me what we decided about <topic>\"\n"
-        "  • \"what's the latest on <topic>\"\n"
+        '  • "what did <person/team> say about <topic>"\n'
+        '  • "find the <email/thread/doc> about <topic>"\n'
+        '  • "summarize discussions about <topic>"\n'
+        '  • "remind me what we decided about <topic>"\n'
+        '  • "what\'s the latest on <topic>"\n'
         "Returns up to k ranked excerpts with source citations (source_type "
         "indicates document, email, or Slack message). Prefer this over guessing "
         "from memory."
@@ -540,9 +540,9 @@ async def create_langchain_tools(
         SearchDocumentsTool(
             retrieval_service=RagRetrievalService(),
             user_id=user_id,
-            citation_collector=citation_collector
-            if citation_collector is not None
-            else [],
+            citation_collector=(
+                citation_collector if citation_collector is not None else []
+            ),
         )
     )
 

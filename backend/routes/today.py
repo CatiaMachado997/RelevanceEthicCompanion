@@ -44,6 +44,7 @@ def _serialize_source_item(row: dict) -> Dict[str, Any]:
     metadata = row.get("metadata") or {}
     if isinstance(metadata, str):
         import json as _json
+
         try:
             metadata = _json.loads(metadata)
         except Exception:
@@ -54,16 +55,15 @@ def _serialize_source_item(row: dict) -> Dict[str, Any]:
         snippet = snippet[:200].rstrip() + "..."
     # Best-effort URL: connectors typically stash a permalink under metadata.
     url = (
-        metadata.get("url")
-        or metadata.get("permalink")
-        or metadata.get("link")
-        or None
+        metadata.get("url") or metadata.get("permalink") or metadata.get("link") or None
     )
     return {
         "id": str(row["id"]),
         "title": row.get("title") or "",
         "snippet": snippet,
-        "timestamp": item_at.isoformat() if hasattr(item_at, "isoformat") and item_at else None,
+        "timestamp": (
+            item_at.isoformat() if hasattr(item_at, "isoformat") and item_at else None
+        ),
         "source_ref": row.get("external_id"),
         "url": url,
     }
@@ -107,7 +107,9 @@ def _fetch_tasks_overdue(user_id: str) -> List[Dict[str, Any]]:
             return [_serialize_task(r) for r in (cur.fetchall() or [])]
 
 
-def _fetch_recent_source_items(user_id: str, source_type: str, limit: int = 5) -> List[Dict[str, Any]]:
+def _fetch_recent_source_items(
+    user_id: str, source_type: str, limit: int = 5
+) -> List[Dict[str, Any]]:
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(

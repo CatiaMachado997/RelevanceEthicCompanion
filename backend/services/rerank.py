@@ -70,9 +70,7 @@ async def rerank(
 
     try:
         async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
-            response = await client.post(
-                JINA_RERANK_URL, headers=headers, json=payload
-            )
+            response = await client.post(JINA_RERANK_URL, headers=headers, json=payload)
             response.raise_for_status()
             data = response.json()
     except Exception as e:

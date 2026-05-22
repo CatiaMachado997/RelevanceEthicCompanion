@@ -38,9 +38,7 @@ async def test_disconnect_removes_tokens_items_and_vectors(mock_weav, mock_db):
     )
     # Two DELETE statements: source_items then data_sources
     assert cur.execute.call_count >= 2
-    executed_sql = " ".join(
-        str(call.args[0]) for call in cur.execute.call_args_list
-    )
+    executed_sql = " ".join(str(call.args[0]) for call in cur.execute.call_args_list)
     assert "DELETE FROM source_items" in executed_sql
     assert "DELETE FROM data_sources" in executed_sql
 

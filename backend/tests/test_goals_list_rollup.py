@@ -100,7 +100,13 @@ def test_list_goals_includes_rollup_per_goal():
         "progress_pct": 50,
     }
     # Rollup columns must not leak through as top-level fields.
-    for k in ("milestones_total", "milestones_hit", "tasks_total", "tasks_done", "progress_pct"):
+    for k in (
+        "milestones_total",
+        "milestones_hit",
+        "tasks_total",
+        "tasks_done",
+        "progress_pct",
+    ):
         assert k not in g0, f"rollup key {k} leaked into top-level goal data"
 
     g1 = body["data"][1]
