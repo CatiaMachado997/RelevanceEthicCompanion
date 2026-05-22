@@ -262,8 +262,13 @@ async def stream_langgraph(
                         for block in content
                     )
                 if isinstance(content, str) and content:
-                    response_text += content
-                    yield {"event": "token", "token": content}
+                    # Sprint J: planner tokens go to thought_token when flag is on;
+                    # synthesis tokens (tool_execution / deep_research) stay on token.
+                    if _settings.STREAMING_REASONING_ENABLED and node == "tool_planner":
+                        yield {"event": "thought_token", "token": content}
+                    else:
+                        response_text += content
+                        yield {"event": "token", "token": content}
 
             # ── Tool use/result events + citations (emitted BEFORE tokens if tools ran) ──
             elif (
@@ -288,13 +293,58 @@ async def stream_langgraph(
                 if pr:
                     planner_run_id = pr
 
-            # ── Token warning + Sprint I plan trace capture ──
+                # Sprint J — emit action_start / action_complete retroactively
+                # from the latest step's actions+observations. These events
+                # arrive after the step is done; true mid-step streaming would
+                # need finer-grained LangGraph events which we defer.
+                if _settings.STREAMING_REASONING_ENABLED:
+                    plan_steps_out = output.get("plan_steps") or []
+                    if plan_steps_out:
+                        latest = plan_steps_out[-1]
+                        step_no = latest.get("step")
+                        for ai, (action, obs) in enumerate(
+                            zip(latest.get("actions", []), latest.get("observations", []))
+                        ):
+                            yield {
+                                "event": "action_start",
+                                "step": step_no,
+                                "action_index": ai,
+                                "tool": action.get("tool"),
+                            }
+                            yield {
+                                "event": "action_complete",
+                                "step": step_no,
+                                "action_index": ai,
+                                "tool": action.get("tool"),
+                                "status": obs.get("status"),
+                                "latency_ms": obs.get("latency_ms"),
+                            }
+
+            # ── Token warning + Sprint I plan trace capture + Sprint J plan_step_actions ──
             elif kind == "on_chain_end" and node in ("tool_execution", "tool_planner"):
                 raw_output = event.get("data", {}).get("output")
                 output = raw_output if isinstance(raw_output, dict) else {}
                 warning = output.get("token_warning")
                 if warning and isinstance(warning, str):
                     yield {"event": "warning", "message": warning}
+
+                # Sprint J — emit a structured event when the planner has
+                # committed to a step's actions. (Only fires for tool_planner
+                # node; tool_execution node also matches this elif but its
+                # plan_steps output reflects the SAME latest step + observations.)
+                if (
+                    _settings.STREAMING_REASONING_ENABLED
+                    and node == "tool_planner"
+                ):
+                    new_plan = output.get("plan_steps") or []
+                    if new_plan:
+                        latest = new_plan[-1]
+                        yield {
+                            "event": "plan_step_actions",
+                            "step": latest.get("step"),
+                            "actions": latest.get("actions", []),
+                        }
+
                 # Sprint I — planner_run_id is created in tool_planner_node's
                 # first invocation; capture it here so the finalize block
                 # below can update the row at end of turn.
@@ -333,6 +383,29 @@ async def stream_langgraph(
             elif kind == "on_chain_end" and event.get("name") == "LangGraph":
                 raw_final = event.get("data", {}).get("output")
                 final_output = raw_final if isinstance(raw_final, dict) else {}
+
+                # Sprint J — interrupt path: when the graph pauses via
+                # interrupt(), the final output carries an __interrupt__ list.
+                # Emit plan_paused and DON'T emit a regular done event.
+                if _settings.STREAMING_REASONING_ENABLED:
+                    interrupts = final_output.get("__interrupt__") or []
+                    if interrupts:
+                        first = interrupts[0] if interrupts else {}
+                        # langgraph.types.Interrupt has a `value` attribute
+                        # holding the payload passed to interrupt().
+                        payload = getattr(first, "value", None)
+                        if payload is None and isinstance(first, dict):
+                            payload = first.get("value", {})
+                        payload = payload or {}
+                        thread_id = (config.get("configurable", {}) or {}).get("thread_id")
+                        yield {
+                            "event": "plan_paused",
+                            "thread_id": thread_id,
+                            **payload,
+                        }
+                        done_yielded = True
+                        continue
+
                 # If streaming captured nothing (edge case), fall back to response_text in state
                 if not response_text:
                     response_text = final_output.get("response_text", "")
