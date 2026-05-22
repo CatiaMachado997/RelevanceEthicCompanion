@@ -237,6 +237,51 @@ WEAVIATE_SCHEMAS: List[Dict[str, Any]] = [
             },
         ],
     },
+    {
+        "class": "PlannerRunMemory",
+        "description": "Per-user record of past completed planner runs, "
+                       "embedded for similarity recall at planner-step start. "
+                       "Sprint K.",
+        "vectorizer": "none",
+        "properties": [
+            {
+                "name": "user_id",
+                "dataType": ["text"],
+                "indexFilterable": True,
+                "indexSearchable": False,
+            },
+            {
+                "name": "planner_run_id",
+                "dataType": ["text"],
+                "indexFilterable": True,
+                "indexSearchable": False,
+            },
+            {
+                "name": "message_text",
+                "dataType": ["text"],
+                "indexFilterable": False,
+                "indexSearchable": True,
+            },
+            {
+                "name": "plan_summary",
+                "dataType": ["text"],
+                "indexFilterable": False,
+                "indexSearchable": False,
+            },
+            {
+                "name": "status",
+                "dataType": ["text"],
+                "indexFilterable": True,
+                "indexSearchable": False,
+            },
+            {
+                "name": "created_at",
+                "dataType": ["date"],
+                "indexFilterable": True,
+                "indexSearchable": False,
+            },
+        ],
+    },
 ]
 
 
