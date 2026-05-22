@@ -2,6 +2,7 @@
 
 from typing import AsyncGenerator, Optional
 from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from orchestrator.state import AgentState
 from orchestrator.nodes.context import context_builder_node
 from orchestrator.nodes.intent import intent_classifier_node
@@ -10,6 +11,25 @@ from orchestrator.nodes.esl import esl_gateway_node
 from orchestrator.nodes.response import response_formatter_node, explain_veto_node
 from orchestrator.subgraphs.deep_research import deep_research_node
 from esl.models import ESLDecisionStatus
+from config import settings as _settings
+
+# Sprint J — async checkpointer singleton (lazy-initialised on first async use)
+_checkpointer = None  # type: ignore[var-annotated]
+_checkpointer_ctx = None
+
+
+async def get_checkpointer():
+    """Lazy singleton AsyncPostgresSaver. Creates checkpoint tables on
+    first call via `setup()`, which is idempotent."""
+    global _checkpointer, _checkpointer_ctx
+    if _checkpointer is None:
+        cp = AsyncPostgresSaver.from_conn_string(_settings.DATABASE_URL)
+        # from_conn_string returns an async context manager; we enter
+        # it once and keep the saver for process lifetime.
+        _checkpointer_ctx = cp
+        _checkpointer = await cp.__aenter__()
+        await _checkpointer.setup()
+    return _checkpointer
 
 
 def _route_after_esl(state: AgentState) -> str:
@@ -96,6 +116,57 @@ def get_graph():
     return _compiled_graph
 
 
+# Sprint J — async graph with optional Postgres checkpointer
+async def build_graph_async():
+    cp = await get_checkpointer() if _settings.STREAMING_REASONING_ENABLED else None
+    g = StateGraph(AgentState)
+    g.add_node("context_builder", context_builder_node)
+    g.add_node("intent_classifier", intent_classifier_node)
+    g.add_node("tool_planner", tool_planner_node)
+    g.add_node("tool_execution", tool_execution_node)
+    g.add_node("deep_research", deep_research_node)
+    g.add_node("esl_gateway", esl_gateway_node)
+    g.add_node("response_formatter", response_formatter_node)
+    g.add_node("explain_veto", explain_veto_node)
+
+    g.set_entry_point("context_builder")
+    g.add_edge("context_builder", "intent_classifier")
+    g.add_conditional_edges(
+        "intent_classifier",
+        _route_after_intent,
+        {"deep_research": "deep_research", "tool_planner": "tool_planner"},
+    )
+    g.add_conditional_edges(
+        "tool_planner",
+        _route_after_tools,
+        {"tool_execution": "tool_execution", "esl_gateway": "esl_gateway"},
+    )
+    g.add_conditional_edges(
+        "tool_execution",
+        _route_after_execution,
+        {"tool_planner": "tool_planner", "esl_gateway": "esl_gateway"},
+    )
+    g.add_edge("deep_research", "esl_gateway")
+    g.add_conditional_edges(
+        "esl_gateway",
+        _route_after_esl,
+        {"response_formatter": "response_formatter", "explain_veto": "explain_veto"},
+    )
+    g.add_edge("response_formatter", END)
+    g.add_edge("explain_veto", END)
+    return g.compile(checkpointer=cp)
+
+
+_compiled_graph_async = None
+
+
+async def get_graph_async():
+    global _compiled_graph_async
+    if _compiled_graph_async is None:
+        _compiled_graph_async = await build_graph_async()
+    return _compiled_graph_async
+
+
 async def stream_langgraph(
     user_id: str,
     message: str,
@@ -147,7 +218,16 @@ async def stream_langgraph(
         "plan_steps": [],
         "planner_run_id": None,
     }
-    graph = get_graph()
+    # Sprint J — when streaming-reasoning is on, use the async graph
+    # builder with a Postgres checkpointer so the turn can pause and
+    # resume durably. Otherwise fall back to the legacy sync graph.
+    if _settings.STREAMING_REASONING_ENABLED:
+        graph = await get_graph_async()
+        thread_id = conversation_id or "transient-" + str(id(initial_state))
+        config: dict = {"configurable": {"thread_id": thread_id}}
+    else:
+        graph = get_graph()
+        config = {}
 
     # Nodes whose LLM calls generate the final user-visible response
     RESPONSE_NODES = frozenset({"tool_planner", "tool_execution", "deep_research"})
@@ -163,7 +243,7 @@ async def stream_langgraph(
     planner_run_id: Optional[str] = None
 
     try:
-        async for event in graph.astream_events(initial_state, version="v2"):
+        async for event in graph.astream_events(initial_state, config, version="v2"):
             kind = event.get("event", "")
             metadata = event.get("metadata", {})
             node = metadata.get("langgraph_node", "")
