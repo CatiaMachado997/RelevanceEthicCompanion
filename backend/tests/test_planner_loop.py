@@ -61,9 +61,7 @@ def _mock_tool(name: str, return_value: str = "ok"):
 @patch("services.langchain_tools.create_langchain_tools")
 @patch("langchain_groq.ChatGroq")
 @patch("orchestrator.nodes.tools.get_context_manager")
-async def test_single_tool_turn_unchanged(
-    mock_cm, mock_groq_cls, mock_create_tools
-):
+async def test_single_tool_turn_unchanged(mock_cm, mock_groq_cls, mock_create_tools):
     """planner emits 1 tool, then 0 → execution runs once → final synthesis.
 
     Mirrors the today-flow: one tool, one synthesis, ESL evaluates the
@@ -80,9 +78,7 @@ async def test_single_tool_turn_unchanged(
     planner_with_tools.ainvoke = AsyncMock(
         side_effect=[
             _planner_response(
-                tool_calls=[
-                    {"name": "get_user_goals", "args": {}, "id": "call_1"}
-                ]
+                tool_calls=[{"name": "get_user_goals", "args": {}, "id": "call_1"}]
             ),
             _planner_response(content="Your goal is to ship sprint C."),
         ]
@@ -122,9 +118,7 @@ async def test_single_tool_turn_unchanged(
 @patch("services.langchain_tools.create_langchain_tools")
 @patch("langchain_groq.ChatGroq")
 @patch("orchestrator.nodes.tools.get_context_manager")
-async def test_two_tool_sequential_turn(
-    mock_cm, mock_groq_cls, mock_create_tools
-):
+async def test_two_tool_sequential_turn(mock_cm, mock_groq_cls, mock_create_tools):
     """Planner chains tool A then tool B in a single turn."""
     from orchestrator.nodes.tools import tool_planner_node, tool_execution_node
 
@@ -142,9 +136,7 @@ async def test_two_tool_sequential_turn(
                 ]
             ),
             _planner_response(
-                tool_calls=[
-                    {"name": "get_user_goals", "args": {}, "id": "2"}
-                ]
+                tool_calls=[{"name": "get_user_goals", "args": {}, "id": "2"}]
             ),
             _planner_response(content="Combined answer."),
         ]
@@ -182,9 +174,7 @@ async def test_two_tool_sequential_turn(
 @patch("services.langchain_tools.create_langchain_tools")
 @patch("langchain_groq.ChatGroq")
 @patch("orchestrator.nodes.tools.get_context_manager")
-async def test_max_planner_steps_caps_loop(
-    mock_cm, mock_groq_cls, mock_create_tools
-):
+async def test_max_planner_steps_caps_loop(mock_cm, mock_groq_cls, mock_create_tools):
     """If the planner keeps emitting tools, the router halts after
     max_planner_steps iterations regardless."""
     from orchestrator.nodes.tools import tool_planner_node, tool_execution_node
@@ -198,9 +188,7 @@ async def test_max_planner_steps_caps_loop(
     planner_with_tools = MagicMock()
     planner_with_tools.ainvoke = AsyncMock(
         return_value=_planner_response(
-            tool_calls=[
-                {"name": "get_user_goals", "args": {}, "id": "loop"}
-            ]
+            tool_calls=[{"name": "get_user_goals", "args": {}, "id": "loop"}]
         )
     )
     synth_response = MagicMock()

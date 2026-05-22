@@ -10,12 +10,14 @@ def test_source_items_table_exists():
     """source_items table must exist with required columns."""
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT column_name
                 FROM information_schema.columns
                 WHERE table_name = 'source_items'
                 ORDER BY ordinal_position
-            """)
+            """
+            )
             cols = [r["column_name"] for r in cur.fetchall()]
     required = {
         "id",
@@ -38,14 +40,17 @@ def test_source_items_table_exists():
 @pytest.mark.integration
 def test_connector_backfill_jobs_table_exists():
     from utils.db import get_db_connection
+
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT column_name, data_type
                 FROM information_schema.columns
                 WHERE table_name = 'connector_backfill_jobs'
                 ORDER BY column_name
-            """)
+            """
+            )
             cols = {r["column_name"]: r["data_type"] for r in cur.fetchall()}
     assert "user_id" in cols
     assert "source_type" in cols

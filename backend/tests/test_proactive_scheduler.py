@@ -16,16 +16,18 @@ def _default_patch_esl_gate_and_telemetry():
     to mock these directly. Tests that want different behaviour patch
     explicitly inside their own bodies.
     """
-    async def _approve(user_id, notification_type, content, urgency="low", metadata=None):
+
+    async def _approve(
+        user_id, notification_type, content, urgency="low", metadata=None
+    ):
         return (True, content)
 
     with patch(
         "services.scheduler.gate_proactive_notification", side_effect=_approve
-    ), patch(
-        "services.scheduler.ToolTelemetryService"
-    ) as mock_telemetry_cls:
+    ), patch("services.scheduler.ToolTelemetryService") as mock_telemetry_cls:
         mock_telemetry_cls.return_value.record_tool_call = MagicMock(return_value="")
         yield
+
 
 # ─────────────────────────────────────────────
 # Helper: build a minimal BackgroundScheduler without starting APScheduler
@@ -573,7 +575,9 @@ class TestSchedulerESLGating:
 
         snapshot = {
             "computed_at": datetime.now(timezone.utc).isoformat(),
-            "tasks_due_soon": [{"title": "Task A", "due_date": "2026-04-26", "priority": 7}],
+            "tasks_due_soon": [
+                {"title": "Task A", "due_date": "2026-04-26", "priority": 7}
+            ],
             "overdue_count": 0,
             "active_projects": [],
             "upcoming_events": [{"title": "Standup", "start_time": "2026-04-26T10:00"}],
@@ -599,7 +603,9 @@ class TestSchedulerESLGating:
         mock_response = MagicMock()
         mock_response.content = "Plan: do A, then B."
 
-        async def _veto(user_id, notification_type, content, urgency="low", metadata=None):
+        async def _veto(
+            user_id, notification_type, content, urgency="low", metadata=None
+        ):
             return (False, content)
 
         with patch(
@@ -609,7 +615,9 @@ class TestSchedulerESLGating:
             return_value=snapshot,
         ), patch(
             "services.context_manager.ContextManager"
-        ), patch("langchain_groq.ChatGroq") as mock_llm_cls, patch(
+        ), patch(
+            "langchain_groq.ChatGroq"
+        ) as mock_llm_cls, patch(
             "services.scheduler.gate_proactive_notification", side_effect=_veto
         ), patch(
             "routes.notifications.create_notification"
@@ -661,7 +669,9 @@ class TestSchedulerESLGating:
 
         modified_text = "ESL modified safer text."
 
-        async def _modify(user_id, notification_type, content, urgency="low", metadata=None):
+        async def _modify(
+            user_id, notification_type, content, urgency="low", metadata=None
+        ):
             return (True, modified_text)
 
         captured = {}
@@ -678,10 +688,13 @@ class TestSchedulerESLGating:
             "services.scheduler.get_db_connection", side_effect=db_side_effect
         ), patch(
             "services.context_manager.ContextManager", return_value=ctx_mgr_inst
-        ), patch("langchain_groq.ChatGroq") as mock_llm_cls, patch(
+        ), patch(
+            "langchain_groq.ChatGroq"
+        ) as mock_llm_cls, patch(
             "services.scheduler.gate_proactive_notification", side_effect=_modify
         ), patch(
-            "routes.notifications.create_notification", side_effect=fake_create_notification
+            "routes.notifications.create_notification",
+            side_effect=fake_create_notification,
         ):
             mock_llm_cls.return_value.ainvoke = AsyncMock(return_value=mock_response)
             await sched._generate_pre_meeting_briefs()
@@ -733,7 +746,9 @@ class TestSchedulerESLGating:
         telemetry_inst = MagicMock()
         telemetry_inst.record_tool_call = MagicMock(side_effect=fake_record_tool_call)
 
-        async def _approve(user_id, notification_type, content, urgency="low", metadata=None):
+        async def _approve(
+            user_id, notification_type, content, urgency="low", metadata=None
+        ):
             return (True, content)
 
         with patch(
@@ -762,7 +777,10 @@ class TestSchedulerESLGating:
         sched = make_scheduler()
 
         review = {
-            "period": {"start": "2026-04-20T00:00:00+00:00", "end": "2026-04-27T00:00:00+00:00"},
+            "period": {
+                "start": "2026-04-20T00:00:00+00:00",
+                "end": "2026-04-27T00:00:00+00:00",
+            },
             "completed_tasks": [{"id": "t1", "title": "Wrote spec"}],
             "completed_milestones": [],
             "carry_over_tasks": [],
@@ -790,7 +808,9 @@ class TestSchedulerESLGating:
             "services.work_rollups.WorkRollupsService.get_weekly_review",
             return_value=review,
         ), patch.object(
-            sched, "_summarize_weekly_review", new=AsyncMock(return_value="Last week was solid.")
+            sched,
+            "_summarize_weekly_review",
+            new=AsyncMock(return_value="Last week was solid."),
         ), patch(
             "routes.notifications.create_notification"
         ) as mock_create_notification:
@@ -807,7 +827,10 @@ class TestSchedulerESLGating:
         sched = make_scheduler()
 
         review = {
-            "period": {"start": "2026-04-20T00:00:00+00:00", "end": "2026-04-27T00:00:00+00:00"},
+            "period": {
+                "start": "2026-04-20T00:00:00+00:00",
+                "end": "2026-04-27T00:00:00+00:00",
+            },
             "completed_tasks": [{"id": "t1", "title": "Wrote spec"}],
             "completed_milestones": [],
             "carry_over_tasks": [],
@@ -829,7 +852,9 @@ class TestSchedulerESLGating:
             ctx.__exit__ = MagicMock(return_value=False)
             return ctx
 
-        async def _veto(user_id, notification_type, content, urgency="low", metadata=None):
+        async def _veto(
+            user_id, notification_type, content, urgency="low", metadata=None
+        ):
             return (False, content)
 
         with patch(
@@ -854,7 +879,10 @@ class TestSchedulerESLGating:
         sched = make_scheduler()
 
         empty_review = {
-            "period": {"start": "2026-04-20T00:00:00+00:00", "end": "2026-04-27T00:00:00+00:00"},
+            "period": {
+                "start": "2026-04-20T00:00:00+00:00",
+                "end": "2026-04-27T00:00:00+00:00",
+            },
             "completed_tasks": [],
             "completed_milestones": [],
             "carry_over_tasks": [],

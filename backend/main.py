@@ -84,7 +84,8 @@ async def lifespan(app: FastAPI):
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS daily_insights (
                       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                       user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -93,8 +94,10 @@ async def lifespan(app: FastAPI):
                       generated_at TIMESTAMPTZ DEFAULT NOW(),
                       UNIQUE(user_id, date)
                     )
-                """)
-                cur.execute("""
+                """
+                )
+                cur.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS goal_milestones (
                       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                       goal_id UUID NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
@@ -104,12 +107,14 @@ async def lifespan(app: FastAPI):
                       created_at TIMESTAMPTZ DEFAULT NOW(),
                       updated_at TIMESTAMPTZ DEFAULT NOW()
                     )
-                """)
+                """
+                )
                 cur.execute(
                     "CREATE INDEX IF NOT EXISTS idx_goal_milestones_goal ON goal_milestones(goal_id)"
                 )
                 # Sprint 3: Documents
-                cur.execute("""
+                cur.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS documents (
                       id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                       user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -123,7 +128,8 @@ async def lifespan(app: FastAPI):
                       created_at    TIMESTAMPTZ DEFAULT NOW(),
                       updated_at    TIMESTAMPTZ DEFAULT NOW()
                     )
-                """)
+                """
+                )
                 cur.execute(
                     "CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id)"
                 )
@@ -131,7 +137,8 @@ async def lifespan(app: FastAPI):
                     "CREATE INDEX IF NOT EXISTS idx_documents_status  ON documents(status)"
                 )
                 # Sprint 4: Projects
-                cur.execute("""
+                cur.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS projects (
                       id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                       user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -143,7 +150,8 @@ async def lifespan(app: FastAPI):
                       created_at  TIMESTAMPTZ DEFAULT NOW(),
                       updated_at  TIMESTAMPTZ DEFAULT NOW()
                     )
-                """)
+                """
+                )
                 cur.execute(
                     "CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id)"
                 )
@@ -151,7 +159,8 @@ async def lifespan(app: FastAPI):
                     "CREATE INDEX IF NOT EXISTS idx_projects_status  ON projects(status)"
                 )
                 # Sprint 4: Tasks
-                cur.execute("""
+                cur.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS tasks (
                       id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                       user_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -168,7 +177,8 @@ async def lifespan(app: FastAPI):
                       created_at     TIMESTAMPTZ DEFAULT NOW(),
                       updated_at     TIMESTAMPTZ DEFAULT NOW()
                     )
-                """)
+                """
+                )
                 cur.execute(
                     "CREATE INDEX IF NOT EXISTS idx_tasks_user_id    ON tasks(user_id)"
                 )
@@ -343,7 +353,9 @@ app.include_router(folders.router)
 app.include_router(dashboard.router)
 app.include_router(status_router)
 app.include_router(connectors.router, prefix="/api/connectors", tags=["connectors"])
-app.include_router(weekly_review.router, prefix="/api/weekly-review", tags=["weekly-review"])
+app.include_router(
+    weekly_review.router, prefix="/api/weekly-review", tags=["weekly-review"]
+)
 app.include_router(today.router, prefix="/api/today", tags=["today"])
 app.include_router(onboarding.router)
 

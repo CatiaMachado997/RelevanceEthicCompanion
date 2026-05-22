@@ -88,9 +88,19 @@ def test_get_blockers_returns_transitive_chain(mock_get_db):
     cur = MagicMock()
     # Three blockers at increasing depth — order preserved by service.
     cur.fetchall.return_value = [
-        {"task_id": TASK_B, "title": "Direct blocker", "status": "in_progress", "depth": 1},
+        {
+            "task_id": TASK_B,
+            "title": "Direct blocker",
+            "status": "in_progress",
+            "depth": 1,
+        },
         {"task_id": TASK_C, "title": "Indirect blocker", "status": "todo", "depth": 2},
-        {"task_id": "44444444-4444-4444-4444-444444444444", "title": "Deep blocker", "status": "todo", "depth": 3},
+        {
+            "task_id": "44444444-4444-4444-4444-444444444444",
+            "title": "Deep blocker",
+            "status": "todo",
+            "depth": 3,
+        },
     ]
     db_ctx, _ = _mock_db(cur)
     mock_get_db.return_value = db_ctx

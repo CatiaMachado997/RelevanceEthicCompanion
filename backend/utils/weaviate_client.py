@@ -41,9 +41,7 @@ class WeaviateClient:
             )
             logger.info(f"✅ Connected to Weaviate at {self.url} (with gRPC)")
         except Exception as e:
-            logger.warning(
-                f"⚠️  gRPC connection failed, falling back to HTTP-only: {e}"
-            )
+            logger.warning(f"⚠️  gRPC connection failed, falling back to HTTP-only: {e}")
             try:
                 # Fallback to HTTP-only if gRPC fails
                 self.client = weaviate.connect_to_local(
@@ -322,9 +320,7 @@ class WeaviateClient:
             )
             return count
         except Exception as e:
-            logger.warning(
-                f"⚠️ delete_by_filter failed on {collection_name}: {e}"
-            )
+            logger.warning(f"⚠️ delete_by_filter failed on {collection_name}: {e}")
             return 0
 
     def delete_by_id(self, collection: str, uuid: str):

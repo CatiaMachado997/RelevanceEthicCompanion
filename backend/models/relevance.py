@@ -36,7 +36,8 @@ class CandidateItem(BaseModel):
         description="Source of the item (e.g., 'tavily', 'weaviate', 'google_calendar')"
     )
     timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), description="When item was created/retrieved"
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="When item was created/retrieved",
     )
     metadata: Dict[str, Any] = Field(
         default_factory=dict, description="Additional metadata"

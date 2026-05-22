@@ -24,9 +24,7 @@ def _make_embedder_mock(vector=None):
 @pytest.mark.asyncio
 async def test_retrieve_returns_empty_when_weaviate_unavailable():
     """If get_weaviate_client() returns None, retrieve() returns []."""
-    with patch(
-        "services.rag_retrieval.get_weaviate_client", return_value=None
-    ), patch(
+    with patch("services.rag_retrieval.get_weaviate_client", return_value=None), patch(
         "services.rag_retrieval._get_embedding_service",
         return_value=_make_embedder_mock(),
     ):
@@ -249,17 +247,13 @@ async def test_retrieve_with_trace_marks_rerank_applied():
 @pytest.mark.asyncio
 async def test_retrieve_with_trace_returns_empty_trace_when_weaviate_unavailable():
     """Trace is always built — even when retrieval short-circuits."""
-    with patch(
-        "services.rag_retrieval.get_weaviate_client", return_value=None
-    ), patch(
+    with patch("services.rag_retrieval.get_weaviate_client", return_value=None), patch(
         "services.rag_retrieval._get_embedding_service",
         return_value=_make_embedder_mock(),
     ):
         from services.rag_retrieval import RagRetrievalService
 
-        results, trace = await RagRetrievalService().retrieve_with_trace(
-            "hi", USER_ID
-        )
+        results, trace = await RagRetrievalService().retrieve_with_trace("hi", USER_ID)
 
     assert results == []
     assert trace["query"] == "hi"

@@ -161,9 +161,7 @@ async def test_trace_is_recorded_into_tool_call_events_output():
     }
 
     fake_retrieval = MagicMock()
-    fake_retrieval.retrieve_with_trace = AsyncMock(
-        return_value=(rows, expected_trace)
-    )
+    fake_retrieval.retrieve_with_trace = AsyncMock(return_value=(rows, expected_trace))
 
     from services.langchain_tools import SearchDocumentsTool
 
