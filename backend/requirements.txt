@@ -82,3 +82,4 @@ mcp
 
 # Tool Marketplace — Composio managed integrations
 composio-langchain==0.11.4
+langgraph-checkpoint-postgres>=2.0.0
