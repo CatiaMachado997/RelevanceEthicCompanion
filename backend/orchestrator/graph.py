@@ -1,5 +1,7 @@
 """LangGraph orchestrator — full wired graph."""
 
+import logging
+import os
 from typing import AsyncGenerator, Optional
 from langgraph.graph import StateGraph, END
 from orchestrator.state import AgentState
@@ -10,6 +12,9 @@ from orchestrator.nodes.esl import esl_gateway_node
 from orchestrator.nodes.response import response_formatter_node, explain_veto_node
 from orchestrator.subgraphs.deep_research import deep_research_node
 from esl.models import ESLDecisionStatus
+from config import settings as _settings
+
+logger = logging.getLogger(__name__)
 
 
 def _route_after_esl(state: AgentState) -> str:
@@ -71,10 +76,60 @@ def build_graph():
 _compiled_graph = None
 
 
+def build_multi_agent_graph():
+    """Multi-agent graph: context_builder → supervisor → esl_gateway → formatter."""
+    from pydantic import SecretStr
+    from orchestrator.agents.supervisor import build_supervisor
+    from orchestrator.nodes.context import get_context_manager
+
+    routing_llm = None
+    worker_llm = None
+    try:
+        from langchain_groq import ChatGroq
+        routing_llm = ChatGroq(
+            model="llama-3.1-8b-instant",
+            api_key=SecretStr(_settings.GROQ_API_KEY),
+        )
+        model_name = getattr(_settings, "DEFAULT_MODEL", "llama-3.3-70b-versatile")
+        worker_llm = ChatGroq(
+            model=model_name,
+            api_key=SecretStr(_settings.GROQ_API_KEY),
+        )
+    except Exception as e:
+        logger.warning(f"Could not build LLMs for multi-agent graph: {e}")
+
+    supervisor_node = build_supervisor(
+        routing_llm=routing_llm,
+        worker_llm=worker_llm,
+    )
+
+    g = StateGraph(AgentState)
+    g.add_node("context_builder", context_builder_node)
+    g.add_node("supervisor", supervisor_node)
+    g.add_node("esl_gateway", esl_gateway_node)
+    g.add_node("response_formatter", response_formatter_node)
+    g.add_node("explain_veto", explain_veto_node)
+
+    g.set_entry_point("context_builder")
+    g.add_edge("context_builder", "supervisor")
+    g.add_edge("supervisor", "esl_gateway")
+    g.add_conditional_edges(
+        "esl_gateway",
+        _route_after_esl,
+        {"response_formatter": "response_formatter", "explain_veto": "explain_veto"},
+    )
+    g.add_edge("response_formatter", END)
+    g.add_edge("explain_veto", END)
+    return g.compile()
+
+
 def get_graph():
     global _compiled_graph
     if _compiled_graph is None:
-        _compiled_graph = build_graph()
+        if os.getenv("MULTI_AGENT", "").lower() == "true":
+            _compiled_graph = build_multi_agent_graph()
+        else:
+            _compiled_graph = build_graph()
     return _compiled_graph
 
 
