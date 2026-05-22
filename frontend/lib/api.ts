@@ -275,13 +275,16 @@ export const chatApi = {
     let settled = false
     let rejectRef: ((err: Error) => void) | null = null
 
-    const promise = new Promise<void>((resolve, reject) => {
+    const promise = new Promise<void>(async (resolve, reject) => {
       rejectRef = reject
       const modelParam = callbacks.model ? `&model=${encodeURIComponent(callbacks.model)}` : ''
       const convParam = callbacks.conversation_id ? `&conversation_id=${encodeURIComponent(callbacks.conversation_id)}` : ''
       const sourcesParam = callbacks.active_sources?.length
         ? `&active_sources=${encodeURIComponent(callbacks.active_sources.join(','))}` : ''
-      const url = `${API_URL}/api/chat/stream?message=${encodeURIComponent(message)}${modelParam}${convParam}${sourcesParam}`
+      // EventSource cannot send Authorization headers — pass token as query param
+      const token = await resolveAccessToken()
+      const tokenParam = token ? `&token=${encodeURIComponent(token)}` : ''
+      const url = `${API_URL}/api/chat/stream?message=${encodeURIComponent(message)}${modelParam}${convParam}${sourcesParam}${tokenParam}`
       es = new EventSource(url, { withCredentials: true })
 
       es.onmessage = (e) => {
