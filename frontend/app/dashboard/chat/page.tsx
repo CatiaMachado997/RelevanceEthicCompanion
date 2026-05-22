@@ -6,6 +6,10 @@ import remarkGfm from 'remark-gfm'
 import { CodeBlock } from '@/components/chat/CodeBlock'
 import { ArtifactCard } from '@/components/chat/ArtifactCard'
 import { SlashCommands } from '@/components/chat/slash-commands'
+import { ReasoningPanel } from '@/components/chat/ReasoningPanel'
+import { PausedActionPrompt } from '@/components/chat/PausedActionPrompt'
+import type { ActionEntry } from '@/components/chat/ReasoningPanel'
+import type { PausedAction } from '@/components/chat/PausedActionPrompt'
 import api, { CitationSource, DocumentSource, toolMarketplaceApi } from '@/lib/api'
 import { SourceCards } from '@/components/chat/SourceCards'
 import { ToolConfirmation } from '@/components/ToolConfirmation'
@@ -329,6 +333,10 @@ export default function ChatPage({ conversationId: conversationIdProp }: { conve
   const [extractLoading, setExtractLoading] = useState(false)
   const [savedNoteFor, setSavedNoteFor] = useState<string | null>(null)
 
+  // Sprint J — reasoning panel + paused-action state
+  const [reasoningByMsg, setReasoningByMsg] = useState<Record<string, { thought: string; actions: ActionEntry[]; isStreaming: boolean }>>({})
+  const [pausedAction, setPausedAction] = useState<PausedAction | null>(null)
+
   const endRef       = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const textareaRef  = useRef<HTMLTextAreaElement>(null)
@@ -587,6 +595,58 @@ export default function ChatPage({ conversationId: conversationIdProp }: { conve
                 : m
             ))
           }
+        },
+        onThoughtToken: (token: string) => {
+          setReasoningByMsg(prev => {
+            const cur = prev[assistantId] ?? { thought: '', actions: [], isStreaming: true }
+            return { ...prev, [assistantId]: { ...cur, thought: cur.thought + token, isStreaming: true } }
+          })
+        },
+        onPlanStepActions: (step: number, actions: Array<{ tool: string; params: unknown }>) => {
+          setReasoningByMsg(prev => {
+            const cur = prev[assistantId] ?? { thought: '', actions: [], isStreaming: true }
+            const newActions: ActionEntry[] = actions.map((a, i) => ({
+              step,
+              action_index: i,
+              tool: a.tool,
+              status: 'running',
+            }))
+            return { ...prev, [assistantId]: { ...cur, actions: [...cur.actions, ...newActions] } }
+          })
+        },
+        onActionComplete: (step: number, action_index: number, status: string, latency_ms: number) => {
+          setReasoningByMsg(prev => {
+            const cur = prev[assistantId]
+            if (!cur) return prev
+            return {
+              ...prev,
+              [assistantId]: {
+                ...cur,
+                actions: cur.actions.map(a =>
+                  a.step === step && a.action_index === action_index
+                    ? { ...a, status: status as ActionEntry['status'], latency_ms }
+                    : a
+                ),
+              },
+            }
+          })
+        },
+        onPlanPaused: (payload: unknown) => {
+          const p = payload as Record<string, unknown>
+          setPausedAction({
+            thread_id: p.thread_id as string,
+            step: p.step as number,
+            action_index: p.action_index as number,
+            tool: p.tool as string,
+            category: p.category as string,
+            params: (p.params as Record<string, unknown>) || {},
+            reason: (p.reason as string) || '',
+            trust_would_help: true,
+          })
+          setReasoningByMsg(prev => {
+            const cur = prev[assistantId]
+            return cur ? { ...prev, [assistantId]: { ...cur, isStreaming: false } } : prev
+          })
         },
       })
       streamRef.current = s
@@ -889,6 +949,17 @@ export default function ChatPage({ conversationId: conversationIdProp }: { conve
                   )}
                 </div>
 
+                {/* Reasoning panel — Sprint J */}
+                {reasoningByMsg[msg.id] && (
+                  <div className="pl-9 w-full">
+                    <ReasoningPanel
+                      thought={reasoningByMsg[msg.id].thought}
+                      actions={reasoningByMsg[msg.id].actions}
+                      isStreaming={reasoningByMsg[msg.id].isStreaming}
+                    />
+                  </div>
+                )}
+
                 {/* Message body */}
                 <div className="pl-9 text-sm w-full">
                   {msg.streaming && isThinking && !msg.content ? (
@@ -963,6 +1034,25 @@ export default function ChatPage({ conversationId: conversationIdProp }: { conve
                     />
                   )}
                   {msg.esl_decision && <ESLTag decision={msg.esl_decision} />}
+                  {/* Paused action prompt — Sprint J */}
+                  {pausedAction && idx === messages.length - 1 && msg.role === 'assistant' && (
+                    <PausedActionPrompt
+                      paused={pausedAction}
+                      onDecision={(decision, trust) => {
+                        const thread_id = pausedAction.thread_id
+                        setPausedAction(null)
+                        api.chat.resume({
+                          thread_id, decision, trust,
+                          onToken: (t: string) => {
+                            setMessages(prev => prev.map(m =>
+                              m.id === msg.id ? { ...m, content: (m.content || '') + t } : m
+                            ))
+                          },
+                          onDone: () => {},
+                        })
+                      }}
+                    />
+                  )}
                 </div>
 
                 {/* Action row — only after streaming done */}
@@ -1103,8 +1193,8 @@ export default function ChatPage({ conversationId: conversationIdProp }: { conve
         </div>
       )}
 
-      {/* ── Input card ── */}
-      <div className="shrink-0 px-4" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
+      {/* ── Input card — hidden while a plan is paused ── */}
+      {!pausedAction && <div className="shrink-0 px-4" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
         <div
           className="mx-auto max-w-[700px] rounded-2xl transition-shadow focus-within:shadow-[0_2px_20px_rgba(0,0,0,0.12)]"
           style={{
@@ -1368,7 +1458,7 @@ export default function ChatPage({ conversationId: conversationIdProp }: { conve
             </div>
           </div>
         </div>
-      </div>
+      </div>}
     </div>
   )
 }

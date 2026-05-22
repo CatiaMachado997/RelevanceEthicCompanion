@@ -35,6 +35,7 @@ class MemoryQueryTool(BaseTool):
     """Tool for querying semantic memory (Weaviate M2)"""
 
     name: str = "query_memory"
+    category: str = "read-personal"  # Sprint J safety classification
     description: str = (
         "Search conversation history and semantic memory for relevant information. "
         "Use this when you need to recall past conversations, user preferences, "
@@ -96,6 +97,7 @@ class CalendarQueryTool(BaseTool):
     """Tool for querying upcoming calendar events"""
 
     name: str = "query_calendar"
+    category: str = "read-personal"  # Sprint J safety classification
     description: str = (
         "Get upcoming calendar events for the user. "
         "Use this to check what's on the user's schedule, find meeting times, "
@@ -177,6 +179,7 @@ class WebSearchTool(BaseTool):
     """Tool for searching the web using Tavily"""
 
     name: str = "web_search"
+    category: str = "read-external"  # Sprint J safety classification
     description: str = (
         "Search the web for current information, news, or resources. "
         "Use this when the user asks about current events, recent information, "
@@ -252,6 +255,7 @@ class UserGoalsTool(BaseTool):
     """Tool for retrieving user's goals"""
 
     name: str = "get_user_goals"
+    category: str = "read-personal"  # Sprint J safety classification
     description: str = (
         "Get the user's current goals and priorities. "
         "Use this to understand what the user is working towards "
@@ -325,6 +329,7 @@ class NoteCreateTool(BaseTool):
     """Tool for saving notes, tasks, or reminders directly from chat"""
 
     name: str = "create_note"
+    category: str = "write-personal"  # Sprint J safety classification
     description: str = (
         "Save a note, task, or reminder for the user. "
         "Use this when the user says 'remember this', 'note that', or asks to save something. "
@@ -418,6 +423,7 @@ class SearchDocumentsTool(BaseTool):
     """
 
     name: str = "search_documents"
+    category: str = "read-personal"  # Sprint J safety classification
     description: str = (
         "Search the user's indexed documents and connector content (Gmail, Slack, "
         "uploaded docs) for passages relevant to the query. Use this whenever the "

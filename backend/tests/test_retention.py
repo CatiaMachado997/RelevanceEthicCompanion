@@ -58,8 +58,9 @@ class TestPruneOldTelemetry:
         ):
             await sched._prune_old_telemetry()
 
-        # Two DELETEs: one per table
-        assert cur.execute.call_count == 2
+        # Four DELETEs: tool_call_events, esl_audit_log, checkpoints, checkpoint_writes.
+        # The latter two are Sprint J — LangGraph checkpoint pruning.
+        assert cur.execute.call_count == 4
 
         first_sql, first_params = cur.execute.call_args_list[0].args
         second_sql, second_params = cur.execute.call_args_list[1].args
@@ -71,6 +72,12 @@ class TestPruneOldTelemetry:
         assert "DELETE FROM esl_audit_log" in second_sql
         assert "timestamp" in second_sql
         assert second_params == (90,)
+
+        # Sprint J — the last two calls are the checkpoint prunes (no params).
+        third_sql = cur.execute.call_args_list[2].args[0]
+        fourth_sql = cur.execute.call_args_list[3].args[0]
+        assert "DELETE FROM checkpoints" in third_sql
+        assert "DELETE FROM checkpoint_writes" in fourth_sql
 
     @pytest.mark.asyncio
     async def test_prune_uses_configured_retention_days(self):
@@ -85,8 +92,11 @@ class TestPruneOldTelemetry:
         ), patch.object(settings, "RETENTION_DAYS", 30):
             await sched._prune_old_telemetry()
 
-        assert cur.execute.call_count == 2
-        for call in cur.execute.call_args_list:
+        # Sprint J — Four DELETEs now (added checkpoints + checkpoint_writes).
+        # Only the first two carry the RETENTION_DAYS param; the checkpoint
+        # prunes use a literal 24h INTERVAL.
+        assert cur.execute.call_count == 4
+        for call in cur.execute.call_args_list[:2]:
             _, params = call.args
             assert params == (30,)
 

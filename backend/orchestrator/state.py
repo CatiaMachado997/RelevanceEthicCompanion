@@ -25,6 +25,22 @@ class AgentState(TypedDict):
     tool_calls: list  # tool calls planned by ToolPlanner
     tool_results: list  # results from ToolExecution
 
+    # Sprint I — explicit ReAct trace.
+    # Source of truth lives in the planner_runs table; this is the
+    # in-memory copy used during a turn. Each step:
+    #   { "step": int (1-based),
+    #     "thought": str,
+    #     "actions": [{"tool": str, "params": dict}, ...],
+    #     "observations": [
+    #       {"status": "ok"|"error", "result"?: any, "error"?: str,
+    #        "latency_ms": int, "attempts": int},
+    #       ...
+    #     ],
+    #     "started_at": str (ISO-8601),
+    #     "duration_ms": int }
+    plan_steps: list
+    planner_run_id: Optional[str]
+
     # ESL
     esl_decision: Optional[ESLDecision]
     proposed_content: str  # the response text before ESL evaluation

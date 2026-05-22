@@ -2,6 +2,7 @@
 
 from typing import AsyncGenerator, Optional
 from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from orchestrator.state import AgentState
 from orchestrator.nodes.context import context_builder_node
 from orchestrator.nodes.intent import intent_classifier_node
@@ -10,6 +11,25 @@ from orchestrator.nodes.esl import esl_gateway_node
 from orchestrator.nodes.response import response_formatter_node, explain_veto_node
 from orchestrator.subgraphs.deep_research import deep_research_node
 from esl.models import ESLDecisionStatus
+from config import settings as _settings
+
+# Sprint J — async checkpointer singleton (lazy-initialised on first async use)
+_checkpointer = None  # type: ignore[var-annotated]
+_checkpointer_ctx = None
+
+
+async def get_checkpointer():
+    """Lazy singleton AsyncPostgresSaver. Creates checkpoint tables on
+    first call via `setup()`, which is idempotent."""
+    global _checkpointer, _checkpointer_ctx
+    if _checkpointer is None:
+        cp = AsyncPostgresSaver.from_conn_string(_settings.DATABASE_URL)
+        # from_conn_string returns an async context manager; we enter
+        # it once and keep the saver for process lifetime.
+        _checkpointer_ctx = cp
+        _checkpointer = await cp.__aenter__()
+        await _checkpointer.setup()
+    return _checkpointer
 
 
 def _route_after_esl(state: AgentState) -> str:
@@ -96,6 +116,57 @@ def get_graph():
     return _compiled_graph
 
 
+# Sprint J — async graph with optional Postgres checkpointer
+async def build_graph_async():
+    cp = await get_checkpointer() if _settings.STREAMING_REASONING_ENABLED else None
+    g = StateGraph(AgentState)
+    g.add_node("context_builder", context_builder_node)
+    g.add_node("intent_classifier", intent_classifier_node)
+    g.add_node("tool_planner", tool_planner_node)
+    g.add_node("tool_execution", tool_execution_node)
+    g.add_node("deep_research", deep_research_node)
+    g.add_node("esl_gateway", esl_gateway_node)
+    g.add_node("response_formatter", response_formatter_node)
+    g.add_node("explain_veto", explain_veto_node)
+
+    g.set_entry_point("context_builder")
+    g.add_edge("context_builder", "intent_classifier")
+    g.add_conditional_edges(
+        "intent_classifier",
+        _route_after_intent,
+        {"deep_research": "deep_research", "tool_planner": "tool_planner"},
+    )
+    g.add_conditional_edges(
+        "tool_planner",
+        _route_after_tools,
+        {"tool_execution": "tool_execution", "esl_gateway": "esl_gateway"},
+    )
+    g.add_conditional_edges(
+        "tool_execution",
+        _route_after_execution,
+        {"tool_planner": "tool_planner", "esl_gateway": "esl_gateway"},
+    )
+    g.add_edge("deep_research", "esl_gateway")
+    g.add_conditional_edges(
+        "esl_gateway",
+        _route_after_esl,
+        {"response_formatter": "response_formatter", "explain_veto": "explain_veto"},
+    )
+    g.add_edge("response_formatter", END)
+    g.add_edge("explain_veto", END)
+    return g.compile(checkpointer=cp)
+
+
+_compiled_graph_async = None
+
+
+async def get_graph_async():
+    global _compiled_graph_async
+    if _compiled_graph_async is None:
+        _compiled_graph_async = await build_graph_async()
+    return _compiled_graph_async
+
+
 async def stream_langgraph(
     user_id: str,
     message: str,
@@ -143,8 +214,20 @@ async def stream_langgraph(
         "force_retrieval": force_retrieval,
         "planner_step": 0,
         "max_planner_steps": 3,
+        # Sprint I — explicit ReAct trace
+        "plan_steps": [],
+        "planner_run_id": None,
     }
-    graph = get_graph()
+    # Sprint J — when streaming-reasoning is on, use the async graph
+    # builder with a Postgres checkpointer so the turn can pause and
+    # resume durably. Otherwise fall back to the legacy sync graph.
+    if _settings.STREAMING_REASONING_ENABLED:
+        graph = await get_graph_async()
+        thread_id = conversation_id or "transient-" + str(id(initial_state))
+        config: dict = {"configurable": {"thread_id": thread_id}}
+    else:
+        graph = get_graph()
+        config = {}
 
     # Nodes whose LLM calls generate the final user-visible response
     RESPONSE_NODES = frozenset({"tool_planner", "tool_execution", "deep_research"})
@@ -155,9 +238,12 @@ async def stream_langgraph(
     document_sources: list = []
     tool_events_yielded = False
     done_yielded = False
+    # Sprint I — capture plan trace from streamed node outputs
+    plan_steps: list = []
+    planner_run_id: Optional[str] = None
 
     try:
-        async for event in graph.astream_events(initial_state, version="v2"):
+        async for event in graph.astream_events(initial_state, config, version="v2"):
             kind = event.get("event", "")
             metadata = event.get("metadata", {})
             node = metadata.get("langgraph_node", "")
@@ -176,8 +262,13 @@ async def stream_langgraph(
                         for block in content
                     )
                 if isinstance(content, str) and content:
-                    response_text += content
-                    yield {"event": "token", "token": content}
+                    # Sprint J: planner tokens go to thought_token when flag is on;
+                    # synthesis tokens (tool_execution / deep_research) stay on token.
+                    if _settings.STREAMING_REASONING_ENABLED and node == "tool_planner":
+                        yield {"event": "thought_token", "token": content}
+                    else:
+                        response_text += content
+                        yield {"event": "token", "token": content}
 
             # ── Tool use/result events + citations (emitted BEFORE tokens if tools ran) ──
             elif (
@@ -194,14 +285,75 @@ async def stream_langgraph(
                 # Capture citation sources for the done event
                 citations = output.get("citations", [])
                 document_sources = output.get("document_sources", [])
+                # Sprint I — capture plan trace as it streams from executor
+                ps = output.get("plan_steps")
+                if ps:
+                    plan_steps = ps
+                pr = output.get("planner_run_id")
+                if pr:
+                    planner_run_id = pr
 
-            # ── Token warning ──
+                # Sprint J — emit action_start / action_complete retroactively
+                # from the latest step's actions+observations. These events
+                # arrive after the step is done; true mid-step streaming would
+                # need finer-grained LangGraph events which we defer.
+                if _settings.STREAMING_REASONING_ENABLED:
+                    plan_steps_out = output.get("plan_steps") or []
+                    if plan_steps_out:
+                        latest = plan_steps_out[-1]
+                        step_no = latest.get("step")
+                        for ai, (action, obs) in enumerate(
+                            zip(latest.get("actions", []), latest.get("observations", []))
+                        ):
+                            yield {
+                                "event": "action_start",
+                                "step": step_no,
+                                "action_index": ai,
+                                "tool": action.get("tool"),
+                            }
+                            yield {
+                                "event": "action_complete",
+                                "step": step_no,
+                                "action_index": ai,
+                                "tool": action.get("tool"),
+                                "status": obs.get("status"),
+                                "latency_ms": obs.get("latency_ms"),
+                            }
+
+            # ── Token warning + Sprint I plan trace capture + Sprint J plan_step_actions ──
             elif kind == "on_chain_end" and node in ("tool_execution", "tool_planner"):
                 raw_output = event.get("data", {}).get("output")
                 output = raw_output if isinstance(raw_output, dict) else {}
                 warning = output.get("token_warning")
                 if warning and isinstance(warning, str):
                     yield {"event": "warning", "message": warning}
+
+                # Sprint J — emit a structured event when the planner has
+                # committed to a step's actions. (Only fires for tool_planner
+                # node; tool_execution node also matches this elif but its
+                # plan_steps output reflects the SAME latest step + observations.)
+                if (
+                    _settings.STREAMING_REASONING_ENABLED
+                    and node == "tool_planner"
+                ):
+                    new_plan = output.get("plan_steps") or []
+                    if new_plan:
+                        latest = new_plan[-1]
+                        yield {
+                            "event": "plan_step_actions",
+                            "step": latest.get("step"),
+                            "actions": latest.get("actions", []),
+                        }
+
+                # Sprint I — planner_run_id is created in tool_planner_node's
+                # first invocation; capture it here so the finalize block
+                # below can update the row at end of turn.
+                pr = output.get("planner_run_id")
+                if pr:
+                    planner_run_id = pr
+                ps = output.get("plan_steps")
+                if ps:
+                    plan_steps = ps
 
             # ── ESL decision (capture for done event) ──
             elif kind == "on_chain_end" and node == "esl_gateway":
@@ -231,6 +383,29 @@ async def stream_langgraph(
             elif kind == "on_chain_end" and event.get("name") == "LangGraph":
                 raw_final = event.get("data", {}).get("output")
                 final_output = raw_final if isinstance(raw_final, dict) else {}
+
+                # Sprint J — interrupt path: when the graph pauses via
+                # interrupt(), the final output carries an __interrupt__ list.
+                # Emit plan_paused and DON'T emit a regular done event.
+                if _settings.STREAMING_REASONING_ENABLED:
+                    interrupts = final_output.get("__interrupt__") or []
+                    if interrupts:
+                        first = interrupts[0] if interrupts else {}
+                        # langgraph.types.Interrupt has a `value` attribute
+                        # holding the payload passed to interrupt().
+                        payload = getattr(first, "value", None)
+                        if payload is None and isinstance(first, dict):
+                            payload = first.get("value", {})
+                        payload = payload or {}
+                        thread_id = (config.get("configurable", {}) or {}).get("thread_id")
+                        yield {
+                            "event": "plan_paused",
+                            "thread_id": thread_id,
+                            **payload,
+                        }
+                        done_yielded = True
+                        continue
+
                 # If streaming captured nothing (edge case), fall back to response_text in state
                 if not response_text:
                     response_text = final_output.get("response_text", "")
@@ -261,6 +436,35 @@ async def stream_langgraph(
             "document_sources": document_sources,
         }
 
+    # Sprint I — finalize the planner_runs row with totals + final status.
+    # Best-effort: failure here just logs (the run row stays as 'running'
+    # and a future janitor task can sweep stale rows).
+    if planner_run_id:
+        try:
+            from services.planner_runs import PlannerRunsService
+
+            total_steps = len(plan_steps)
+            total_actions = sum(len(s.get("actions", [])) for s in plan_steps)
+            total_duration_ms = sum(s.get("duration_ms", 0) for s in plan_steps)
+            # Status priority: vetoed > cap_hit > completed
+            if esl_data.get("status") == "VETOED":
+                status = "vetoed"
+            elif total_steps >= 3 and plan_steps and plan_steps[-1].get("actions"):
+                # Last step still had actions — we hit the cap.
+                status = "cap_hit"
+            else:
+                status = "completed"
+            PlannerRunsService().finalize(
+                run_id=planner_run_id,
+                status=status,
+                total_steps=total_steps,
+                total_actions=total_actions,
+                total_duration_ms=total_duration_ms,
+                plan_steps=plan_steps,
+            )
+        except Exception as exc:
+            logger.warning("planner_runs finalize failed: %s", exc)
+
     # Store conversation turns non-blocking
     await _post_stream_store(
         user_id=user_id,
@@ -269,6 +473,7 @@ async def stream_langgraph(
         conversation_id=conversation_id,
         document_sources=document_sources,
         citations=citations,
+        plan_steps=plan_steps,
     )
 
 
@@ -279,6 +484,7 @@ async def _post_stream_store(
     conversation_id: Optional[str],
     document_sources: Optional[list] = None,
     citations: Optional[list] = None,
+    plan_steps: Optional[list] = None,  # Sprint I — denormalized cache
 ) -> None:
     """Persist conversation turns to M1 + M2. Non-blocking — errors are logged."""
     import logging
@@ -294,6 +500,8 @@ async def _post_stream_store(
             assistant_meta["document_sources"] = document_sources
         if citations:
             assistant_meta["citations"] = citations
+        if plan_steps:
+            assistant_meta["plan_steps"] = plan_steps  # Sprint I cache
 
         # Adapt to actual ContextManager API (check what store methods exist)
         if hasattr(cm, "store_conversation_turn"):

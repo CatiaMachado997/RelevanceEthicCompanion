@@ -149,6 +149,21 @@ class Settings(BaseSettings):
     JINA_API_KEY: str = ""
     RERANK_MODEL: str = "jina-reranker-v2-base-multilingual"
 
+    # Sprint I — explicit ReAct + parallel actions. When False (default),
+    # the planner emits one tool call per step (legacy behavior) and the
+    # executor runs them serially. When True, planner emits {thought,
+    # actions: [...]} and actions in a step run in parallel via
+    # asyncio.gather with one auto-retry per failed action.
+    PLANNER_PARALLEL_ENABLED: bool = False
+
+    # Sprint J — streaming reasoning + interrupts. When False (default),
+    # the planner runs unchanged, no thought_token / plan_step_actions /
+    # action_start / action_complete events are emitted, and the
+    # interrupt path is dead-coded. When True, the executor consults
+    # SafetyPreferencesService per action and may call interrupt(),
+    # which requires the PostgresSaver checkpointer to be wired up.
+    STREAMING_REASONING_ENABLED: bool = False
+
     # Backend URL for OAuth redirects
     BACKEND_URL: str = "http://localhost:8000"
 
