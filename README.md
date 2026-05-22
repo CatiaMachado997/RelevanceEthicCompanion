@@ -15,7 +15,7 @@ gets out of your way the rest of the time. No engagement metrics. No FOMO. No da
 [![CI](https://github.com/CatiaMachado997/RelevanceEthicCompanion/actions/workflows/ci.yml/badge.svg)](https://github.com/CatiaMachado997/RelevanceEthicCompanion/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-**Live app:** [frontend-phi-flame-36.vercel.app](https://frontend-phi-flame-36.vercel.app)
+**Live app:** see deployment section below
 
 ---
 
@@ -36,9 +36,9 @@ gets out of your way the rest of the time. No engagement metrics. No FOMO. No da
 
 | Service | URL |
 |---|---|
-| Frontend | [frontend-phi-flame-36.vercel.app](https://frontend-phi-flame-36.vercel.app) |
-| Backend API | [romantic-appreciation-production-11da.up.railway.app](https://romantic-appreciation-production-11da.up.railway.app) |
-| API docs | [/docs](https://romantic-appreciation-production-11da.up.railway.app/docs) |
+| Frontend | your Vercel deployment URL |
+| Backend API | your Railway service URL |
+| API docs | `<railway-url>/docs` |
 
 ---
 
@@ -191,8 +191,8 @@ Add these secrets in GitHub → Settings → Secrets → Actions:
 | Secret | Value |
 |---|---|
 | `VERCEL_TOKEN` | Vercel → Settings → Tokens |
-| `VERCEL_ORG_ID` | `team_Fd1dTc00pWZIvYmpmx9jLAz4` |
-| `VERCEL_PROJECT_ID` | `prj_HEWL7CRGzzfQzlYSjtdd0xA3yk5t` |
+| `VERCEL_ORG_ID` | Run `cat frontend/.vercel/project.json` after first `vercel` deploy |
+| `VERCEL_PROJECT_ID` | Run `cat frontend/.vercel/project.json` after first `vercel` deploy |
 | `RAILWAY_TOKEN` | Railway → Account Settings → Tokens |
 
 On every push to `main`: tests run → ESL coverage enforced (≥75%) → both services deploy automatically.
