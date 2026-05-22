@@ -72,3 +72,17 @@ def test_goals_agent_has_get_goals_tool():
     tools = build_goals_tools(user_id="u1", context_manager=MagicMock())
     names = [t.name for t in tools]
     assert "get_user_goals" in names
+
+
+def test_document_agent_builds():
+    from orchestrator.agents.document import build_agent
+    checkpointer = MemorySaver()
+    agent = build_agent(llm=_mock_llm(), checkpointer=checkpointer)
+    assert agent is not None
+
+
+def test_document_agent_has_search_tool():
+    from orchestrator.agents.document import build_document_tools
+    tools = build_document_tools(user_id="u1", context_manager=MagicMock())
+    names = [t.name for t in tools]
+    assert "search_documents" in names
