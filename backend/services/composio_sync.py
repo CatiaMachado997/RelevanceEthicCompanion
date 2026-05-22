@@ -44,6 +44,16 @@ _TOOL_CONFIG: dict[str, dict[str, Any]] = {
         "params": {"limit": 20},
         "source_type": "slack",
     },
+    "github": {
+        "action": "GITHUB_LIST_REPOSITORY_ISSUES",
+        "params": {"state": "open", "per_page": 20},
+        "source_type": "github",
+    },
+    "notion": {
+        "action": "NOTION_SEARCH",
+        "params": {"query": "", "page_size": 20},
+        "source_type": "notion",
+    },
 }
 
 
@@ -113,6 +123,45 @@ def _parse_items(tool_id: str, result: Any) -> list[dict[str, Any]]:
                         "title": f"#{channel}",
                         "content": text[:4000],
                         "item_at": item_at,
+                    }
+                )
+
+        elif source_type == "github":
+            issues = data.get("issues") or data if isinstance(data, list) else []
+            for issue in issues:
+                title = issue.get("title") or "(no title)"
+                body = issue.get("body") or ""
+                repo = (issue.get("repository_url") or "").split("/")[-1]
+                created = issue.get("created_at") or None
+                label = f"[{repo}] {title}" if repo else title
+                items.append(
+                    {
+                        "source_item_type": "github_issue",
+                        "title": label,
+                        "content": body[:4000],
+                        "item_at": _parse_date(created),
+                    }
+                )
+
+        elif source_type == "notion":
+            results = data.get("results") or []
+            for page in results:
+                # Notion page title is nested in properties
+                props = page.get("properties") or {}
+                title_prop = (
+                    props.get("title") or props.get("Name") or props.get("name") or {}
+                )
+                title_arr = (title_prop.get("title") or []) if isinstance(title_prop, dict) else []
+                title = "".join(
+                    t.get("plain_text", "") for t in title_arr if isinstance(t, dict)
+                ) or page.get("url") or "(untitled)"
+                edited = page.get("last_edited_time") or page.get("created_time") or None
+                items.append(
+                    {
+                        "source_item_type": "notion_page",
+                        "title": title,
+                        "content": title,  # full content requires a separate blocks fetch
+                        "item_at": _parse_date(edited),
                     }
                 )
 
