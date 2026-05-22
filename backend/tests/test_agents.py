@@ -101,3 +101,20 @@ def test_connectors_agent_returns_empty_tools_when_no_composio_key():
         mock_settings.COMPOSIO_API_KEY = None
         tools = build_connector_tools(user_id="u1", connected_tool_ids=set())
     assert tools == []
+
+
+def test_supervisor_builds():
+    from orchestrator.agents.supervisor import build_supervisor
+    checkpointer = MemorySaver()
+    llm = _mock_llm()
+    supervisor = build_supervisor(
+        routing_llm=llm,
+        worker_llm=llm,
+        checkpointer=checkpointer,
+    )
+    assert supervisor is not None
+
+
+def test_supervisor_system_prompt_mentions_active_sources():
+    from orchestrator.agents.supervisor import SUPERVISOR_SYSTEM_PROMPT
+    assert "active_sources" in SUPERVISOR_SYSTEM_PROMPT.lower() or "authorised" in SUPERVISOR_SYSTEM_PROMPT.lower()
