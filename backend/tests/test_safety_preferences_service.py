@@ -8,12 +8,13 @@ from services.safety_preferences import SafetyPreferencesService, SafetyPreferen
 TEST_USER_ID = "00000000-0000-0000-0000-000000000000"
 
 
-def _mock_db(execute_results):
-    """execute_results is a list of (fetchone_value, fetchall_value) tuples,
-    one per execute() call, returned in order."""
+def _mock_db(fetchone_results, fetchall_results):
+    """fetchone_results/fetchall_results: lists consumed in call order by
+    each method independently. The service code calls fetchone() once
+    (users PK lookup) and fetchall() twice (categories, tools)."""
     cur = MagicMock()
-    cur.fetchone = MagicMock(side_effect=[r[0] for r in execute_results])
-    cur.fetchall = MagicMock(side_effect=[r[1] for r in execute_results])
+    cur.fetchone = MagicMock(side_effect=fetchone_results)
+    cur.fetchall = MagicMock(side_effect=fetchall_results)
     conn = MagicMock()
     conn.__enter__ = MagicMock(return_value=conn)
     conn.__exit__ = MagicMock(return_value=False)
@@ -22,13 +23,18 @@ def _mock_db(execute_results):
     return conn, cur
 
 
+def _mock_db_load(safe_mode, categories, tools):
+    """Shortcut for the load_for_user() flow: one fetchone (users) +
+    two fetchalls (categories, tools)."""
+    return _mock_db(
+        fetchone_results=[{"safe_mode_enabled": safe_mode}],
+        fetchall_results=[categories, tools],
+    )
+
+
 def test_load_for_user_empty_returns_default_off():
     """A user with no rows in any layer gets safe_mode_enabled=False and empty sets."""
-    conn, _ = _mock_db([
-        (None, [{"safe_mode_enabled": False}]),  # users SELECT
-        (None, []),                              # categories SELECT
-        (None, []),                              # tools SELECT
-    ])
+    conn, _ = _mock_db_load(safe_mode=False, categories=[], tools=[])
     with patch("services.safety_preferences.get_db_connection", return_value=conn):
         svc = SafetyPreferencesService()
         prefs = svc.load_for_user(TEST_USER_ID)
@@ -38,27 +44,21 @@ def test_load_for_user_empty_returns_default_off():
 
 
 def test_load_for_user_with_master_on():
-    conn, _ = _mock_db([
-        (None, [{"safe_mode_enabled": True}]),
-        (None, []),
-        (None, []),
-    ])
+    conn, _ = _mock_db_load(safe_mode=True, categories=[], tools=[])
     with patch("services.safety_preferences.get_db_connection", return_value=conn):
         prefs = SafetyPreferencesService().load_for_user(TEST_USER_ID)
     assert prefs.safe_mode_enabled is True
 
 
 def test_load_for_user_with_categories_and_tools():
-    conn, _ = _mock_db([
-        (None, [{"safe_mode_enabled": False}]),
-        (None, [
+    conn, _ = _mock_db_load(
+        safe_mode=False,
+        categories=[
             {"category": "write-external", "requires_confirmation": True},
             {"category": "read-external",  "requires_confirmation": True},
-        ]),
-        (None, [
-            {"tool_name": "create_note", "requires_confirmation": True},
-        ]),
-    ])
+        ],
+        tools=[{"tool_name": "create_note", "requires_confirmation": True}],
+    )
     with patch("services.safety_preferences.get_db_connection", return_value=conn):
         prefs = SafetyPreferencesService().load_for_user(TEST_USER_ID)
     assert prefs.categories == {"write-external", "read-external"}
@@ -111,7 +111,7 @@ def test_should_confirm_explain_reason_priority():
 
 
 def test_set_safe_mode_upserts():
-    conn, cur = _mock_db([(None, None)])
+    conn, cur = _mock_db([], [])
     with patch("services.safety_preferences.get_db_connection", return_value=conn):
         SafetyPreferencesService().set_safe_mode(TEST_USER_ID, enabled=True)
     sql = cur.execute.call_args[0][0]
@@ -123,7 +123,7 @@ def test_set_safe_mode_upserts():
 
 
 def test_set_category_upsert_true_writes_row():
-    conn, cur = _mock_db([(None, None)])
+    conn, cur = _mock_db([], [])
     with patch("services.safety_preferences.get_db_connection", return_value=conn):
         SafetyPreferencesService().set_category(
             TEST_USER_ID, category="write-external", requires_confirmation=True
@@ -134,7 +134,7 @@ def test_set_category_upsert_true_writes_row():
 
 
 def test_set_category_false_deletes_row():
-    conn, cur = _mock_db([(None, None)])
+    conn, cur = _mock_db([], [])
     with patch("services.safety_preferences.get_db_connection", return_value=conn):
         SafetyPreferencesService().set_category(
             TEST_USER_ID, category="write-external", requires_confirmation=False
@@ -146,7 +146,7 @@ def test_set_category_false_deletes_row():
 def test_set_category_invalid_value_rejected():
     """A category outside the CHECK constraint should be rejected at the
     application layer to avoid hitting the DB error path."""
-    conn, _ = _mock_db([(None, None)])
+    conn, _ = _mock_db([], [])
     with patch("services.safety_preferences.get_db_connection", return_value=conn):
         # Should log and return without writing; OR raise ValueError.
         # Either is acceptable.
@@ -160,6 +160,6 @@ def test_set_category_invalid_value_rejected():
 
 def test_delete_tool_preference_idempotent():
     """delete_tool() on a row that doesn't exist should not raise."""
-    conn, _ = _mock_db([(None, None)])
+    conn, _ = _mock_db([], [])
     with patch("services.safety_preferences.get_db_connection", return_value=conn):
         SafetyPreferencesService().delete_tool(TEST_USER_ID, tool_name="ghost")

@@ -77,9 +77,8 @@ class SafetyPreferencesService:
                         "SELECT safe_mode_enabled FROM users WHERE id = %s",
                         (user_id,),
                     )
-                    rows = cur.fetchall() or []
-                    row = rows[0] if rows else {}
-                    safe_mode = bool(row.get("safe_mode_enabled")) if row else False
+                    row = cur.fetchone() or {}
+                    safe_mode = bool(row.get("safe_mode_enabled"))
 
                     cur.execute(
                         """SELECT category
