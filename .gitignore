@@ -74,3 +74,5 @@ weaviate-data/
 
 # Docker
 docker-compose.override.yml
+.claude/worktrees/
+.worktrees/
