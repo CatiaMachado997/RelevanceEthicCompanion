@@ -72,12 +72,14 @@ types-requests>=2.31.0
 
 # Sprint 2a
 langgraph>=0.2.0
+langgraph-supervisor>=0.0.30
+langgraph-checkpoint-postgres>=2.0.0
 fastapi-mcp>=0.4.0
 # Pinned to 2.x line — langfuse 3.x+ pulls opentelemetry-api which causes pip resolution-too-deep.
 # The app only uses Langfuse(public_key, secret_key, host), a stable API across 2.x/3.x.
 langfuse>=2.60.0,<3.0
 anthropic>=0.25.0
-mcp
+mcp>=1.0.0,<2.0
 
 # Tool Marketplace — Composio managed integrations
 composio-langchain==0.11.4
