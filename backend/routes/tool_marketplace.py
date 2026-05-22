@@ -15,6 +15,7 @@ from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 from esl.tool_gate import ESLToolGate
 from config import settings
 from services.composio_tools import TOOL_ID_TO_COMPOSIO_TOOLKIT
+from services import composio_sync
 
 try:
     from composio import Composio
@@ -245,6 +246,42 @@ async def oauth_callback(
             url=f"{settings.FRONTEND_URL}/dashboard/integrations?error={quote(_err, safe='')}",
             status_code=302,
         )
+
+
+# ─── Sync ────────────────────────────────────────────────────────────────────
+
+
+@router.post("/{tool_id}/sync")
+async def sync_tool(
+    tool_id: str,
+    user_id: str = Depends(get_current_user_id),
+) -> dict:
+    """Fetch recent data from a connected integration and store it in source_items.
+
+    Returns the number of new items synced. Requires COMPOSIO_API_KEY to be set
+    and the tool to already be connected by the user.
+    """
+    if not settings.COMPOSIO_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="Composio integration not configured. Set COMPOSIO_API_KEY in .env.",
+        )
+
+    # Verify the tool is actually connected for this user
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM user_tool_connections WHERE user_id = %s AND tool_id = %s AND enabled = TRUE",
+                (user_id, tool_id),
+            )
+            row = cur.fetchone()
+    if not row:
+        raise HTTPException(
+            status_code=404, detail=f"Tool not connected: {tool_id}"
+        )
+
+    count = await composio_sync.sync_tool_data(user_id=user_id, tool_id=tool_id)
+    return {"synced": count, "tool_id": tool_id}
 
 
 # ─── Disconnect ───────────────────────────────────────────────────────────────

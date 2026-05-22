@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { dataSourcesApi, toolMarketplaceApi, ToolDefinition, ConnectedTool } from '@/lib/api'
+import { toolMarketplaceApi, ToolDefinition, ConnectedTool } from '@/lib/api'
 import { CatalogueCard } from '@/components/CatalogueCard'
 import { RefreshCw, CheckCircle2, AlertCircle, Zap, Plug } from 'lucide-react'
 
@@ -158,15 +158,22 @@ function IntegrationsContent() {
 
   const loadConnected = async () => {
     try {
-      const r = await dataSourcesApi.list()
+      const conn = await toolMarketplaceApi.getConnected()
       if (!mountedRef.current) return
-      setConnected((r.sources ?? []) as ConnectedSource[])
-      try {
-        const s = await dataSourcesApi.stats()
-        if (mountedRef.current) setStats(s)
-      } catch {
-        // stats are non-critical
+      const toolIdToSourceType: Record<string, SourceType> = {
+        gmail_write: 'gmail',
+        google_calendar_write: 'google_calendar',
+        slack: 'slack',
       }
+      const sources: ConnectedSource[] = conn
+        .filter(c => c.tool_id in toolIdToSourceType && c.enabled)
+        .map(c => ({
+          source_type: toolIdToSourceType[c.tool_id],
+          enabled: true,
+          status: 'synced' as const,
+          last_sync: c.last_used_at ?? null,
+        }))
+      setConnected(sources)
     } catch (e) {
       console.error(e)
     } finally {
@@ -227,21 +234,27 @@ function IntegrationsContent() {
   }
   const lastSync = (type: SourceType) => sourceData(type)?.last_sync
 
+  const toolIdMap: Record<SourceType, string> = {
+    gmail: 'gmail_write',
+    google_calendar: 'google_calendar_write',
+    slack: 'slack',
+  }
+
   const handleConnect = async (type: SourceType) => {
     try {
-      const { authorization_url } = await dataSourcesApi.getAuthUrl(type)
-      window.location.href = authorization_url
+      const url = await toolMarketplaceApi.connectComposio(toolIdMap[type])
+      if (url) window.location.href = url
     } catch (e) {
       console.error(e)
       const label = INTEGRATIONS.find(i => i.type === type)?.label ?? type
-      setErrorFlash(`Could not start ${label} connection. Make sure you're signed in and try again.`)
+      setErrorFlash(`Could not start ${label} connection. Make sure the backend is running.`)
       setTimeout(() => setErrorFlash(null), 6000)
     }
   }
 
   const handleDisconnect = async (type: SourceType) => {
     try {
-      await dataSourcesApi.disconnect(type)
+      await toolMarketplaceApi.disconnect(toolIdMap[type])
       setConnected(prev => prev.filter(s => s.source_type !== type))
     } catch (e) {
       console.error(e)
@@ -251,10 +264,10 @@ function IntegrationsContent() {
   const handleSync = async (type: SourceType) => {
     setSyncing(type)
     try {
-      await dataSourcesApi.sync(type)
+      await toolMarketplaceApi.syncTool(toolIdMap[type])
     } catch (e) {
       const label = INTEGRATIONS.find(i => i.type === type)?.label ?? type
-      setErrorFlash(`Sync failed for ${label}. If the problem persists, try reconnecting.`)
+      setErrorFlash(`Sync failed for ${label}.`)
       setTimeout(() => setErrorFlash(null), 6000)
     } finally {
       setSyncing(null)
@@ -264,11 +277,11 @@ function IntegrationsContent() {
 
   const handleReconnect = async (type: SourceType) => {
     try {
-      const { authorization_url } = await dataSourcesApi.getAuthUrl(type)
-      window.location.href = authorization_url
+      const url = await toolMarketplaceApi.connectComposio(toolIdMap[type])
+      if (url) window.location.href = url
     } catch (e) {
       const label = INTEGRATIONS.find(i => i.type === type)?.label ?? type
-      setErrorFlash(`Could not start ${label} reconnection. Make sure you're signed in and try again.`)
+      setErrorFlash(`Could not start ${label} reconnection. Make sure the backend is running.`)
       setTimeout(() => setErrorFlash(null), 6000)
     }
   }

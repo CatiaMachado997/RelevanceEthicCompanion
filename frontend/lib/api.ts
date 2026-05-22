@@ -1109,6 +1109,11 @@ export const toolMarketplaceApi = {
     return data.connect_url
   },
 
+  syncTool: async (toolId: string): Promise<{ synced: number }> => {
+    const res = await apiRequest<{ synced: number; tool_id: string }>(`/api/tools/${toolId}/sync`, { method: 'POST' })
+    return { synced: res.synced }
+  },
+
   disconnect: (toolId: string): Promise<void> =>
     apiRequest<void>(`/api/tools/${toolId}/disconnect`, { method: 'DELETE' }),
 
