@@ -12,6 +12,8 @@ from pydantic import SecretStr
 from orchestrator.state import AgentState
 from orchestrator.nodes.context import get_context_manager
 from config import settings
+from config import settings as _j_settings
+from services.safety_preferences import SafetyPreferencesService, SafetyPreferences
 
 logger = logging.getLogger(__name__)
 
@@ -443,6 +445,14 @@ async def tool_execution_node(state: AgentState) -> dict:
         citation_collector=document_sources,
     )
     tool_map = {t.name: t for t in tools}
+
+    # Sprint J — load the user's layered safety preferences once per
+    # step. The result is the same throughout the step's execution.
+    if _j_settings.STREAMING_REASONING_ENABLED:
+        safety_prefs = SafetyPreferencesService().load_for_user(user_id)
+    else:
+        safety_prefs = SafetyPreferences(safe_mode_enabled=False)
+
     llm = ChatGroq(
         model=state.get("model", "llama-3.3-70b-versatile"),
         api_key=SecretStr(settings.GROQ_API_KEY),
@@ -472,19 +482,27 @@ async def tool_execution_node(state: AgentState) -> dict:
 
         t = tool_map[tool_name]
         meta = getattr(t, "metadata", {}) or {}
+        category = getattr(t, "category", "write-external")
+        needs_confirm = safety_prefs.should_confirm(
+            tool_name=tool_name, category=category
+        )
         if meta.get("tool_id") and meta.get("action_name"):
-            sequential_actions.append((ai, action, t))
+            # Marketplace tool: always sequential due to its own ESL gate.
+            sequential_actions.append((ai, action, t, category, needs_confirm))
+        elif needs_confirm:
+            # User-flagged read tool: also goes sequential — we pause per action.
+            sequential_actions.append((ai, action, t, category, True))
         else:
-            parallel_actions.append((ai, action, t))
+            parallel_actions.append((ai, action, t, category, False))
         events.append({"event": "tool_use", "tool": tool_name})
 
     # --- Parallel fan-out for read-only tools ---
     if parallel_actions:
         obs_list = await asyncio.gather(
-            *[_execute_with_retry(t, a.get("params", {})) for _, a, t in parallel_actions],
+            *[_execute_with_retry(t, a.get("params", {})) for _, a, t, _c, _n in parallel_actions],
             return_exceptions=False,
         )
-        for (ai, action, t), obs in zip(parallel_actions, obs_list):
+        for (ai, action, t, _category, _needs), obs in zip(parallel_actions, obs_list):
             tool_name = action["tool"]
             params = action.get("params", {})
             if obs["status"] == "ok":
@@ -516,10 +534,55 @@ async def tool_execution_node(state: AgentState) -> dict:
                 current_step["observations"].append(obs)
 
     # --- Sequential execution for marketplace-gated tools ---
-    for ai, action, t in sequential_actions:
+    for ai, action, t, category, needs_confirm in sequential_actions:
         tool_name = action["tool"]
         tool_input = action.get("params", {})
         meta = getattr(t, "metadata", {}) or {}
+
+        # Sprint J — for non-marketplace tools whose category/tool/master
+        # preference requires confirmation, pause via LangGraph interrupt().
+        # Marketplace tools have their own ESL gate further down — we
+        # don't double-gate them.
+        if needs_confirm and not (meta.get("tool_id") and meta.get("action_name")):
+            from langgraph.types import interrupt
+
+            decision = interrupt({
+                "kind": "user_confirmation",
+                "step": step_index,
+                "action_index": ai,
+                "tool": tool_name,
+                "category": category,
+                "params": tool_input,
+                "reason": safety_prefs.explain_reason(
+                    tool_name=tool_name, category=category
+                ),
+            })
+            # On resume, `decision` is whatever was passed to Command(resume=...).
+            chosen = (decision or {}).get("action", "approve")
+            if chosen == "cancel":
+                obs = {"status": "cancelled", "latency_ms": 0, "attempts": 0}
+                if current_step is not None:
+                    current_step["observations"].append(obs)
+                results.append({"tool": tool_name, "result": "Cancelled by user."})
+                events.append({"event": "tool_cancelled", "tool": tool_name})
+                # Stop processing further actions in this step.
+                break
+            if chosen == "skip":
+                obs = {
+                    "status": "skipped", "reason": "user",
+                    "latency_ms": 0, "attempts": 0,
+                }
+                if current_step is not None:
+                    current_step["observations"].append(obs)
+                results.append({"tool": tool_name, "result": "Skipped by user."})
+                events.append({"event": "tool_skipped", "tool": tool_name})
+                continue
+            if chosen == "approve" and (decision or {}).get("trust"):
+                # "Trust this tool from now on" — clear ONLY the per-tool
+                # row. Higher layers (master / category) remain.
+                SafetyPreferencesService().delete_tool(user_id, tool_name=tool_name)
+            # else: chosen == "approve" — fall through to normal execution
+
         tool_id = meta["tool_id"]
         action_name = meta["action_name"]
         risk_level = meta.get("risk_level", "medium")
