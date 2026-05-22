@@ -86,8 +86,8 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     TAVILY_API_KEY: str
 
-    # Google Cloud
-    GOOGLE_CLOUD_PROJECT: str
+    # Google Cloud (optional — only needed when using GCP Secret Manager)
+    GOOGLE_CLOUD_PROJECT: Optional[str] = None
     GOOGLE_APPLICATION_CREDENTIALS: str = ""
 
     # Google OAuth (Phase 5: Calendar Integration)

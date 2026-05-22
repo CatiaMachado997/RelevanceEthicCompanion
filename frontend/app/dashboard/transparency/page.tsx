@@ -405,7 +405,6 @@ export default function TransparencyPage() {
         </motion.div>
       )}
 
-      {/* Audit Log — always rendered so filter chips are accessible */}
       {activeTab === 'esl' && (
       <Card className="rounded-2xl border border-[var(--ec-card-border)] bg-[var(--ec-card-bg)] shadow-[var(--ec-card-shadow)]">
         <CardHeader>

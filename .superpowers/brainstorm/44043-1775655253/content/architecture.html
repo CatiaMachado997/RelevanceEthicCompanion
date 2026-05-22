@@ -1,0 +1,95 @@
+<h2>Tool Marketplace — Proposed Architecture</h2>
+<p class="subtitle">Three layers working together: Catalogue → Registry → ESL-gated execution</p>
+
+<div class="section">
+  <h3>Overall system</h3>
+  <div class="mockup">
+    <div class="mockup-header">Data & control flow</div>
+    <div class="mockup-body" style="font-family:monospace;font-size:0.78rem;line-height:1.8;padding:1rem">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;text-align:center">
+
+        <div style="background:#1a1a2e;border-radius:8px;padding:1rem;border:1px solid #6c63ff">
+          <div style="color:#6c63ff;font-weight:bold;margin-bottom:0.5rem">① USER</div>
+          <div style="font-size:0.7rem;color:#aaa">Integrations page<br>Browse catalogue<br>Connect / disconnect<br>Set trust levels</div>
+        </div>
+
+        <div style="background:#1a1a2e;border-radius:8px;padding:1rem;border:1px solid #f59e0b">
+          <div style="color:#f59e0b;font-weight:bold;margin-bottom:0.5rem">② REGISTRY</div>
+          <div style="font-size:0.7rem;color:#aaa">tool_definitions table<br>user_tool_connections<br>tool_permissions<br>(trust level per action)</div>
+        </div>
+
+        <div style="background:#1a1a2e;border-radius:8px;padding:1rem;border:1px solid #10b981">
+          <div style="color:#10b981;font-weight:bold;margin-bottom:0.5rem">③ EXECUTION</div>
+          <div style="font-size:0.7rem;color:#aaa">LangGraph tool node<br>ESL gates all writes<br>Confirm → execute<br>Audit logged</div>
+        </div>
+
+      </div>
+
+      <div style="text-align:center;margin:1rem 0;color:#555;font-size:0.8rem">
+        ↓ user connects a tool → registry knows it's active → LangGraph loads it dynamically → ESL gates every action
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+        <div style="background:#0d1b2a;border-radius:8px;padding:0.75rem;border:1px solid #333">
+          <div style="color:#a78bfa;font-weight:bold;font-size:0.75rem;margin-bottom:0.4rem">CURATED CATALOGUE</div>
+          <div style="font-size:0.68rem;color:#aaa">Notion, Slack, GitHub,<br>GCal (write), Gmail (write)<br>Pre-built connectors<br>OAuth flow managed by EC</div>
+        </div>
+        <div style="background:#0d1b2a;border-radius:8px;padding:0.75rem;border:1px solid #333">
+          <div style="color:#a78bfa;font-weight:bold;font-size:0.75rem;margin-bottom:0.4rem">MCP ESCAPE HATCH</div>
+          <div style="font-size:0.68rem;color:#aaa">Any MCP server by URL<br>Local or remote<br>Hidden under "Advanced"<br>ESL applied equally</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>ESL permission model (progressive trust)</h3>
+  <div class="mockup">
+    <div class="mockup-header">How EC asks for trust — once per action type</div>
+    <div class="mockup-body" style="padding:1rem;font-size:0.8rem">
+      <div style="display:flex;flex-direction:column;gap:0.5rem">
+        <div style="background:#1a1a2e;border-radius:6px;padding:0.75rem;border-left:3px solid #f59e0b">
+          <div style="color:#f59e0b;font-weight:bold;font-size:0.75rem">FIRST TIME — EC asks</div>
+          <div style="color:#ccc;margin-top:0.25rem;font-size:0.75rem">"Create a GitHub issue? Allow once / Always allow / Never"</div>
+        </div>
+        <div style="background:#1a1a2e;border-radius:6px;padding:0.75rem;border-left:3px solid #10b981">
+          <div style="color:#10b981;font-weight:bold;font-size:0.75rem">TRUSTED — auto-executes</div>
+          <div style="color:#ccc;margin-top:0.25rem;font-size:0.75rem">Stored in tool_permissions. User can revoke anytime in Settings.</div>
+        </div>
+        <div style="background:#1a1a2e;border-radius:6px;padding:0.75rem;border-left:3px solid #ef4444">
+          <div style="color:#ef4444;font-weight:bold;font-size:0.75rem">HIGH-RISK — always confirms</div>
+          <div style="color:#ccc;margin-top:0.25rem;font-size:0.75rem">Send email, delete, post publicly — ESL enforces preview regardless of trust.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>New database tables</h3>
+  <div class="mockup">
+    <div class="mockup-header">Schema additions</div>
+    <div class="mockup-body" style="font-family:monospace;font-size:0.72rem;padding:1rem;line-height:1.6;color:#a5f3fc">
+      <div style="margin-bottom:0.75rem"><span style="color:#f59e0b">tool_definitions</span>  <span style="color:#888">-- the catalogue</span><br>
+        &nbsp;&nbsp;id, name, description, source_type<br>
+        &nbsp;&nbsp;auth_type (oauth|mcp|apikey)<br>
+        &nbsp;&nbsp;actions[] JSONB  <span style="color:#888">-- read_events, create_issue…</span><br>
+        &nbsp;&nbsp;risk_level (low|medium|high) per action
+      </div>
+      <div style="margin-bottom:0.75rem"><span style="color:#f59e0b">user_tool_connections</span>  <span style="color:#888">-- per user</span><br>
+        &nbsp;&nbsp;user_id, tool_id, enabled<br>
+        &nbsp;&nbsp;credentials JSONB encrypted<br>
+        &nbsp;&nbsp;mcp_url (nullable — MCP only)<br>
+        &nbsp;&nbsp;connected_at, last_used_at
+      </div>
+      <div><span style="color:#f59e0b">tool_permissions</span>  <span style="color:#888">-- trust memory</span><br>
+        &nbsp;&nbsp;user_id, tool_id, action_name<br>
+        &nbsp;&nbsp;trust_level (ask|allow|deny)<br>
+        &nbsp;&nbsp;granted_at, expires_at (nullable)
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:1.5rem">Does this architecture look right? Reply in the terminal.</p>

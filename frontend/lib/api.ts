@@ -291,14 +291,17 @@ export const chatApi = {
     let settled = false
     let rejectRef: ((err: Error) => void) | null = null
 
-    const promise = new Promise<void>((resolve, reject) => {
+    const promise = new Promise<void>(async (resolve, reject) => {
       rejectRef = reject
       const modelParam = callbacks.model ? `&model=${encodeURIComponent(callbacks.model)}` : ''
       const convParam = callbacks.conversation_id ? `&conversation_id=${encodeURIComponent(callbacks.conversation_id)}` : ''
       const sourcesParam = callbacks.active_sources?.length
         ? `&active_sources=${encodeURIComponent(callbacks.active_sources.join(','))}` : ''
+      // EventSource cannot send Authorization headers — pass token as query param
+      const token = await resolveAccessToken()
+      const tokenParam = token ? `&token=${encodeURIComponent(token)}` : ''
       const forceParam = callbacks.force_retrieval ? '&force_retrieval=true' : ''
-      const url = `${API_URL}/api/chat/stream?message=${encodeURIComponent(message)}${modelParam}${convParam}${sourcesParam}${forceParam}`
+      const url = `${API_URL}/api/chat/stream?message=${encodeURIComponent(message)}${modelParam}${convParam}${sourcesParam}${tokenParam}${forceParam}`
       es = new EventSource(url, { withCredentials: true })
 
       es.onmessage = (e) => {
@@ -1227,6 +1230,11 @@ export const toolMarketplaceApi = {
       body: JSON.stringify({ toolkit }),
     })
     return data.connect_url
+  },
+
+  syncTool: async (toolId: string): Promise<{ synced: number }> => {
+    const res = await apiRequest<{ synced: number; tool_id: string }>(`/api/tools/${toolId}/sync`, { method: 'POST' })
+    return { synced: res.synced }
   },
 
   disconnect: (toolId: string): Promise<void> =>
