@@ -120,6 +120,9 @@ async def stream_langgraph(
         "token_warning": None,
         "pending_tool_confirmation": None,
         "source_context": [],
+        "messages": [],
+        "active_agent": "",
+        "agent_outputs": {},
     }
     graph = get_graph()
 
