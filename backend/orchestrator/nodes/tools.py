@@ -1,5 +1,6 @@
 """ToolPlanner and ToolExecution — LLM-driven tool selection and execution."""
 
+import asyncio
 import json
 import logging
 import time
@@ -13,6 +14,36 @@ from orchestrator.nodes.context import get_context_manager
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+
+async def _execute_with_retry(tool: Any, params: dict) -> dict:
+    """Run one tool invocation; retry once on exception with 200 ms backoff.
+
+    Returns a structured observation dict — never raises.
+
+    Sprint I Task 9.
+    """
+    t0 = time.perf_counter()
+    last_error: Optional[str] = None
+    for attempt in (1, 2):
+        try:
+            result = await tool.ainvoke(params)
+            return {
+                "status": "ok",
+                "result": result,
+                "latency_ms": int((time.perf_counter() - t0) * 1000),
+                "attempts": attempt,
+            }
+        except Exception as exc:  # noqa: BLE001
+            last_error = str(exc)
+            if attempt == 1:
+                await asyncio.sleep(0.2)
+    return {
+        "status": "error",
+        "error": last_error or "unknown error",
+        "latency_ms": int((time.perf_counter() - t0) * 1000),
+        "attempts": 2,
+    }
 
 
 async def _audit_tool_action(
@@ -99,6 +130,30 @@ def _build_citations(results: list) -> list:
             continue
         citations.append({"tool": tool, "label": meta["label"], "icon": meta["icon"]})
     return citations
+
+
+def _parse_planner_response(response: Any) -> dict:
+    """Convert an LLM response into our structured step shape.
+
+    The model's response will have:
+      - `content`: a free-form string (the thought, possibly empty)
+      - `tool_calls`: structured tool selections from bind_tools()
+
+    We treat any present tool_calls as the step's actions and the content
+    as the thought. If there are no tool_calls, this is the terminal
+    step — actions = [], and the content becomes proposed_content for
+    the response synthesizer (handled outside this fn).
+
+    Sprint I Task 10.
+    """
+    content = getattr(response, "content", "") or ""
+    thought = content if isinstance(content, str) else str(content)
+    tool_calls = list(getattr(response, "tool_calls", []) or [])
+    actions = [
+        {"tool": tc.get("name", ""), "params": tc.get("args", {}) or {}}
+        for tc in tool_calls
+    ]
+    return {"thought": thought.strip(), "actions": actions, "raw_tool_calls": tool_calls}
 
 
 def _build_system_prompt(state: AgentState) -> str:
@@ -211,7 +266,11 @@ def _build_system_prompt(state: AgentState) -> str:
 
 
 async def tool_planner_node(state: AgentState) -> dict:
-    """Ask the LLM which tools to call given the current message + context."""
+    """Sprint I: ask the LLM which tool(s) to call this step.
+
+    Emits {thought, actions: [...]} per step. Empty actions = exit loop.
+    Manages the planner_runs row lifecycle.
+    """
     from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
     from langchain_groq import ChatGroq
     from services.langchain_tools import create_langchain_tools
@@ -231,10 +290,6 @@ async def tool_planner_node(state: AgentState) -> dict:
 
     messages: List[BaseMessage] = [SystemMessage(content=_build_system_prompt(state))]
     for h in state.get("conversation_history", []):
-        # Prior assistant turns must be AIMessage so the LLM treats them as
-        # its own past replies (i.e. real conversational memory). Using
-        # SystemMessage here mixed prior replies with system instructions
-        # and prevented the model from following the conversation thread.
         messages.append(
             HumanMessage(content=h["content"])
             if h["role"] == "user"
@@ -242,32 +297,45 @@ async def tool_planner_node(state: AgentState) -> dict:
         )
     messages.append(HumanMessage(content=state["message"]))
 
-    # On a replan iteration, surface results from earlier tool calls so the
-    # planner can decide whether further tools are needed.
-    prior_results = state.get("tool_results") or []
-    if prior_results:
+    # On a replan iteration, surface the running plan trace so the
+    # planner can see prior thoughts + actions + observations.
+    plan_steps: list = list(state.get("plan_steps") or [])
+    if plan_steps:
         messages.append(
             SystemMessage(
                 content=(
-                    "Tools already executed this turn (results available "
-                    "for follow-up planning):\n"
-                    + json.dumps(prior_results)[:4000]
-                    + "\n\nIf you have everything you need, respond with no "
-                    "further tool calls."
+                    "Plan so far (your prior thoughts, actions, and what each tool returned):\n"
+                    + json.dumps(plan_steps, default=str)[:6000]
+                    + "\n\nIf you have everything you need, respond with no further tool calls."
                 )
             )
         )
 
-    response = await llm_with_tools.ainvoke(messages)
-    tool_calls = list(getattr(response, "tool_calls", []) or [])
-    proposed = response.content if not tool_calls else ""
+    # Lazy import to keep tests fast and avoid circulars
+    from services.planner_runs import PlannerRunsService
 
-    # `/ask` slash command: force a search_documents call so the user can audit
-    # which chunks the answer was grounded in regardless of the planner's choice.
-    if state.get("force_retrieval"):
-        already = any(tc.get("name") == "search_documents" for tc in tool_calls)
+    # First invocation: create the planner_runs parent row.
+    planner_run_id = state.get("planner_run_id") or ""
+    if not planner_run_id:
+        planner_run_id = PlannerRunsService().create(
+            user_id=user_id,
+            conversation_id=state.get("conversation_id"),
+            intent=state.get("intent") or "chat",
+        )
+
+    response = await llm_with_tools.ainvoke(messages)
+    parsed = _parse_planner_response(response)
+
+    # `/ask` slash command — force a search_documents action on step 1 only.
+    if state.get("force_retrieval") and not plan_steps:
+        already = any(a["tool"] == "search_documents" for a in parsed["actions"])
         if not already:
-            tool_calls.insert(
+            parsed["actions"].insert(
+                0,
+                {"tool": "search_documents", "params": {"query": state["message"], "k": 5}},
+            )
+            # Also reflect into raw_tool_calls so downstream legacy paths see it
+            parsed["raw_tool_calls"].insert(
                 0,
                 {
                     "name": "search_documents",
@@ -275,13 +343,27 @@ async def tool_planner_node(state: AgentState) -> dict:
                     "id": "forced_search_documents",
                 },
             )
-            proposed = ""
 
-    next_step = state.get("planner_step", 0) + 1
+    next_step_index = len(plan_steps) + 1
+    step = {
+        "step": next_step_index,
+        "thought": parsed["thought"],
+        "actions": parsed["actions"],
+        "observations": [],  # filled in by tool_execution_node
+        "started_at": datetime.now(UTC).isoformat(),
+    }
+    plan_steps.append(step)
+
+    # Maintain legacy tool_calls field so downstream code keeps working:
+    legacy_tool_calls = parsed["raw_tool_calls"]
+    proposed = parsed["thought"] if not parsed["actions"] else ""
+
     return {
-        "tool_calls": tool_calls,
+        "tool_calls": legacy_tool_calls,
         "proposed_content": proposed,
-        "planner_step": next_step,
+        "planner_step": next_step_index,
+        "plan_steps": plan_steps,
+        "planner_run_id": planner_run_id,
     }
 
 
@@ -295,8 +377,14 @@ def _record_telemetry(
     latency_ms: int,
     error_message: Optional[str] = None,
     esl_decision: Optional[str] = None,
+    planner_run_id: Optional[str] = None,
+    step_index: Optional[int] = None,
+    action_index: Optional[int] = None,
 ) -> None:
-    """Best-effort tool_call_events insert. Never raises."""
+    """Best-effort tool_call_events insert. Never raises.
+
+    Sprint I — added planner_run_id / step_index / action_index breadcrumbs.
+    """
     try:
         from services.tool_telemetry import ToolTelemetryService
 
@@ -315,13 +403,24 @@ def _record_telemetry(
             error_message=error_message,
             esl_decision=esl_decision,
             latency_ms=latency_ms,
+            planner_run_id=planner_run_id,
+            step_index=step_index,
+            action_index=action_index,
         )
-    except Exception as exc:  # noqa: BLE001 — defensive; telemetry must not break flow
+    except Exception as exc:  # noqa: BLE001
         logger.warning("tool telemetry record failed for %s: %s", tool_name, exc)
 
 
 async def tool_execution_node(state: AgentState) -> dict:
-    """Execute tool calls and synthesize a final response."""
+    """Sprint I: execute the latest plan step's actions in parallel.
+
+    For each action:
+      - Marketplace tools still pass through ESLToolGate (VETO / PENDING).
+      - Other actions run via _execute_with_retry.
+    Per-action observations are appended to the current step.
+    Each action is also recorded in tool_call_events with the
+    planner_run_id, step_index, action_index breadcrumbs.
+    """
     from langchain_core.messages import HumanMessage
     from langchain_groq import ChatGroq
     from services.langchain_tools import create_langchain_tools
@@ -330,7 +429,12 @@ async def tool_execution_node(state: AgentState) -> dict:
     cm = get_context_manager()
     user_id = state["user_id"]
     conversation_id = state.get("conversation_id")
-    # Mutable list passed into search_documents — populated when the tool runs.
+    planner_run_id = state.get("planner_run_id") or None
+    plan_steps: list = list(state.get("plan_steps") or [])
+    current_step = plan_steps[-1] if plan_steps else None
+    step_index = current_step["step"] if current_step else 0
+    step_actions = current_step["actions"] if current_step else []
+
     document_sources: list = list(state.get("document_sources") or [])
     tools = await create_langchain_tools(
         cm,
@@ -344,156 +448,158 @@ async def tool_execution_node(state: AgentState) -> dict:
         api_key=SecretStr(settings.GROQ_API_KEY),
     )
 
-    # Accumulate across replans so the synthesis step (and downstream
-    # citation builder) sees every tool that ran this turn.
     results: list = list(state.get("tool_results") or [])
     events: list = []
     pending_confirmation = None
 
-    for tc in state.get("tool_calls", []):
-        tool_name = tc.get("name", "")
-        tool_input = tc.get("args", {})
-        events.append({"event": "tool_use", "tool": tool_name})
+    parallel_actions: list = []
+    sequential_actions: list = []
 
+    for ai, action in enumerate(step_actions):
+        tool_name = action.get("tool", "")
         if tool_name not in tool_map:
             results.append({"tool": tool_name, "result": "Tool not found"})
+            obs = {"status": "error", "error": "Tool not found", "latency_ms": 0, "attempts": 1}
+            if current_step is not None:
+                current_step["observations"].append(obs)
             _record_telemetry(
-                user_id,
-                conversation_id,
-                tool_name,
-                tool_input,
-                "Tool not found",
-                status="error",
-                latency_ms=0,
+                user_id, conversation_id, tool_name, action.get("params", {}),
+                "Tool not found", status="error", latency_ms=0,
                 error_message="Tool not found",
+                planner_run_id=planner_run_id, step_index=step_index, action_index=ai,
             )
             continue
 
         t = tool_map[tool_name]
         meta = getattr(t, "metadata", {}) or {}
-        tool_id = meta.get("tool_id")
-        action_name = meta.get("action_name")
+        if meta.get("tool_id") and meta.get("action_name"):
+            sequential_actions.append((ai, action, t))
+        else:
+            parallel_actions.append((ai, action, t))
+        events.append({"event": "tool_use", "tool": tool_name})
+
+    # --- Parallel fan-out for read-only tools ---
+    if parallel_actions:
+        obs_list = await asyncio.gather(
+            *[_execute_with_retry(t, a.get("params", {})) for _, a, t in parallel_actions],
+            return_exceptions=False,
+        )
+        for (ai, action, t), obs in zip(parallel_actions, obs_list):
+            tool_name = action["tool"]
+            params = action.get("params", {})
+            if obs["status"] == "ok":
+                results.append({"tool": tool_name, "result": str(obs["result"])})
+                events.append({"event": "tool_result", "tool": tool_name})
+                telemetry_output: Any = (
+                    obs["result"] if isinstance(obs["result"], (dict, list))
+                    else str(obs["result"])
+                )
+                trace = getattr(t, "last_trace", None)
+                if tool_name == "search_documents" and trace is not None:
+                    telemetry_output = {"result": str(obs["result"]), "trace": trace}
+                _record_telemetry(
+                    user_id, conversation_id, tool_name, params,
+                    telemetry_output, status="success",
+                    latency_ms=obs["latency_ms"],
+                    planner_run_id=planner_run_id, step_index=step_index, action_index=ai,
+                )
+            else:
+                results.append({"tool": tool_name, "result": f"Error: {obs['error']}"})
+                _record_telemetry(
+                    user_id, conversation_id, tool_name, params,
+                    f"Error: {obs['error']}", status="error",
+                    latency_ms=obs["latency_ms"],
+                    error_message=obs["error"],
+                    planner_run_id=planner_run_id, step_index=step_index, action_index=ai,
+                )
+            if current_step is not None:
+                current_step["observations"].append(obs)
+
+    # --- Sequential execution for marketplace-gated tools ---
+    for ai, action, t in sequential_actions:
+        tool_name = action["tool"]
+        tool_input = action.get("params", {})
+        meta = getattr(t, "metadata", {}) or {}
+        tool_id = meta["tool_id"]
+        action_name = meta["action_name"]
         risk_level = meta.get("risk_level", "medium")
+        from esl.tool_gate import ESLToolGate, GateResult
 
-        # Only gate marketplace tools (they have tool_id in metadata)
-        if tool_id and action_name:
-            from esl.tool_gate import ESLToolGate, GateResult
-
-            gate = ESLToolGate()
-            preview = f"{tool_name}: {json.dumps(tool_input)[:200]}"
-            decision = await gate.check(
-                user_id=user_id,
-                tool_id=tool_id,
-                action_name=action_name,
-                risk_level=risk_level,
-                preview=preview,
+        gate = ESLToolGate()
+        preview = f"{tool_name}: {json.dumps(tool_input)[:200]}"
+        decision = await gate.check(
+            user_id=user_id, tool_id=tool_id, action_name=action_name,
+            risk_level=risk_level, preview=preview,
+        )
+        if decision.status == GateResult.VETOED:
+            results.append({"tool": tool_name, "result": "Action not permitted by user settings."})
+            events.append({"event": "tool_vetoed", "tool": tool_name})
+            await _audit_tool_action(user_id, tool_id, action_name, "VETOED", "User denied this action")
+            obs = {"status": "error", "error": "vetoed", "latency_ms": 0, "attempts": 1}
+            if current_step is not None:
+                current_step["observations"].append(obs)
+            _record_telemetry(
+                user_id, conversation_id, tool_name, tool_input,
+                "Action not permitted by user settings.",
+                status="vetoed", latency_ms=0, esl_decision="VETOED",
+                planner_run_id=planner_run_id, step_index=step_index, action_index=ai,
             )
-            if decision.status == GateResult.VETOED:
-                results.append(
-                    {
-                        "tool": tool_name,
-                        "result": "Action not permitted by user settings.",
-                    }
-                )
-                events.append({"event": "tool_vetoed", "tool": tool_name})
-                await _audit_tool_action(
-                    user_id, tool_id, action_name, "VETOED", "User denied this action"
-                )
-                _record_telemetry(
-                    user_id,
-                    conversation_id,
-                    tool_name,
-                    tool_input,
-                    "Action not permitted by user settings.",
-                    status="vetoed",
-                    latency_ms=0,
-                    esl_decision="VETOED",
-                )
-                continue
-            if decision.status == GateResult.PENDING_CONFIRMATION:
-                pending_confirmation = {
-                    "tool_id": tool_id,
-                    "action_name": action_name,
-                    "tool_name": tool_name,
-                    "preview": decision.preview,
-                    "params": tool_input,
-                    "risk_level": risk_level,
-                }
-                events.append(
-                    {
-                        "event": "tool_pending_confirmation",
-                        "tool": tool_name,
-                        "tool_id": tool_id,
-                        "tool_name": tool_name,
-                        "action_name": action_name,
-                        "preview": decision.preview,
-                    }
-                )
-                results.append(
-                    {
-                        "tool": tool_name,
-                        "result": f"Awaiting your confirmation: {decision.preview}",
-                    }
-                )
-                _record_telemetry(
-                    user_id,
-                    conversation_id,
-                    tool_name,
-                    tool_input,
-                    {"preview": decision.preview},
-                    status="pending_confirmation",
-                    latency_ms=0,
-                )
-                continue
+            continue
+        if decision.status == GateResult.PENDING_CONFIRMATION:
+            pending_confirmation = {
+                "tool_id": tool_id, "action_name": action_name,
+                "tool_name": tool_name, "preview": decision.preview,
+                "params": tool_input, "risk_level": risk_level,
+            }
+            events.append({
+                "event": "tool_pending_confirmation", "tool": tool_name,
+                "tool_id": tool_id, "tool_name": tool_name,
+                "action_name": action_name, "preview": decision.preview,
+            })
+            results.append({"tool": tool_name, "result": f"Awaiting your confirmation: {decision.preview}"})
+            obs = {"status": "pending", "latency_ms": 0, "attempts": 1}
+            if current_step is not None:
+                current_step["observations"].append(obs)
+            _record_telemetry(
+                user_id, conversation_id, tool_name, tool_input,
+                {"preview": decision.preview}, status="pending_confirmation",
+                latency_ms=0,
+                planner_run_id=planner_run_id, step_index=step_index, action_index=ai,
+            )
+            continue
 
-        t0 = time.perf_counter()
-        try:
-            result = await t.ainvoke(tool_input)
-            t1 = time.perf_counter()
-            results.append({"tool": tool_name, "result": str(result)})
+        obs = await _execute_with_retry(t, tool_input)
+        if obs["status"] == "ok":
+            results.append({"tool": tool_name, "result": str(obs["result"])})
             events.append({"event": "tool_result", "tool": tool_name})
-            if tool_id and action_name:
-                await _audit_tool_action(
-                    user_id,
-                    tool_id,
-                    action_name,
-                    "APPROVED",
-                    "Marketplace tool executed",
-                )
-            # Sprint G Task 4: fold the retrieval breadcrumb trace into the
-            # telemetry output so Transparency's tool-call detail can render
-            # candidates → rerank → final cited.
-            telemetry_output: Any = (
-                result if isinstance(result, (dict, list)) else str(result)
-            )
-            trace = getattr(t, "last_trace", None)
-            if tool_name == "search_documents" and trace is not None:
-                telemetry_output = {"result": str(result), "trace": trace}
+            await _audit_tool_action(user_id, tool_id, action_name, "APPROVED", "Marketplace tool executed")
             _record_telemetry(
-                user_id,
-                conversation_id,
-                tool_name,
-                tool_input,
-                telemetry_output,
-                status="success",
-                latency_ms=int((t1 - t0) * 1000),
-                esl_decision="APPROVED" if (tool_id and action_name) else None,
+                user_id, conversation_id, tool_name, tool_input,
+                obs["result"] if isinstance(obs["result"], (dict, list)) else str(obs["result"]),
+                status="success", latency_ms=obs["latency_ms"], esl_decision="APPROVED",
+                planner_run_id=planner_run_id, step_index=step_index, action_index=ai,
             )
-        except Exception as e:
-            t1 = time.perf_counter()
-            results.append({"tool": tool_name, "result": f"Error: {e}"})
+        else:
+            results.append({"tool": tool_name, "result": f"Error: {obs['error']}"})
             _record_telemetry(
-                user_id,
-                conversation_id,
-                tool_name,
-                tool_input,
-                f"Error: {e}",
-                status="error",
-                latency_ms=int((t1 - t0) * 1000),
-                error_message=str(e),
+                user_id, conversation_id, tool_name, tool_input,
+                f"Error: {obs['error']}", status="error", latency_ms=obs["latency_ms"],
+                error_message=obs["error"],
+                planner_run_id=planner_run_id, step_index=step_index, action_index=ai,
             )
+        if current_step is not None:
+            current_step["observations"].append(obs)
 
-    # Clear consumed tool_calls so the next planner pass starts fresh.
+    # Step done — capture timing
+    if current_step is not None and "duration_ms" not in current_step:
+        try:
+            start = datetime.fromisoformat(current_step["started_at"])
+            current_step["duration_ms"] = int(
+                (datetime.now(UTC) - start).total_seconds() * 1000
+            )
+        except Exception:
+            current_step["duration_ms"] = 0
+
     cleared_tool_calls: list = []
 
     if results:
@@ -520,4 +626,5 @@ async def tool_execution_node(state: AgentState) -> dict:
         "token_count": state.get("token_count", 0) + tokens_used,
         "token_warning": warning,
         "pending_tool_confirmation": pending_confirmation,
+        "plan_steps": plan_steps,
     }

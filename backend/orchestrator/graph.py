@@ -143,6 +143,9 @@ async def stream_langgraph(
         "force_retrieval": force_retrieval,
         "planner_step": 0,
         "max_planner_steps": 3,
+        # Sprint I — explicit ReAct trace
+        "plan_steps": [],
+        "planner_run_id": None,
     }
     graph = get_graph()
 
@@ -155,6 +158,9 @@ async def stream_langgraph(
     document_sources: list = []
     tool_events_yielded = False
     done_yielded = False
+    # Sprint I — capture plan trace from streamed node outputs
+    plan_steps: list = []
+    planner_run_id: Optional[str] = None
 
     try:
         async for event in graph.astream_events(initial_state, version="v2"):
@@ -194,14 +200,30 @@ async def stream_langgraph(
                 # Capture citation sources for the done event
                 citations = output.get("citations", [])
                 document_sources = output.get("document_sources", [])
+                # Sprint I — capture plan trace as it streams from executor
+                ps = output.get("plan_steps")
+                if ps:
+                    plan_steps = ps
+                pr = output.get("planner_run_id")
+                if pr:
+                    planner_run_id = pr
 
-            # ── Token warning ──
+            # ── Token warning + Sprint I plan trace capture ──
             elif kind == "on_chain_end" and node in ("tool_execution", "tool_planner"):
                 raw_output = event.get("data", {}).get("output")
                 output = raw_output if isinstance(raw_output, dict) else {}
                 warning = output.get("token_warning")
                 if warning and isinstance(warning, str):
                     yield {"event": "warning", "message": warning}
+                # Sprint I — planner_run_id is created in tool_planner_node's
+                # first invocation; capture it here so the finalize block
+                # below can update the row at end of turn.
+                pr = output.get("planner_run_id")
+                if pr:
+                    planner_run_id = pr
+                ps = output.get("plan_steps")
+                if ps:
+                    plan_steps = ps
 
             # ── ESL decision (capture for done event) ──
             elif kind == "on_chain_end" and node == "esl_gateway":
@@ -261,6 +283,35 @@ async def stream_langgraph(
             "document_sources": document_sources,
         }
 
+    # Sprint I — finalize the planner_runs row with totals + final status.
+    # Best-effort: failure here just logs (the run row stays as 'running'
+    # and a future janitor task can sweep stale rows).
+    if planner_run_id:
+        try:
+            from services.planner_runs import PlannerRunsService
+
+            total_steps = len(plan_steps)
+            total_actions = sum(len(s.get("actions", [])) for s in plan_steps)
+            total_duration_ms = sum(s.get("duration_ms", 0) for s in plan_steps)
+            # Status priority: vetoed > cap_hit > completed
+            if esl_data.get("status") == "VETOED":
+                status = "vetoed"
+            elif total_steps >= 3 and plan_steps and plan_steps[-1].get("actions"):
+                # Last step still had actions — we hit the cap.
+                status = "cap_hit"
+            else:
+                status = "completed"
+            PlannerRunsService().finalize(
+                run_id=planner_run_id,
+                status=status,
+                total_steps=total_steps,
+                total_actions=total_actions,
+                total_duration_ms=total_duration_ms,
+                plan_steps=plan_steps,
+            )
+        except Exception as exc:
+            logger.warning("planner_runs finalize failed: %s", exc)
+
     # Store conversation turns non-blocking
     await _post_stream_store(
         user_id=user_id,
@@ -269,6 +320,7 @@ async def stream_langgraph(
         conversation_id=conversation_id,
         document_sources=document_sources,
         citations=citations,
+        plan_steps=plan_steps,
     )
 
 
@@ -279,6 +331,7 @@ async def _post_stream_store(
     conversation_id: Optional[str],
     document_sources: Optional[list] = None,
     citations: Optional[list] = None,
+    plan_steps: Optional[list] = None,  # Sprint I — denormalized cache
 ) -> None:
     """Persist conversation turns to M1 + M2. Non-blocking — errors are logged."""
     import logging
@@ -294,6 +347,8 @@ async def _post_stream_store(
             assistant_meta["document_sources"] = document_sources
         if citations:
             assistant_meta["citations"] = citations
+        if plan_steps:
+            assistant_meta["plan_steps"] = plan_steps  # Sprint I cache
 
         # Adapt to actual ContextManager API (check what store methods exist)
         if hasattr(cm, "store_conversation_turn"):
