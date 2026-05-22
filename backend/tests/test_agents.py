@@ -44,3 +44,17 @@ def test_research_agent_has_tavily_tool():
         tools = build_research_tools(user_id="u1", context_manager=MagicMock())
     names = [t.name for t in tools]
     assert "web_search" in names
+
+
+def test_calendar_agent_builds():
+    from orchestrator.agents.calendar import build_agent
+    checkpointer = MemorySaver()
+    agent = build_agent(llm=_mock_llm(), checkpointer=checkpointer)
+    assert agent is not None
+
+
+def test_calendar_agent_has_query_tool():
+    from orchestrator.agents.calendar import build_calendar_tools
+    tools = build_calendar_tools(user_id="u1", context_manager=MagicMock())
+    names = [t.name for t in tools]
+    assert "query_calendar" in names
