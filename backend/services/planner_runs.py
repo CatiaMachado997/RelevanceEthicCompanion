@@ -17,6 +17,7 @@ import logging
 from typing import List, Optional
 
 from utils.db import get_db_connection
+from config import settings as _settings
 
 logger = logging.getLogger(__name__)
 
@@ -111,4 +112,66 @@ class PlannerRunsService:
         except Exception as exc:  # noqa: BLE001 — telemetry must not raise
             logger.warning(
                 "planner_runs: finalize failed for run %s: %s", run_id, exc
+            )
+            return
+
+        # Sprint K — schedule a fire-and-forget memory write if this run
+        # is worth remembering. Eligibility:
+        #   - status == 'completed'
+        #   - at least one observation across all steps has status == 'ok'
+        # We don't have user_id / message_text in this function's args, so
+        # we fetch them via the run's conversation_turn_id FK.
+        if not _settings.EPISODIC_MEMORY_ENABLED:
+            return
+        if status != "completed":
+            return
+        has_ok = any(
+            (obs or {}).get("status") == "ok"
+            for step in (plan_steps or [])
+            for obs in (step.get("observations") or [])
+        )
+        if not has_ok:
+            return
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """SELECT pr.user_id, ct.content AS message_text
+                             FROM planner_runs pr
+                        LEFT JOIN conversation_turns ct
+                               ON ct.id = pr.conversation_turn_id
+                            WHERE pr.id = %s""",
+                        (run_id,),
+                    )
+                    row = cur.fetchone() or {}
+            user_id = row.get("user_id")
+            message_text = row.get("message_text") or ""
+            if not user_id or not message_text:
+                return  # nothing useful to embed; degrade silently
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "planner_run_memory: finalize lookup failed for %s: %s",
+                run_id, exc,
+            )
+            return
+        try:
+            import asyncio
+            from services.planner_run_memory import PlannerRunMemoryService
+
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(
+                    PlannerRunMemoryService().write(
+                        user_id=str(user_id),
+                        planner_run_id=run_id,
+                        message_text=message_text,
+                        plan_steps=plan_steps,
+                    )
+                )
+            # If no loop is running (e.g. tests calling finalize from a
+            # sync context), skip — those tests won't exercise the memory
+            # write path anyway.
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "planner_run_memory: schedule failed for %s: %s", run_id, exc
             )
