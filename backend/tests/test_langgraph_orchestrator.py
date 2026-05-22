@@ -258,3 +258,16 @@ def test_multi_agent_flag_selects_supervisor_path():
     assert any("supervisor" in n for n in node_names), f"Expected supervisor node, got: {node_names}"
     os.environ.pop("MULTI_AGENT", None)
     og._compiled_graph = None
+
+
+@pytest.mark.asyncio
+async def test_get_checkpointer_returns_memory_saver_in_test():
+    """In test environment, get_checkpointer returns MemorySaver."""
+    from orchestrator.graph import get_checkpointer
+    from unittest.mock import patch
+    with patch("orchestrator.graph._settings") as mock_settings:
+        mock_settings.ENVIRONMENT = "test"
+        mock_settings.database_url = "postgresql://test:test@localhost/test"
+        checkpointer = await get_checkpointer()
+    from langgraph.checkpoint.memory import MemorySaver
+    assert isinstance(checkpointer, MemorySaver)
