@@ -18,6 +18,7 @@ import { api } from "@/lib/api"
 import type { Folder } from "@/lib/api"
 import { toast } from "@/lib/toast"
 import { UserStatus } from "@/components/UserStatus"
+import { SetupNudge } from "@/components/onboarding/SetupNudge"
 
 interface Conversation {
   id: string
@@ -433,6 +434,60 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
     setDragOverFolder(folderId ?? '__ungrouped__')
   }
 
+  // ─── Folder reorder DnD ───────────────────────────────────────────
+  // Conversations and folders are both draggable, but the existing
+  // conversation handlers MUST stay decoupled — discriminate via
+  // separate `dataTransfer` types: `text/ec-conversation` vs
+  // `text/ec-folder`. A nice side-effect: dragging a folder over
+  // another folder won't trigger the conversation drop highlight.
+  const [draggingFolderId, setDraggingFolderId] = useState<string | null>(null)
+  // Index in the current `folders` array where the dragged folder
+  // would land if released right now. null = no active reorder.
+  const [folderDropIndex, setFolderDropIndex] = useState<number | null>(null)
+
+  const handleFolderDragStart = (e: React.DragEvent, folderId: string) => {
+    e.dataTransfer.setData('text/ec-folder', folderId)
+    e.dataTransfer.effectAllowed = 'move'
+    setDraggingFolderId(folderId)
+  }
+
+  const handleFolderDragOver = (e: React.DragEvent, hoverIdx: number) => {
+    if (!e.dataTransfer.types.includes('text/ec-folder')) return
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+    setFolderDropIndex(hoverIdx)
+  }
+
+  const handleFolderDragEnd = () => {
+    setDraggingFolderId(null)
+    setFolderDropIndex(null)
+  }
+
+  const handleFolderReorderDrop = async (e: React.DragEvent, hoverIdx: number) => {
+    if (!e.dataTransfer.types.includes('text/ec-folder')) return
+    e.preventDefault()
+    e.stopPropagation()
+    const draggedId = e.dataTransfer.getData('text/ec-folder')
+    setDraggingFolderId(null)
+    setFolderDropIndex(null)
+    if (!draggedId) return
+    const fromIdx = folders.findIndex(f => f.id === draggedId)
+    if (fromIdx === -1 || fromIdx === hoverIdx) return
+    // Build the reordered id list. Standard "remove from old index,
+    // insert at new index" splice; account for the post-removal shift
+    // when dragging downward.
+    const ids = folders.map(f => f.id)
+    ids.splice(fromIdx, 1)
+    const insertIdx = hoverIdx > fromIdx ? hoverIdx - 1 : hoverIdx
+    ids.splice(insertIdx, 0, draggedId)
+    try {
+      await api.folders.reorder(ids)
+    } finally {
+      qc.invalidateQueries({ queryKey: ["folders"] })
+    }
+  }
+
   const handleDropOnFolder = async (e: React.DragEvent, folderId: string | null) => {
     e.preventDefault()
     const convId = e.dataTransfer.getData('text/ec-conversation')
@@ -473,6 +528,9 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
           Ethic Companion
         </span>
       </div>
+
+      {/* First-run nudge (renders nothing once user has completed setup or dismissed) */}
+      <SetupNudge />
 
       {/* Primary nav */}
       <nav className="flex-1 flex flex-col gap-0.5 px-2 py-3 overflow-y-auto">
@@ -586,21 +644,53 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
             </p>
           )}
 
-          {folders.map(folder => {
+          {folders.map((folder, idx) => {
             const isExpanded = expandedFolders.has(folder.id)
             const isEditingFolder = editingFolderId === folder.id
             const isDropTarget = dragOverFolder === folder.id
             const convsInFolder = conversations.filter(c => c.folder_id === folder.id)
+            const isDragging = draggingFolderId === folder.id
+            // Only the row immediately above the drop position shows
+            // the indicator line — keeps the visual quiet.
+            const showDropIndicator =
+              folderDropIndex === idx && draggingFolderId !== folder.id
 
             return (
               <div
                 key={folder.id}
-                onDragOver={e => handleDragOverFolder(e, folder.id)}
+                draggable={!isEditingFolder}
+                onDragStart={e => handleFolderDragStart(e, folder.id)}
+                onDragEnd={handleFolderDragEnd}
+                onDragOver={e => {
+                  // Conversation drops still go to the existing handler;
+                  // folder reorder uses its own typed payload.
+                  if (e.dataTransfer.types.includes('text/ec-folder')) {
+                    handleFolderDragOver(e, idx)
+                  } else {
+                    handleDragOverFolder(e, folder.id)
+                  }
+                }}
                 onDragLeave={() => setDragOverFolder(null)}
-                onDrop={e => handleDropOnFolder(e, folder.id)}
-                className="rounded transition-colors"
-                style={{ background: isDropTarget ? 'var(--ec-sidebar-active)' : undefined }}
+                onDrop={e => {
+                  if (e.dataTransfer.types.includes('text/ec-folder')) {
+                    handleFolderReorderDrop(e, idx)
+                  } else {
+                    handleDropOnFolder(e, folder.id)
+                  }
+                }}
+                className="rounded transition-colors relative"
+                style={{
+                  background: isDropTarget ? 'var(--ec-sidebar-active)' : undefined,
+                  opacity: isDragging ? 0.4 : undefined,
+                }}
               >
+                {showDropIndicator && (
+                  <div
+                    aria-hidden
+                    className="absolute left-1 right-1 -top-px h-0.5 rounded-full"
+                    style={{ background: 'var(--ec-text)' }}
+                  />
+                )}
                 <div
                   className="group flex items-center gap-1 px-1 py-1 rounded cursor-pointer hover:bg-[rgba(0,0,0,0.04)]"
                   onClick={() => !isEditingFolder && toggleFolder(folder.id)}

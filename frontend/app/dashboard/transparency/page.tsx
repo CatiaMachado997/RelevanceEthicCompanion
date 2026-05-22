@@ -23,6 +23,9 @@ import {
 } from '@/components/ui/select'
 import { PageHeader } from '@/components/ui/page-header'
 import { FilterChips } from '@/components/ui/filter-chips'
+import { Button } from '@/components/ui/button'
+import ToolCallsTab from '@/components/transparency/ToolCallsTab'
+import SystemHealthTab from '@/components/transparency/SystemHealthTab'
 import {
   PieChart,
   Pie,
@@ -107,6 +110,7 @@ export default function TransparencyPage() {
   const [loading, setLoading] = useState(true)
   const [days, setDays] = useState('7')
   const [statusFilter, setStatusFilter] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'esl' | 'tools' | 'health'>('esl')
 
   useEffect(() => {
     loadData()
@@ -183,20 +187,66 @@ export default function TransparencyPage() {
         title="Transparency"
         subtitle="See how ESL protects you"
         action={
-          <Select value={days} onValueChange={setDays}>
-            <SelectTrigger className="w-[130px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="7">Last 7 days</SelectItem>
-              <SelectItem value="14">Last 14 days</SelectItem>
-              <SelectItem value="30">Last 30 days</SelectItem>
-            </SelectContent>
-          </Select>
+          activeTab === 'esl' ? (
+            <Select value={days} onValueChange={setDays}>
+              <SelectTrigger className="w-[130px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7">Last 7 days</SelectItem>
+                <SelectItem value="14">Last 14 days</SelectItem>
+                <SelectItem value="30">Last 30 days</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : null
         }
       />
 
-      {loading ? (
+      {/* Tabs */}
+      <div className="flex items-center gap-2 border-b border-[rgba(0,0,0,0.06)]">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => setActiveTab('esl')}
+          className={`rounded-none border-b-2 px-4 py-2 text-sm ${
+            activeTab === 'esl'
+              ? 'border-[#0a0a0a] text-[#0a0a0a]'
+              : 'border-transparent text-[#6b6b6b] hover:text-[#0a0a0a]'
+          }`}
+        >
+          ESL decisions
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => setActiveTab('tools')}
+          className={`rounded-none border-b-2 px-4 py-2 text-sm ${
+            activeTab === 'tools'
+              ? 'border-[#0a0a0a] text-[#0a0a0a]'
+              : 'border-transparent text-[#6b6b6b] hover:text-[#0a0a0a]'
+          }`}
+        >
+          Tool calls
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => setActiveTab('health')}
+          className={`rounded-none border-b-2 px-4 py-2 text-sm ${
+            activeTab === 'health'
+              ? 'border-[#0a0a0a] text-[#0a0a0a]'
+              : 'border-transparent text-[#6b6b6b] hover:text-[#0a0a0a]'
+          }`}
+        >
+          System health
+        </Button>
+      </div>
+
+      {activeTab === 'tools' ? (
+        <ToolCallsTab />
+      ) : activeTab === 'health' ? (
+        <SystemHealthTab />
+      ) : loading ? (
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             {[1, 2, 3, 4].map((i) => (
@@ -355,7 +405,7 @@ export default function TransparencyPage() {
         </motion.div>
       )}
 
-      {/* Audit Log — always rendered so filter chips are accessible */}
+      {activeTab === 'esl' && (
       <Card className="rounded-2xl border border-[var(--ec-card-border)] bg-[var(--ec-card-bg)] shadow-[var(--ec-card-shadow)]">
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -434,6 +484,7 @@ export default function TransparencyPage() {
           )}
         </CardContent>
       </Card>
+      )}
     </div>
   )
 }

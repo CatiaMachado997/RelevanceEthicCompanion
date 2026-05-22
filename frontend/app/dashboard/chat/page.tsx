@@ -6,7 +6,8 @@ import remarkGfm from 'remark-gfm'
 import { CodeBlock } from '@/components/chat/CodeBlock'
 import { ArtifactCard } from '@/components/chat/ArtifactCard'
 import { SlashCommands } from '@/components/chat/slash-commands'
-import api, { CitationSource, toolMarketplaceApi } from '@/lib/api'
+import api, { CitationSource, DocumentSource, toolMarketplaceApi } from '@/lib/api'
+import { SourceCards } from '@/components/chat/SourceCards'
 import { ToolConfirmation } from '@/components/ToolConfirmation'
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
@@ -39,6 +40,7 @@ interface Message {
     reason: string
   }
   citations?: CitationSource[]
+  documentSources?: DocumentSource[]
   pendingConfirmation?: PendingConfirmation
 }
 
@@ -287,10 +289,18 @@ const markdownComponents: Components = {
 }
 
 /* ═══════════════════════════════════════════════════ */
-export default function ChatPage({ conversationId }: { conversationId?: string } = {}) {
+export default function ChatPage({ conversationId: conversationIdProp }: { conversationId?: string } = {}) {
   const { user } = useAuth()
   const router = useRouter()
   const initials = user?.email?.split('@')[0].substring(0, 2).toUpperCase() ?? 'U'
+
+  // Local conversation id, seeded from the route prop. We update this in-place
+  // after creating a conversation on first send (we use window.history.replaceState
+  // there, which doesn't re-render the route so the prop never refreshes). Without
+  // this, every subsequent send sees `conversationId === undefined` and spawns
+  // yet another conversation — the "clicking anywhere starts a new chat" bug.
+  const [conversationId, setConversationId] = useState<string | undefined>(conversationIdProp)
+  useEffect(() => { setConversationId(conversationIdProp) }, [conversationIdProp])
 
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput]       = useState('')
@@ -367,6 +377,8 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
           role:      m.role as 'user' | 'assistant',
           content:   m.content,
           timestamp: m.timestamp ?? '',
+          citations: m.metadata?.citations,
+          documentSources: m.metadata?.document_sources,
         })))
       })
       .catch(console.error)
@@ -393,12 +405,35 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
       setInput('')
       setAttachedFile(null)
       setConversationTitle('')
-      // If we're on a conversation page, navigate to root chat so conversationId becomes undefined.
-      if (conversationId) router.replace('/dashboard/chat')
+      // Clear local id and URL so the next send creates a fresh conversation.
+      setConversationId(undefined)
+      if (conversationId) {
+        // If route prop is set, use router so the segment unwinds cleanly.
+        router.replace('/dashboard/chat')
+      } else if (typeof window !== 'undefined' && window.location.pathname !== '/dashboard/chat') {
+        // We're on the base /dashboard/chat route in React, but the URL still
+        // shows /dashboard/chat/<id> because we used replaceState earlier.
+        window.history.replaceState(null, '', '/dashboard/chat')
+      }
     }
     window.addEventListener('ec:new-chat', onNew)
     return () => window.removeEventListener('ec:new-chat', onNew)
   }, [conversationId, router])
+
+  // The `/ask` slash command dispatches `ec:slash-submit` so the user doesn't
+  // have to press Enter twice. We feed the typed text straight into handleSend,
+  // which detects the `/ask ` prefix and sets force_retrieval on the stream.
+  useEffect(() => {
+    const onSubmit = (e: Event) => {
+      const detail = (e as CustomEvent<{ message?: string }>).detail
+      const message = detail?.message
+      if (!message) return
+      handleSend(message)
+    }
+    window.addEventListener('ec:slash-submit', onSubmit)
+    return () => window.removeEventListener('ec:slash-submit', onSubmit)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const saveTitle = async () => {
     const t = titleDraft.trim()
@@ -449,7 +484,15 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
 
   /* send */
   const handleSend = async (text?: string) => {
-    const userText = (text ?? input).trim()
+    let userText = (text ?? input).trim()
+    // `/ask <query>` slash command — strip the prefix and force document
+    // retrieval on this turn, regardless of the planner's judgement.
+    let forceRetrieval = false
+    const askMatch = userText.match(/^\/ask\s+([\s\S]+)$/i)
+    if (askMatch) {
+      userText = askMatch[1].trim()
+      forceRetrieval = true
+    }
     const userMessage = attachedFile
       ? `${userText ? userText + '\n\n' : ''}[Attached file: ${attachedFile.name}]\n\`\`\`\n${attachedFile.content.slice(0, 8000)}\n\`\`\``
       : userText
@@ -476,12 +519,20 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
     try {
       setRateLimitExceeded(null)
 
-      // Create a conversation if one doesn't exist yet, then redirect
+      // Create a conversation if one doesn't exist yet, then update the URL.
+      // We use window.history.replaceState rather than router.replace so the
+      // current ChatPage instance keeps streaming — router.replace would unmount
+      // the component on its way to /chat/[id]/page.tsx, dropping the in-flight
+      // stream and leaving the user staring at a blank "new chat".
       let activeConvId = conversationId
       if (!activeConvId) {
         const conv = await api.chat.conversations.create()
         activeConvId = conv.id
-        router.replace(`/dashboard/chat/${activeConvId}`)
+        // Update local state so subsequent sends reuse this conversation. The
+        // route prop won't refresh because we use replaceState (not router.push)
+        // to avoid unmounting this component mid-stream.
+        setConversationId(activeConvId)
+        window.history.replaceState(null, '', `/dashboard/chat/${activeConvId}`)
         window.dispatchEvent(new Event('ec:conversation-created'))
       }
 
@@ -493,6 +544,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
         model: selectedModel,
         conversation_id: activeConvId,
         active_sources: selectedSources,
+        force_retrieval: forceRetrieval,
         onRateLimitWarning: (level, message) => { if (!rateLimitDismissedRef.current) setRateLimitWarning({ level, message }) },
         onRateLimitExceeded: (retryAfter, message) => {
           setRateLimitExceeded({ retryAfter, message })
@@ -527,10 +579,12 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
               : m
           ))
         },
-        onDone: ({ citations }) => {
-          if (citations && citations.length > 0) {
+        onDone: ({ citations, document_sources }) => {
+          if ((citations && citations.length > 0) || (document_sources && document_sources.length > 0)) {
             setMessages(prev => prev.map(m =>
-              m.id === assistantId ? { ...m, citations } : m
+              m.id === assistantId
+                ? { ...m, citations: citations ?? m.citations, documentSources: document_sources ?? m.documentSources }
+                : m
             ))
           }
         },
@@ -873,6 +927,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                     </>
                   ) : null}
                   <CitationPills citations={msg.citations} />
+                  <SourceCards sources={msg.documentSources} />
                   {msg.pendingConfirmation && (
                     <ToolConfirmation
                       toolName={msg.pendingConfirmation.tool_name}

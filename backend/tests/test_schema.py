@@ -33,3 +33,21 @@ def test_source_items_table_exists():
         "relevance_hints",
     }
     assert required.issubset(set(cols)), f"Missing columns: {required - set(cols)}"
+
+
+@pytest.mark.integration
+def test_connector_backfill_jobs_table_exists():
+    from utils.db import get_db_connection
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT column_name, data_type
+                FROM information_schema.columns
+                WHERE table_name = 'connector_backfill_jobs'
+                ORDER BY column_name
+            """)
+            cols = {r["column_name"]: r["data_type"] for r in cur.fetchall()}
+    assert "user_id" in cols
+    assert "source_type" in cols
+    assert cols["status"] == "text"
+    assert cols["items_processed"] == "integer"

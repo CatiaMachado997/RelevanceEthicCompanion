@@ -2,8 +2,9 @@
 
 import json
 import logging
+import time
 from datetime import datetime, UTC
-from typing import List
+from typing import Any, List, Optional
 
 from pydantic import SecretStr
 
@@ -75,6 +76,7 @@ _TOOL_CITATION_META: dict = {
     "query_memory": {"label": "Memory", "icon": "memory"},
     "get_user_goals": {"label": "Goals", "icon": "target"},
     "web_search": {"label": "Web Search", "icon": "globe"},
+    "search_documents": {"label": "Documents", "icon": "file-text"},
     "create_note": None,  # write tool — omit from citations
 }
 
@@ -198,13 +200,19 @@ def _build_system_prompt(state: AgentState) -> str:
     if context_block:
         prompt += f"\n\n{context_block}"
     prompt += "\n\nAnswer helpfully and concisely. Use tools when you need live data beyond what's shown above."
+    prompt += (
+        "\n\nWhen the user asks a knowledge-recall question about their own "
+        "workspace — e.g. what someone said, decisions made, past emails or "
+        "threads, or 'the latest on' a topic — prefer calling `search_documents` "
+        "first rather than answering from training or memory."
+    )
 
     return prompt
 
 
 async def tool_planner_node(state: AgentState) -> dict:
     """Ask the LLM which tools to call given the current message + context."""
-    from langchain_core.messages import HumanMessage, SystemMessage
+    from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
     from langchain_groq import ChatGroq
     from services.langchain_tools import create_langchain_tools
 
@@ -223,17 +231,93 @@ async def tool_planner_node(state: AgentState) -> dict:
 
     messages: List[BaseMessage] = [SystemMessage(content=_build_system_prompt(state))]
     for h in state.get("conversation_history", []):
+        # Prior assistant turns must be AIMessage so the LLM treats them as
+        # its own past replies (i.e. real conversational memory). Using
+        # SystemMessage here mixed prior replies with system instructions
+        # and prevented the model from following the conversation thread.
         messages.append(
             HumanMessage(content=h["content"])
             if h["role"] == "user"
-            else SystemMessage(content=h["content"])
+            else AIMessage(content=h["content"])
         )
     messages.append(HumanMessage(content=state["message"]))
 
+    # On a replan iteration, surface results from earlier tool calls so the
+    # planner can decide whether further tools are needed.
+    prior_results = state.get("tool_results") or []
+    if prior_results:
+        messages.append(
+            SystemMessage(
+                content=(
+                    "Tools already executed this turn (results available "
+                    "for follow-up planning):\n"
+                    + json.dumps(prior_results)[:4000]
+                    + "\n\nIf you have everything you need, respond with no "
+                    "further tool calls."
+                )
+            )
+        )
+
     response = await llm_with_tools.ainvoke(messages)
-    tool_calls = getattr(response, "tool_calls", []) or []
+    tool_calls = list(getattr(response, "tool_calls", []) or [])
     proposed = response.content if not tool_calls else ""
-    return {"tool_calls": tool_calls, "proposed_content": proposed}
+
+    # `/ask` slash command: force a search_documents call so the user can audit
+    # which chunks the answer was grounded in regardless of the planner's choice.
+    if state.get("force_retrieval"):
+        already = any(tc.get("name") == "search_documents" for tc in tool_calls)
+        if not already:
+            tool_calls.insert(
+                0,
+                {
+                    "name": "search_documents",
+                    "args": {"query": state["message"], "k": 5},
+                    "id": "forced_search_documents",
+                },
+            )
+            proposed = ""
+
+    next_step = state.get("planner_step", 0) + 1
+    return {
+        "tool_calls": tool_calls,
+        "proposed_content": proposed,
+        "planner_step": next_step,
+    }
+
+
+def _record_telemetry(
+    user_id: str,
+    conversation_id: Optional[str],
+    tool_name: str,
+    tool_input: dict,
+    output: object,
+    status: str,
+    latency_ms: int,
+    error_message: Optional[str] = None,
+    esl_decision: Optional[str] = None,
+) -> None:
+    """Best-effort tool_call_events insert. Never raises."""
+    try:
+        from services.tool_telemetry import ToolTelemetryService
+
+        if isinstance(output, (dict, list)) or output is None:
+            payload: object = output
+        else:
+            payload = str(output)[:4000]
+        ToolTelemetryService().record_tool_call(
+            user_id=user_id,
+            tool_name=tool_name,
+            source="chat",
+            source_ref=conversation_id,
+            input=tool_input or {},
+            output=payload,
+            status=status,
+            error_message=error_message,
+            esl_decision=esl_decision,
+            latency_ms=latency_ms,
+        )
+    except Exception as exc:  # noqa: BLE001 — defensive; telemetry must not break flow
+        logger.warning("tool telemetry record failed for %s: %s", tool_name, exc)
 
 
 async def tool_execution_node(state: AgentState) -> dict:
@@ -245,8 +329,14 @@ async def tool_execution_node(state: AgentState) -> dict:
 
     cm = get_context_manager()
     user_id = state["user_id"]
+    conversation_id = state.get("conversation_id")
+    # Mutable list passed into search_documents — populated when the tool runs.
+    document_sources: list = list(state.get("document_sources") or [])
     tools = await create_langchain_tools(
-        cm, user_id, active_sources=state.get("active_sources") or []
+        cm,
+        user_id,
+        active_sources=state.get("active_sources") or [],
+        citation_collector=document_sources,
     )
     tool_map = {t.name: t for t in tools}
     llm = ChatGroq(
@@ -254,8 +344,10 @@ async def tool_execution_node(state: AgentState) -> dict:
         api_key=SecretStr(settings.GROQ_API_KEY),
     )
 
-    results = []
-    events = []
+    # Accumulate across replans so the synthesis step (and downstream
+    # citation builder) sees every tool that ran this turn.
+    results: list = list(state.get("tool_results") or [])
+    events: list = []
     pending_confirmation = None
 
     for tc in state.get("tool_calls", []):
@@ -265,6 +357,16 @@ async def tool_execution_node(state: AgentState) -> dict:
 
         if tool_name not in tool_map:
             results.append({"tool": tool_name, "result": "Tool not found"})
+            _record_telemetry(
+                user_id,
+                conversation_id,
+                tool_name,
+                tool_input,
+                "Tool not found",
+                status="error",
+                latency_ms=0,
+                error_message="Tool not found",
+            )
             continue
 
         t = tool_map[tool_name]
@@ -297,6 +399,16 @@ async def tool_execution_node(state: AgentState) -> dict:
                 await _audit_tool_action(
                     user_id, tool_id, action_name, "VETOED", "User denied this action"
                 )
+                _record_telemetry(
+                    user_id,
+                    conversation_id,
+                    tool_name,
+                    tool_input,
+                    "Action not permitted by user settings.",
+                    status="vetoed",
+                    latency_ms=0,
+                    esl_decision="VETOED",
+                )
                 continue
             if decision.status == GateResult.PENDING_CONFIRMATION:
                 pending_confirmation = {
@@ -323,10 +435,21 @@ async def tool_execution_node(state: AgentState) -> dict:
                         "result": f"Awaiting your confirmation: {decision.preview}",
                     }
                 )
+                _record_telemetry(
+                    user_id,
+                    conversation_id,
+                    tool_name,
+                    tool_input,
+                    {"preview": decision.preview},
+                    status="pending_confirmation",
+                    latency_ms=0,
+                )
                 continue
 
+        t0 = time.perf_counter()
         try:
             result = await t.ainvoke(tool_input)
+            t1 = time.perf_counter()
             results.append({"tool": tool_name, "result": str(result)})
             events.append({"event": "tool_result", "tool": tool_name})
             if tool_id and action_name:
@@ -337,8 +460,41 @@ async def tool_execution_node(state: AgentState) -> dict:
                     "APPROVED",
                     "Marketplace tool executed",
                 )
+            # Sprint G Task 4: fold the retrieval breadcrumb trace into the
+            # telemetry output so Transparency's tool-call detail can render
+            # candidates → rerank → final cited.
+            telemetry_output: Any = (
+                result if isinstance(result, (dict, list)) else str(result)
+            )
+            trace = getattr(t, "last_trace", None)
+            if tool_name == "search_documents" and trace is not None:
+                telemetry_output = {"result": str(result), "trace": trace}
+            _record_telemetry(
+                user_id,
+                conversation_id,
+                tool_name,
+                tool_input,
+                telemetry_output,
+                status="success",
+                latency_ms=int((t1 - t0) * 1000),
+                esl_decision="APPROVED" if (tool_id and action_name) else None,
+            )
         except Exception as e:
+            t1 = time.perf_counter()
             results.append({"tool": tool_name, "result": f"Error: {e}"})
+            _record_telemetry(
+                user_id,
+                conversation_id,
+                tool_name,
+                tool_input,
+                f"Error: {e}",
+                status="error",
+                latency_ms=int((t1 - t0) * 1000),
+                error_message=str(e),
+            )
+
+    # Clear consumed tool_calls so the next planner pass starts fresh.
+    cleared_tool_calls: list = []
 
     if results:
         synthesis_prompt = (
@@ -355,10 +511,12 @@ async def tool_execution_node(state: AgentState) -> dict:
     tokens_used = estimate_tokens(state.get("message", "")) + estimate_tokens(proposed)
     warning = check_token_warning(state["user_id"], tokens_used)
     return {
+        "tool_calls": cleared_tool_calls,
         "tool_results": results,
         "proposed_content": proposed,
         "response_events": events,
         "citations": _build_citations(results),
+        "document_sources": document_sources,
         "token_count": state.get("token_count", 0) + tokens_used,
         "token_warning": warning,
         "pending_tool_confirmation": pending_confirmation,

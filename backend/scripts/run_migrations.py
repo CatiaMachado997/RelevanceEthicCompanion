@@ -27,17 +27,11 @@ def get_db_connection():
     return _get()
 
 
-def _ensure_migrations_table(cur) -> None:
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS schema_migrations (
-            filename   TEXT PRIMARY KEY,
-            applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-    """)
+def run_migrations(migrations_dir: str | None = None) -> int:
+    """Apply all pending .sql files in migrations_dir.
 
-
-def run_migrations(migrations_dir: str | None = None) -> None:
-    """Apply all pending .sql files in migrations_dir."""
+    Returns the number of newly-applied migrations (0 if schema is up to date).
+    """
     if migrations_dir is None:
         migrations_dir = str(Path(__file__).parent.parent / "migrations")
 
@@ -45,15 +39,21 @@ def run_migrations(migrations_dir: str | None = None) -> None:
 
     if not sql_files:
         logger.info("No migration files found in %s", migrations_dir)
-        return
+        return 0
 
     # Ensure the tracking table exists and get already-applied set.
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            _ensure_migrations_table(cur)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    filename   TEXT PRIMARY KEY,
+                    applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """)
             cur.execute("SELECT filename FROM schema_migrations")
             applied = {row["filename"] for row in cur.fetchall()}
 
+    applied_count = 0
     # Each migration runs in its own connection so it commits atomically.
     # If a migration fails, only that migration is rolled back; earlier ones
     # already committed and will not be re-run.
@@ -78,8 +78,10 @@ def run_migrations(migrations_dir: str | None = None) -> None:
             logger.exception("  failed while applying: %s", filename)
             raise
         logger.info("  done: %s", filename)
+        applied_count += 1
 
     logger.info("Migrations complete.")
+    return applied_count
 
 
 def dry_run_migrations(migrations_dir: str | None = None) -> list[tuple[str, str]]:
@@ -88,36 +90,33 @@ def dry_run_migrations(migrations_dir: str | None = None) -> list[tuple[str, str
         migrations_dir = str(Path(__file__).parent.parent / "migrations")
 
     sql_files = sorted(f for f in os.listdir(migrations_dir) if f.endswith(".sql"))
-
     if not sql_files:
         return []
 
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            _ensure_migrations_table(cur)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    filename TEXT PRIMARY KEY,
+                    applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """)
             cur.execute("SELECT filename FROM schema_migrations")
             applied = {row["filename"] for row in cur.fetchall()}
 
-    pending = []
-    for filename in sql_files:
-        if filename in applied:
-            continue
-        filepath = os.path.join(migrations_dir, filename)
-        sql = Path(filepath).read_text(encoding="utf-8")
-        pending.append((filename, sql))
-
-    return pending
+    return [
+        (f, Path(os.path.join(migrations_dir, f)).read_text(encoding="utf-8"))
+        for f in sql_files
+        if f not in applied
+    ]
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(description="Run pending SQL migrations")
     parser.add_argument("--migrations-dir", default=None)
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Print pending migrations without applying them",
-    )
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Print pending migrations without applying them")
     args = parser.parse_args()
     try:
         if args.dry_run:
@@ -126,12 +125,8 @@ if __name__ == "__main__":
                 print("No pending migrations.")
             else:
                 for filename, sql in pending:
-                    print(f"\n{'='*60}")
-                    print(f"  PENDING: {filename}")
-                    print(f"{'='*60}")
-                    print(sql)
+                    print(f"\n{'='*60}\n  PENDING: {filename}\n{'='*60}\n{sql}")
         else:
             run_migrations(migrations_dir=args.migrations_dir)
     except Exception:
-        # The inner per-file handler already logged filename + full traceback.
         sys.exit(1)

@@ -144,6 +144,11 @@ class Settings(BaseSettings):
     # Get your key free at https://app.composio.dev/settings (API Keys tab)
     COMPOSIO_API_KEY: str = ""
 
+    # Jina reranker (Sprint G Task 3) — optional cross-encoder rerank pass
+    # over hybrid-search results. Empty key → graceful no-op fallback.
+    JINA_API_KEY: str = ""
+    RERANK_MODEL: str = "jina-reranker-v2-base-multilingual"
+
     # Backend URL for OAuth redirects
     BACKEND_URL: str = "http://localhost:8000"
 
@@ -162,6 +167,9 @@ class Settings(BaseSettings):
 
     # Dev mode: override mock user ID to match the real user who connected OAuth
     DEV_USER_ID: str = "00000000-0000-0000-0000-000000000000"
+
+    # Retention — daily prune job for tool_call_events / esl_audit_log
+    RETENTION_DAYS: int = 90
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 

@@ -20,8 +20,8 @@ help:
 
 setup:
 	@echo "==> Setting up local environment..."
-	@[ -f $(BACKEND_DIR)/.env ] || cp $(BACKEND_DIR)/.env.example $(BACKEND_DIR)/.env && echo "  copied backend/.env"
-	@[ -f $(FRONTEND_DIR)/.env.local ] || cp $(FRONTEND_DIR)/.env.local.example $(FRONTEND_DIR)/.env.local && echo "  copied frontend/.env.local"
+	@[ -f $(BACKEND_DIR)/.env ] || { cp $(BACKEND_DIR)/.env.example $(BACKEND_DIR)/.env && echo "  copied backend/.env"; }
+	@[ -f $(FRONTEND_DIR)/.env.local ] || { cp $(FRONTEND_DIR)/.env.local.example $(FRONTEND_DIR)/.env.local && echo "  copied frontend/.env.local"; }
 	@[ -d $(BACKEND_DIR)/venv ] || (cd $(BACKEND_DIR) && python3 -m venv venv && echo "  created venv")
 	@cd $(BACKEND_DIR) && source venv/bin/activate && pip install -q -r requirements.txt && echo "  pip install done"
 	@cd $(FRONTEND_DIR) && npm install --silent && echo "  npm install done"
@@ -39,7 +39,7 @@ dev-reset:
 	@cd $(BACKEND_DIR) && docker compose down -v
 	@cd $(BACKEND_DIR) && docker compose up -d
 	@echo "==> Waiting for Postgres to be ready..."
-	@sleep 3
+	@cd $(BACKEND_DIR) && until docker compose exec -T db pg_isready -U postgres -q; do sleep 1; done
 	@cd $(BACKEND_DIR) && source venv/bin/activate && python -m scripts.run_migrations
 	@cd $(BACKEND_DIR) && source venv/bin/activate && python -m scripts.seed_dev
 	@echo "==> Dev DB reset and seeded"
@@ -63,7 +63,9 @@ migrate-prod:
 	@echo "  ║  ⚠  WARNING: PRODUCTION DATABASE  ⚠     ║"
 	@echo "  ╚══════════════════════════════════════════╝"
 	@echo ""
-	@$(MAKE) migrate-dry
+	@[ -n "$$PROD_DATABASE_URL" ] || { echo "ERROR: PROD_DATABASE_URL is not set. Aborting."; exit 1; }
+	@cd $(BACKEND_DIR) && source venv/bin/activate && \
+		DATABASE_URL="$$PROD_DATABASE_URL" python -m scripts.run_migrations --dry-run
 	@echo ""
 	@read -p "Type 'yes-i-am-sure' to apply to PRODUCTION: " confirm; \
 	if [ "$$confirm" = "yes-i-am-sure" ]; then \

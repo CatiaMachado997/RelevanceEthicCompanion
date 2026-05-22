@@ -15,6 +15,7 @@ from esl.models import ProposedAction, ActionType, UrgencyLevel, ESLDecisionStat
 from utils.db import get_db_connection
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 from services.context_manager import ContextManager
+from services.task_dependencies import TaskDependenciesService
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -30,10 +31,15 @@ def get_esl(cm: ContextManager = Depends(get_context_manager)) -> EthicalSafegua
     return EthicalSafeguardLayer(cm)
 
 
+def get_task_dependencies_service() -> TaskDependenciesService:
+    return TaskDependenciesService()
+
+
 class CreateTaskRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=500)
     description: Optional[str] = None
     project_id: Optional[str] = None
+    goal_id: Optional[str] = None
     priority: int = Field(default=5, ge=1, le=10)
     due_date: Optional[str] = None
     source_origin: str = "manual"
@@ -47,6 +53,11 @@ class UpdateTaskRequest(BaseModel):
     priority: Optional[int] = Field(None, ge=1, le=10)
     due_date: Optional[str] = None
     project_id: Optional[str] = None
+    goal_id: Optional[str] = None
+
+
+class AddDependencyRequest(BaseModel):
+    depends_on_task_id: str = Field(..., min_length=1)
 
 
 class ExtractRequest(BaseModel):
@@ -67,6 +78,7 @@ def _serialize_task(row: dict) -> Dict[str, Any]:
         "id": str(row["id"]),
         "user_id": str(row["user_id"]),
         "project_id": str(row["project_id"]) if row["project_id"] else None,
+        "goal_id": str(row["goal_id"]) if row.get("goal_id") else None,
         "title": row["title"],
         "description": row["description"],
         "status": row["status"],
@@ -216,14 +228,15 @@ async def create_task(
                 cur.execute(
                     """
                     INSERT INTO tasks
-                        (user_id, project_id, title, description, priority, due_date,
-                         source_origin, ai_confidence)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        (user_id, project_id, goal_id, title, description, priority,
+                         due_date, source_origin, ai_confidence)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING *
                     """,
                     (
                         user_id,
                         request.project_id,
+                        request.goal_id,
                         request.title,
                         request.description,
                         request.priority,
@@ -321,3 +334,61 @@ async def delete_task(
     except Exception as e:
         logger.error(f"Failed to delete task: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete task")
+
+
+# ── Dependency sub-routes (Sprint D Task 4) ─────────────────────────────────
+
+
+def _assert_task_owned(task_id: str, user_id: str) -> None:
+    """Verify `task_id` belongs to `user_id`. Raises 404 otherwise."""
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM tasks WHERE id = %s AND user_id = %s",
+                (task_id, user_id),
+            )
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail="task not found")
+
+
+@router.get("/{task_id}/dependencies", response_model=Dict[str, Any])
+async def get_task_dependencies(
+    task_id: str,
+    user_id: str = Depends(get_current_read_user_id),
+    service: TaskDependenciesService = Depends(get_task_dependencies_service),
+) -> Dict[str, Any]:
+    _assert_task_owned(task_id, user_id)
+    return {
+        "blockers": service.get_blockers(task_id),
+        "blocked_by": service.get_blocked_by(task_id),
+    }
+
+
+@router.post("/{task_id}/dependencies", response_model=Dict[str, Any])
+async def add_task_dependency(
+    task_id: str,
+    request: AddDependencyRequest,
+    user_id: str = Depends(get_current_user_id),
+    service: TaskDependenciesService = Depends(get_task_dependencies_service),
+) -> Dict[str, Any]:
+    _assert_task_owned(task_id, user_id)
+    _assert_task_owned(request.depends_on_task_id, user_id)
+    try:
+        service.add_dependency(task_id, request.depends_on_task_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"ok": True}
+
+
+@router.delete(
+    "/{task_id}/dependencies/{depends_on_task_id}", response_model=Dict[str, Any]
+)
+async def remove_task_dependency(
+    task_id: str,
+    depends_on_task_id: str,
+    user_id: str = Depends(get_current_user_id),
+    service: TaskDependenciesService = Depends(get_task_dependencies_service),
+) -> Dict[str, Any]:
+    _assert_task_owned(task_id, user_id)
+    removed = service.remove_dependency(task_id, depends_on_task_id)
+    return {"removed": removed}

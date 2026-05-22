@@ -212,28 +212,36 @@ class ContextManager:
         role: Literal["user", "assistant"],
         content: str,
         conversation_id: Optional[str] = None,
+        metadata: Optional[dict] = None,
     ) -> None:
-        """Store a single conversation turn in PostgreSQL for reliable ordered retrieval."""
+        """Store a single conversation turn in PostgreSQL for reliable ordered retrieval.
+
+        `metadata` carries per-turn structured data (e.g. document_sources for
+        RAG citations); stored as JSONB so the frontend can render source cards
+        when the conversation is reloaded.
+        """
         if role not in ("user", "assistant"):
             raise ValueError(f"Invalid role: {role}. Must be 'user' or 'assistant'")
+
+        meta_json = json.dumps(metadata or {})
 
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 if conversation_id:
                     cur.execute(
                         """
-                        INSERT INTO conversation_turns (user_id, role, content, conversation_id)
-                        VALUES (%s, %s, %s, %s)
+                        INSERT INTO conversation_turns (user_id, role, content, conversation_id, metadata)
+                        VALUES (%s, %s, %s, %s, %s::jsonb)
                     """,
-                        (user_id, role, content, conversation_id),
+                        (user_id, role, content, conversation_id, meta_json),
                     )
                 else:
                     cur.execute(
                         """
-                        INSERT INTO conversation_turns (user_id, role, content)
-                        VALUES (%s, %s, %s)
+                        INSERT INTO conversation_turns (user_id, role, content, metadata)
+                        VALUES (%s, %s, %s, %s::jsonb)
                     """,
-                        (user_id, role, content),
+                        (user_id, role, content, meta_json),
                     )
         logger.debug(f"Stored conversation turn ({role}) for user {user_id}")
 
@@ -250,7 +258,7 @@ class ContextManager:
                 if conversation_id:
                     cur.execute(
                         """
-                        SELECT role, content, created_at FROM conversation_turns
+                        SELECT role, content, created_at, metadata FROM conversation_turns
                         WHERE user_id = %s AND conversation_id = %s
                         ORDER BY created_at ASC LIMIT %s
                     """,
@@ -259,9 +267,9 @@ class ContextManager:
                 else:
                     cur.execute(
                         """
-                        SELECT role, content
+                        SELECT role, content, metadata, created_at
                         FROM (
-                            SELECT role, content, created_at
+                            SELECT role, content, metadata, created_at
                             FROM conversation_turns
                             WHERE user_id = %s
                             ORDER BY created_at DESC
@@ -277,6 +285,7 @@ class ContextManager:
                 "role": row["role"],
                 "content": row["content"],
                 "created_at": row.get("created_at"),
+                "metadata": row.get("metadata") or {},
             }
             for row in rows
         ]

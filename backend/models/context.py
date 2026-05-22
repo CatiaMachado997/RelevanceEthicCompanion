@@ -6,7 +6,7 @@ Models for user context, goals, and events
 
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 
@@ -81,7 +81,7 @@ class ConversationMessage(BaseModel):
     user_id: str
     role: str = Field(..., description="user or assistant")
     content: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -96,5 +96,5 @@ class SemanticMemoryEntry(BaseModel):
         ..., description="Source of content (conversation, note, calendar)"
     )
     source_id: Optional[str] = None
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: Dict[str, Any] = Field(default_factory=dict)

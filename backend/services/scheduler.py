@@ -8,12 +8,31 @@ import logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
-from datetime import datetime
+from datetime import datetime, timezone
 
 from services.data_ingestion import DataIngestionService
+from services.proactive_gate import gate_proactive_notification
+from services.tool_telemetry import ToolTelemetryService
 from utils.db import get_db_connection
 
 logger = logging.getLogger(__name__)
+
+
+# Module-level singleton — set by main.lifespan() at startup. Other services
+# (e.g. SystemHealthService) read this via get_scheduler_instance() so they
+# don't have to import from `main` (which would be a circular import).
+_scheduler_singleton: "BackgroundScheduler | None" = None
+
+
+def set_scheduler_instance(scheduler: "BackgroundScheduler") -> None:
+    """Register the running scheduler so other services can read job state."""
+    global _scheduler_singleton
+    _scheduler_singleton = scheduler
+
+
+def get_scheduler_instance() -> "BackgroundScheduler | None":
+    """Return the running BackgroundScheduler, or None if not started."""
+    return _scheduler_singleton
 
 
 class BackgroundScheduler:
@@ -53,6 +72,23 @@ class BackgroundScheduler:
             name="Sync Google Calendar for all users",
             replace_existing=True,
             max_instances=1,  # Prevent overlap
+        )
+
+        # Gmail sync — every 30 minutes
+        self.scheduler.add_job(
+            func=self._sync_all_gmail,
+            trigger="interval",
+            minutes=30,
+            id="sync_gmail",
+            replace_existing=True,
+        )
+        # Slack sync — every 5 minutes
+        self.scheduler.add_job(
+            func=self._sync_all_slack,
+            trigger="interval",
+            minutes=5,
+            id="sync_slack",
+            replace_existing=True,
         )
 
         # Task 2: Clean up expired tokens daily at 3 AM
@@ -133,12 +169,35 @@ class BackgroundScheduler:
             max_instances=1,
         )
 
+        # Sprint E Task 5: weekly review brief — every Monday at 7 AM UTC
+        self.scheduler.add_job(
+            func=self._generate_weekly_review_brief,
+            trigger=CronTrigger(day_of_week="mon", hour=7, minute=0),
+            id="weekly_review_brief",
+            name="Generate Monday weekly-review brief for all users",
+            replace_existing=True,
+            max_instances=1,
+        )
+        logger.info("Weekly review brief job scheduled (Mon 07:00 UTC)")
+
+        # Sprint E Task 1: daily prune of tool_call_events + esl_audit_log
+        self.scheduler.add_job(
+            func=self._prune_old_telemetry,
+            trigger=CronTrigger(hour=4, minute=0),
+            id="prune_old_telemetry",
+            name="Prune tool_call_events and esl_audit_log older than RETENTION_DAYS",
+            replace_existing=True,
+            max_instances=1,
+        )
+
         # Start scheduler
         self.scheduler.start()
         self._running = True
 
         logger.info("✅ Background scheduler started")
         logger.info("   - Calendar sync: Every 15 minutes")
+        logger.info("   - Gmail sync: Every 30 minutes")
+        logger.info("   - Slack sync: Every 5 minutes")
         logger.info("   - Token cleanup: Daily at 3 AM")
         logger.info("   - Health check: Every hour")
         logger.info("   - Weekly digest: Every Monday at 8 AM")
@@ -223,6 +282,51 @@ class BackgroundScheduler:
         except Exception as e:
             logger.error(f"❌ Failed to get users with calendar: {e}")
             return []
+
+    async def _sync_all_gmail(self):
+        await self._sync_all_for_source("gmail")
+
+    async def _sync_all_slack(self):
+        await self._sync_all_for_source("slack")
+
+    async def _sync_all_for_source(self, source_type: str):
+        """Generic per-source sync runner — replaces the calendar-specific helper
+        once we have three sources."""
+        try:
+            users = await self._get_users_with_source(source_type)
+            synced = failed = 0
+            for user_id in users:
+                try:
+                    r = await self.data_ingestion.sync_data_source(
+                        user_id, source_type
+                    )
+                    if r.get("success"):
+                        synced += 1
+                    else:
+                        failed += 1
+                except Exception as e:
+                    failed += 1
+                    logger.error(
+                        f"❌ {source_type} sync failed for {user_id}: {e}"
+                    )
+            logger.info(
+                f"✅ Scheduled {source_type} sync: {synced} ok, {failed} failed"
+            )
+        except Exception as e:
+            logger.error(
+                f"❌ Critical error in {source_type} sync: {e}", exc_info=True
+            )
+
+    async def _get_users_with_source(self, source_type: str) -> list:
+        from utils.db import get_db_connection
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT user_id FROM data_sources "
+                    "WHERE source_type = %s AND enabled = TRUE",
+                    (source_type,),
+                )
+                return [r["user_id"] for r in cur.fetchall()]
 
     async def _cleanup_expired_tokens(self):
         """
@@ -323,16 +427,52 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                     response = await llm.ainvoke([HumanMessage(content=prompt)])
                     content = (response.content or "").strip()
 
-                    if content:
-                        with get_db_connection() as conn:
-                            create_notification(
-                                conn,
-                                user_id=user_id,
-                                type="info",
-                                title="Your weekly companion check-in",
-                                message=content[:500],
-                                metadata={"source": "weekly_digest"},
-                            )
+                    if not content:
+                        continue
+
+                    brief_content = content
+                    should_send, final_content = await gate_proactive_notification(
+                        user_id=user_id,
+                        notification_type="weekly_digest",
+                        content=brief_content,
+                        urgency="low",
+                        metadata={"source": "weekly_digest"},
+                    )
+                    esl_decision = (
+                        "VETOED"
+                        if not should_send
+                        else (
+                            "MODIFIED"
+                            if final_content != brief_content
+                            else "APPROVED"
+                        )
+                    )
+                    ToolTelemetryService().record_tool_call(
+                        user_id=user_id,
+                        tool_name="weekly_digest",
+                        source="scheduled",
+                        source_ref="weekly_digest",
+                        input={"prompt_inputs": {"goals": goal_text, "values": value_text}},
+                        output={"content": final_content},
+                        status="success" if should_send else "vetoed",
+                        esl_decision=esl_decision,
+                        latency_ms=None,
+                    )
+                    if not should_send:
+                        logger.info(
+                            f"⛔ ESL vetoed weekly_digest for user {user_id}"
+                        )
+                        continue
+                    content = final_content
+                    with get_db_connection() as conn:
+                        create_notification(
+                            conn,
+                            user_id=user_id,
+                            type="info",
+                            title="Your weekly companion check-in",
+                            message=content[:500],
+                            metadata={"source": "weekly_digest"},
+                        )
 
                 except Exception as e:
                     logger.warning(
@@ -355,7 +495,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
             from langchain_groq import ChatGroq
             from config import settings
 
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             window_end = datetime(
                 now.year, now.month, now.day, now.hour, now.minute
             ).__class__(now.year, now.month, now.day, now.hour, now.minute)
@@ -422,8 +562,13 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                         for g in goals[:3]
                     )
 
+                    event_start_aware = (
+                        event_start
+                        if event_start.tzinfo is not None
+                        else event_start.replace(tzinfo=timezone.utc)
+                    )
                     minutes_until = int(
-                        (event_start.replace(tzinfo=None) - now).total_seconds() / 60
+                        (event_start_aware - now).total_seconds() / 60
                     )
                     location_note = f" at {event_location}" if event_location else ""
 
@@ -438,22 +583,65 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                     response = await llm.ainvoke([HumanMessage(content=prompt)])
                     brief_text = (response.content or "").strip()
 
-                    if brief_text:
-                        with get_db_connection() as conn:
-                            create_notification(
-                                conn,
-                                user_id=user_id,
-                                type="brief",
-                                title=f"Pre-meeting brief: {event_title}",
-                                message=brief_text[:500],
-                                metadata={
-                                    "subtype": "pre_meeting_brief",
-                                    "event_title": event_title,
-                                    "event_start": event_start_iso,
-                                    "source": "scheduler",
-                                },
-                            )
-                        briefs_created += 1
+                    if not brief_text:
+                        continue
+
+                    brief_content = brief_text
+                    meta = {
+                        "subtype": "pre_meeting_brief",
+                        "event_title": event_title,
+                        "event_start": event_start_iso,
+                        "source": "scheduler",
+                    }
+                    should_send, final_content = await gate_proactive_notification(
+                        user_id=user_id,
+                        notification_type="pre_meeting_brief",
+                        content=brief_content,
+                        urgency="medium",
+                        metadata=meta,
+                    )
+                    esl_decision = (
+                        "VETOED"
+                        if not should_send
+                        else (
+                            "MODIFIED"
+                            if final_content != brief_content
+                            else "APPROVED"
+                        )
+                    )
+                    ToolTelemetryService().record_tool_call(
+                        user_id=user_id,
+                        tool_name="pre_meeting_brief",
+                        source="scheduled",
+                        source_ref="pre_meeting_brief",
+                        input={
+                            "prompt_inputs": {
+                                "event_title": event_title,
+                                "minutes_until": minutes_until,
+                                "goals": goal_text,
+                            }
+                        },
+                        output={"content": final_content},
+                        status="success" if should_send else "vetoed",
+                        esl_decision=esl_decision,
+                        latency_ms=None,
+                    )
+                    if not should_send:
+                        logger.info(
+                            f"⛔ ESL vetoed pre_meeting_brief for user {user_id}"
+                        )
+                        continue
+                    brief_text = final_content
+                    with get_db_connection() as conn:
+                        create_notification(
+                            conn,
+                            user_id=user_id,
+                            type="brief",
+                            title=f"Pre-meeting brief: {event_title}",
+                            message=brief_text[:500],
+                            metadata=meta,
+                        )
+                    briefs_created += 1
 
                 except Exception as e:
                     logger.warning(
@@ -481,7 +669,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
             from langchain_groq import ChatGroq
             from config import settings
 
-            today_str = datetime.utcnow().strftime("%Y-%m-%d")
+            today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
@@ -556,19 +744,60 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                     response = await llm.ainvoke([HumanMessage(content=prompt)])
                     plan_text = (response.content or "").strip()
 
-                    if plan_text:
-                        with get_db_connection() as conn:
-                            create_notification(
-                                conn,
-                                user_id=user_id,
-                                type="info",
-                                title="Your focus for today",
-                                message=plan_text[:500],
-                                metadata={
-                                    "subtype": "daily_focus",
-                                    "source": "scheduler",
-                                },
-                            )
+                    if not plan_text:
+                        continue
+
+                    brief_content = plan_text
+                    meta = {"subtype": "daily_focus", "source": "scheduler"}
+                    should_send, final_content = await gate_proactive_notification(
+                        user_id=user_id,
+                        notification_type="daily_focus_plan",
+                        content=brief_content,
+                        urgency="low",
+                        metadata=meta,
+                    )
+                    esl_decision = (
+                        "VETOED"
+                        if not should_send
+                        else (
+                            "MODIFIED"
+                            if final_content != brief_content
+                            else "APPROVED"
+                        )
+                    )
+                    ToolTelemetryService().record_tool_call(
+                        user_id=user_id,
+                        tool_name="daily_focus_plan",
+                        source="scheduled",
+                        source_ref="daily_focus_plan",
+                        input={
+                            "prompt_inputs": {
+                                "events": events_text,
+                                "tasks": tasks_text,
+                                "goals": goals_text,
+                                "pressure": pressure,
+                            }
+                        },
+                        output={"content": final_content},
+                        status="success" if should_send else "vetoed",
+                        esl_decision=esl_decision,
+                        latency_ms=None,
+                    )
+                    if not should_send:
+                        logger.info(
+                            f"⛔ ESL vetoed daily_focus_plan for user {user_id}"
+                        )
+                        continue
+                    plan_text = final_content
+                    with get_db_connection() as conn:
+                        create_notification(
+                            conn,
+                            user_id=user_id,
+                            type="info",
+                            title="Your focus for today",
+                            message=plan_text[:500],
+                            metadata=meta,
+                        )
 
                 except Exception as e:
                     logger.warning(
@@ -590,7 +819,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
             from routes.notifications import create_notification
             import datetime as dt_module
 
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             in_24h = now + dt_module.timedelta(hours=24)
 
             with get_db_connection() as conn:
@@ -644,6 +873,52 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                 context_note = f" ({project_title})" if project_title else ""
                 message = f"Due at {due_str}{context_note}. Don't let it slip through."
 
+                brief_content = message
+                meta = {
+                    "subtype": "deadline_warning",
+                    "task_id": task_id,
+                    "source": "scheduler",
+                }
+                should_send, final_content = await gate_proactive_notification(
+                    user_id=user_id,
+                    notification_type="deadline_warning",
+                    content=brief_content,
+                    urgency="medium",
+                    metadata=meta,
+                )
+                esl_decision = (
+                    "VETOED"
+                    if not should_send
+                    else (
+                        "MODIFIED"
+                        if final_content != brief_content
+                        else "APPROVED"
+                    )
+                )
+                ToolTelemetryService().record_tool_call(
+                    user_id=user_id,
+                    tool_name="deadline_warning",
+                    source="scheduled",
+                    source_ref="deadline_warning",
+                    input={
+                        "prompt_inputs": {
+                            "task_title": task_title,
+                            "task_id": task_id,
+                            "due_str": due_str,
+                        }
+                    },
+                    output={"content": final_content},
+                    status="success" if should_send else "vetoed",
+                    esl_decision=esl_decision,
+                    latency_ms=None,
+                )
+                if not should_send:
+                    logger.info(
+                        f"⛔ ESL vetoed deadline_warning for user {user_id}"
+                    )
+                    continue
+                message = final_content
+
                 with get_db_connection() as conn:
                     create_notification(
                         conn,
@@ -651,11 +926,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                         type="warning",
                         title=f"Due soon: {task_title}",
                         message=message,
-                        metadata={
-                            "subtype": "deadline_warning",
-                            "task_id": task_id,
-                            "source": "scheduler",
-                        },
+                        metadata=meta,
                     )
                 warnings_created += 1
 
@@ -762,21 +1033,58 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                     response = await llm.ainvoke([HumanMessage(content=prompt)])
                     summary = (response.content or "").strip()
 
-                    if summary:
-                        with get_db_connection() as conn:
-                            create_notification(
-                                conn,
-                                user_id=user_id,
-                                type="info",
-                                title="Weekly project snapshot",
-                                message=summary[:500],
-                                metadata={
-                                    "subtype": "project_status_snapshot",
-                                    "project_count": len(user_projects),
-                                    "source": "scheduler",
-                                },
-                            )
-                        snapshots_created += 1
+                    if not summary:
+                        continue
+
+                    brief_content = summary
+                    meta = {
+                        "subtype": "project_status_snapshot",
+                        "project_count": len(user_projects),
+                        "source": "scheduler",
+                    }
+                    should_send, final_content = await gate_proactive_notification(
+                        user_id=user_id,
+                        notification_type="project_status_snapshot",
+                        content=brief_content,
+                        urgency="low",
+                        metadata=meta,
+                    )
+                    esl_decision = (
+                        "VETOED"
+                        if not should_send
+                        else (
+                            "MODIFIED"
+                            if final_content != brief_content
+                            else "APPROVED"
+                        )
+                    )
+                    ToolTelemetryService().record_tool_call(
+                        user_id=user_id,
+                        tool_name="project_status_snapshot",
+                        source="scheduled",
+                        source_ref="project_status_snapshot",
+                        input={"prompt_inputs": {"project_lines": project_lines}},
+                        output={"content": final_content},
+                        status="success" if should_send else "vetoed",
+                        esl_decision=esl_decision,
+                        latency_ms=None,
+                    )
+                    if not should_send:
+                        logger.info(
+                            f"⛔ ESL vetoed project_status_snapshot for user {user_id}"
+                        )
+                        continue
+                    summary = final_content
+                    with get_db_connection() as conn:
+                        create_notification(
+                            conn,
+                            user_id=user_id,
+                            type="info",
+                            title="Weekly project snapshot",
+                            message=summary[:500],
+                            metadata=meta,
+                        )
+                    snapshots_created += 1
 
                 except Exception as e:
                     logger.warning(
@@ -845,7 +1153,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
             from routes.notifications import create_notification
             import datetime as dt_module
 
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             in_7_days = now + dt_module.timedelta(days=7)
 
             with get_db_connection() as conn:
@@ -943,6 +1251,46 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                         + "\nConsider linking them or reviewing them together."
                     )
 
+                    brief_content = message
+                    meta = {
+                        "subtype": "related_items_cluster",
+                        "cluster_keywords": [kw for kw, _ in top],
+                        "source": "scheduler",
+                    }
+                    should_send, final_content = await gate_proactive_notification(
+                        user_id=user_id,
+                        notification_type="related_items_cluster",
+                        content=brief_content,
+                        urgency="low",
+                        metadata=meta,
+                    )
+                    esl_decision = (
+                        "VETOED"
+                        if not should_send
+                        else (
+                            "MODIFIED"
+                            if final_content != brief_content
+                            else "APPROVED"
+                        )
+                    )
+                    ToolTelemetryService().record_tool_call(
+                        user_id=user_id,
+                        tool_name="related_items_cluster",
+                        source="scheduled",
+                        source_ref="related_items_cluster",
+                        input={"prompt_inputs": {"cluster_keywords": [kw for kw, _ in top]}},
+                        output={"content": final_content},
+                        status="success" if should_send else "vetoed",
+                        esl_decision=esl_decision,
+                        latency_ms=None,
+                    )
+                    if not should_send:
+                        logger.info(
+                            f"⛔ ESL vetoed related_items_cluster for user {user_id}"
+                        )
+                        continue
+                    message = final_content
+
                     with get_db_connection() as conn:
                         create_notification(
                             conn,
@@ -950,11 +1298,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                             type="info",
                             title="Connected items this week",
                             message=message[:500],
-                            metadata={
-                                "subtype": "related_items_cluster",
-                                "cluster_keywords": [kw for kw, _ in top],
-                                "source": "scheduler",
-                            },
+                            metadata=meta,
                         )
                     notifications_created += 1
 
@@ -969,6 +1313,180 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
 
         except Exception as e:
             logger.error(f"[Scheduler] Related-items clustering job failed: {e}")
+
+    async def _summarize_weekly_review(self, review: dict) -> str:
+        """LLM helper for the Monday weekly-review brief.
+
+        Mirrors the client/prompt convention from `_generate_daily_focus_plan`.
+        Returns a 2–3 sentence summary, or empty string on error.
+        """
+        try:
+            from langchain_core.messages import HumanMessage
+            from langchain_groq import ChatGroq
+            from config import settings
+
+            completed_tasks = review.get("completed_tasks") or []
+            completed_milestones = review.get("completed_milestones") or []
+            carry_over = review.get("carry_over_tasks") or []
+            upcoming_tasks = review.get("upcoming_tasks") or []
+            upcoming_milestones = review.get("upcoming_milestones") or []
+
+            prompt = (
+                "Weekly review summary.\n"
+                f"Last week: {len(completed_tasks)} task(s) completed, "
+                f"{len(completed_milestones)} milestone(s) hit, "
+                f"{len(carry_over)} carry-over task(s).\n"
+                f"This week: {len(upcoming_tasks)} task(s) due, "
+                f"{len(upcoming_milestones)} milestone(s) coming up.\n\n"
+                "Write a 2–3 sentence summary acknowledging last week's progress "
+                "and framing the week ahead. Be direct and specific, not motivational."
+            )
+
+            llm = ChatGroq(
+                model="llama-3.1-8b-instant",
+                groq_api_key=settings.GROQ_API_KEY,
+                temperature=0.6,
+            )
+            response = await llm.ainvoke([HumanMessage(content=prompt)])
+            return (response.content or "").strip()
+        except Exception as e:
+            logger.warning(f"[Scheduler] _summarize_weekly_review failed: {e}")
+            return ""
+
+    async def _generate_weekly_review_brief(self):
+        """Sprint E Task 5: Monday 07:00 UTC weekly-review brief.
+
+        For each user: build the weekly review via WorkRollupsService,
+        summarise via LLM, gate through ESL, write notification + telemetry.
+        """
+        logger.info("[Scheduler] Generating weekly review briefs…")
+        try:
+            from routes.notifications import create_notification
+            from services.work_rollups import WorkRollupsService
+
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT id FROM users LIMIT 100")
+                    users = cur.fetchall()
+
+            rollup_service = WorkRollupsService()
+            briefs_created = 0
+
+            for user_row in users:
+                user_id = str(user_row["id"])
+                try:
+                    review = rollup_service.get_weekly_review(user_id)
+                except Exception as e:
+                    logger.warning(
+                        f"[Scheduler] weekly_review_brief skipped {user_id}: {e}"
+                    )
+                    continue
+
+                empty = (
+                    not review.get("completed_tasks")
+                    and not review.get("completed_milestones")
+                    and not review.get("carry_over_tasks")
+                    and not review.get("upcoming_tasks")
+                    and not review.get("upcoming_milestones")
+                )
+                if empty:
+                    continue
+
+                brief_text = await self._summarize_weekly_review(review)
+                if not brief_text:
+                    continue
+
+                meta = {
+                    "subtype": "weekly_review_brief",
+                    "period": review.get("period"),
+                    "source": "scheduler",
+                }
+                should_send, final_content = await gate_proactive_notification(
+                    user_id=user_id,
+                    notification_type="weekly_review_brief",
+                    content=brief_text,
+                    urgency="low",
+                    metadata={"period": review.get("period")},
+                )
+                esl_decision = (
+                    "VETOED"
+                    if not should_send
+                    else (
+                        "MODIFIED" if final_content != brief_text else "APPROVED"
+                    )
+                )
+                ToolTelemetryService().record_tool_call(
+                    user_id=user_id,
+                    tool_name="weekly_review_brief",
+                    source="scheduled",
+                    source_ref="weekly_review_brief",
+                    input={"period": review.get("period")},
+                    output={"content": final_content},
+                    status="success" if should_send else "vetoed",
+                    esl_decision=esl_decision,
+                    latency_ms=None,
+                )
+
+                if not should_send:
+                    logger.info(
+                        f"⛔ ESL vetoed weekly_review_brief for user {user_id}"
+                    )
+                    continue
+
+                with get_db_connection() as conn:
+                    create_notification(
+                        conn,
+                        user_id=user_id,
+                        type="info",
+                        title="Your weekly review",
+                        message=final_content[:500],
+                        metadata=meta,
+                    )
+                briefs_created += 1
+
+            logger.info(
+                f"[Scheduler] Weekly review briefs complete: {briefs_created} created."
+            )
+
+        except Exception as e:
+            logger.error(f"[Scheduler] Weekly review brief job failed: {e}")
+
+    async def _prune_old_telemetry(self):
+        """
+        Sprint E Task 1: drop telemetry rows older than RETENTION_DAYS from
+        `tool_call_events` (uses `created_at`) and `esl_audit_log` (uses
+        `timestamp`). Daily at 04:00 UTC. Errors are logged, not raised, so a
+        broken prune doesn't take down the scheduler thread.
+        """
+        try:
+            from config import settings
+
+            days = int(getattr(settings, "RETENTION_DAYS", 90))
+
+            tool_deleted = 0
+            audit_deleted = 0
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "DELETE FROM tool_call_events "
+                        "WHERE created_at < NOW() - (INTERVAL '1 day' * %s)",
+                        (days,),
+                    )
+                    tool_deleted = cur.rowcount or 0
+
+                    cur.execute(
+                        "DELETE FROM esl_audit_log "
+                        "WHERE timestamp < NOW() - (INTERVAL '1 day' * %s)",
+                        (days,),
+                    )
+                    audit_deleted = cur.rowcount or 0
+
+            logger.info(
+                f"pruned {tool_deleted} tool_call_events, "
+                f"{audit_deleted} esl_audit_log rows older than {days}d"
+            )
+        except Exception as e:
+            logger.error(f"[Scheduler] prune_old_telemetry failed: {e}")
 
     async def _health_check(self):
         """
