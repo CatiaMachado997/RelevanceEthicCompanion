@@ -80,7 +80,6 @@ def build_multi_agent_graph():
     """Multi-agent graph: context_builder → supervisor → esl_gateway → formatter."""
     from pydantic import SecretStr
     from orchestrator.agents.supervisor import build_supervisor
-    from orchestrator.nodes.context import get_context_manager
 
     routing_llm = None
     worker_llm = None
@@ -121,6 +120,21 @@ def build_multi_agent_graph():
     g.add_edge("response_formatter", END)
     g.add_edge("explain_veto", END)
     return g.compile()
+
+
+async def get_checkpointer():
+    """Return MemorySaver in test/development, AsyncPostgresSaver in production."""
+    from langgraph.checkpoint.memory import MemorySaver
+    if getattr(_settings, "ENVIRONMENT", "development") in ("test", "development"):
+        return MemorySaver()
+    try:
+        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+        saver = await AsyncPostgresSaver.from_conn_string(_settings.database_url)
+        await saver.setup()
+        return saver
+    except Exception as e:
+        logger.warning(f"AsyncPostgresSaver unavailable, falling back to MemorySaver: {e}")
+        return MemorySaver()
 
 
 def get_graph():
@@ -182,7 +196,10 @@ async def stream_langgraph(
     graph = get_graph()
 
     # Nodes whose LLM calls generate the final user-visible response
-    RESPONSE_NODES = frozenset({"tool_planner", "tool_execution", "deep_research"})
+    if os.getenv("MULTI_AGENT", "").lower() == "true":
+        RESPONSE_NODES = frozenset({"supervisor"})
+    else:
+        RESPONSE_NODES = frozenset({"tool_planner", "tool_execution", "deep_research"})
 
     response_text = ""
     esl_data = {}

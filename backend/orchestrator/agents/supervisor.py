@@ -73,11 +73,7 @@ def build_supervisor(
             prompt=SUPERVISOR_SYSTEM_PROMPT,
         ).compile(checkpointer=checkpointer)
     except (ImportError, AttributeError, TypeError) as e:
-        logger.warning(f"langgraph_supervisor.create_supervisor unavailable ({e}), using react agent fallback")
-        from langgraph.prebuilt import create_react_agent
-        return create_react_agent(
-            model=routing_llm,
-            tools=[],
-            prompt=SUPERVISOR_SYSTEM_PROMPT,
-            checkpointer=checkpointer,
-        )
+        raise RuntimeError(
+            f"langgraph_supervisor.create_supervisor is required but unavailable: {e}. "
+            "Install langgraph-supervisor>=0.0.30."
+        ) from e
