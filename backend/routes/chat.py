@@ -200,6 +200,87 @@ async def stream_chat(
     return StreamingResponse(_lg_stream(), media_type="text/event-stream")
 
 
+# ── Sprint J: resume a paused graph thread ──────────────────────────
+
+
+class ChatResumeBody(BaseModel):
+    thread_id: str
+    decision: str  # "approve" | "skip" | "cancel"
+    trust: bool = False
+
+
+@router.post("/resume")
+async def chat_resume(
+    body: ChatResumeBody,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Sprint J — resume a paused graph thread with the user's decision.
+
+    Returns an SSE stream that picks up the rest of the turn from the
+    checkpoint. The graph state, plan_steps, accumulated tool results,
+    and conversation history are all restored by the PostgresSaver.
+    """
+    import json as _json
+
+    if body.decision not in ("approve", "skip", "cancel"):
+        raise HTTPException(
+            status_code=422, detail=f"invalid decision: {body.decision}"
+        )
+
+    from orchestrator.graph import get_graph_async
+    from langgraph.types import Command
+
+    resume_payload = {"action": body.decision, "trust": body.trust}
+
+    async def _stream():
+        try:
+            graph = await get_graph_async()
+            config = {"configurable": {"thread_id": body.thread_id}}
+            async for event in graph.astream_events(
+                Command(resume=resume_payload), config, version="v2"
+            ):
+                kind = event.get("event", "")
+                metadata = event.get("metadata", {})
+                node = metadata.get("langgraph_node", "")
+                # Minimum-viable resume stream: forward response tokens
+                # so the user sees the turn finish. Tool-event handling
+                # is best-effort — if the resumed turn re-pauses we'll
+                # surface that too.
+                if kind == "on_chat_model_stream" and node in (
+                    "tool_execution",
+                    "deep_research",
+                    "response_formatter",
+                ):
+                    chunk = event.get("data", {}).get("chunk")
+                    content = getattr(chunk, "content", "") if chunk else ""
+                    if isinstance(content, list):
+                        content = "".join(
+                            block.get("text", "") if isinstance(block, dict) else str(block)
+                            for block in content
+                        )
+                    if isinstance(content, str) and content:
+                        yield f"data: {_json.dumps({'event': 'token', 'token': content})}\n\n"
+                elif kind == "on_chain_end" and event.get("name") == "LangGraph":
+                    raw_final = event.get("data", {}).get("output")
+                    final_output = raw_final if isinstance(raw_final, dict) else {}
+                    interrupts = final_output.get("__interrupt__") or []
+                    if interrupts:
+                        first = interrupts[0]
+                        payload = getattr(first, "value", None)
+                        if payload is None and isinstance(first, dict):
+                            payload = first.get("value", {})
+                        payload = payload or {}
+                        yield (
+                            f"data: {_json.dumps({'event': 'plan_paused', 'thread_id': body.thread_id, **payload})}\n\n"
+                        )
+                        return
+            yield f"data: {_json.dumps({'event': 'done'})}\n\n"
+        except Exception as exc:
+            yield f"data: {_json.dumps({'event': 'error', 'message': str(exc)})}\n\n"
+
+    return StreamingResponse(_stream(), media_type="text/event-stream")
+
+
 @router.get("/conversations")
 async def list_conversations(
     user_id: str = Depends(get_current_read_user_id),
