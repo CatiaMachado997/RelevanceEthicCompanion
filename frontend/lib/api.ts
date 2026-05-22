@@ -276,6 +276,11 @@ export const chatApi = {
           onRateLimitWarning?: (level: string, message: string) => void
           onRateLimitExceeded?: (retryAfter: string, message: string) => void
           onDone?: (data: { esl_decision?: Record<string, unknown>; citations?: CitationSource[]; document_sources?: DocumentSource[] }) => void
+          // Sprint J callbacks
+          onThoughtToken?: (token: string) => void
+          onPlanStepActions?: (step: number, actions: Array<{ tool: string; params: unknown }>) => void
+          onActionComplete?: (step: number, action_index: number, status: string, latency_ms: number) => void
+          onPlanPaused?: (payload: unknown) => void
           model?: string
           conversation_id?: string
           active_sources?: string[]
@@ -343,6 +348,29 @@ export const chatApi = {
             if (!settled) { settled = true; reject(new Error(data.error)) }
             return
           }
+          // Sprint J events
+          if (data.event === 'thought_token') {
+            callbacks.onThoughtToken?.(data.token)
+            return
+          }
+          if (data.event === 'plan_step_actions') {
+            callbacks.onPlanStepActions?.(data.step, data.actions)
+            return
+          }
+          if (data.event === 'action_start') {
+            // no dedicated callback needed — action_complete carries status
+            return
+          }
+          if (data.event === 'action_complete') {
+            callbacks.onActionComplete?.(data.step, data.action_index, data.status, data.latency_ms)
+            return
+          }
+          if (data.event === 'plan_paused') {
+            callbacks.onPlanPaused?.(data)
+            es!.close()
+            if (!settled) { settled = true; resolve() }
+            return
+          }
 
           // Backward-compat: legacy {token, done} format
           if (data.error) {
@@ -387,6 +415,87 @@ export const chatApi = {
     }
 
     return extended
+  },
+
+  /**
+   * Resume a paused plan turn via POST /api/chat/resume.
+   * SSE-streams the continuation; supports the same Sprint J events as stream().
+   */
+  resume: (params: {
+    thread_id: string
+    decision: 'approve' | 'skip' | 'cancel'
+    trust?: boolean
+    onToken?: (token: string) => void
+    onPlanPaused?: (payload: unknown) => void
+    onDone?: () => void
+    onError?: (msg: string) => void
+  }): { cancel: () => void } => {
+    const controller = new AbortController()
+
+    ;(async () => {
+      try {
+        const token = await resolveAccessToken()
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+        if (token) headers.Authorization = `Bearer ${token}`
+
+        const response = await fetch(`${API_URL}/api/chat/resume`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            thread_id: params.thread_id,
+            decision: params.decision,
+            trust: params.trust,
+          }),
+          signal: controller.signal,
+        })
+
+        if (!response.ok || !response.body) {
+          const err = await response.json().catch(() => ({ detail: 'Request failed' }))
+          params.onError?.(err.detail || `HTTP ${response.status}`)
+          return
+        }
+
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let buf = ''
+
+        while (true) {
+          const { value, done } = await reader.read()
+          if (done) break
+          buf += decoder.decode(value, { stream: true })
+          const lines = buf.split('\n')
+          buf = lines.pop() ?? ''
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue
+            try {
+              const data = JSON.parse(line.slice(6))
+              if (data.event === 'token') {
+                params.onToken?.(data.token)
+              } else if (data.event === 'plan_paused') {
+                params.onPlanPaused?.(data)
+              } else if (data.event === 'done') {
+                params.onDone?.()
+              } else if (data.event === 'error') {
+                params.onError?.(data.error)
+              } else if (data.token !== undefined) {
+                params.onToken?.(data.token)
+              } else if (data.done) {
+                params.onDone?.()
+              }
+            } catch {
+              // ignore parse errors
+            }
+          }
+        }
+        params.onDone?.()
+      } catch (err) {
+        if (err instanceof Error && err.name !== 'AbortError') {
+          params.onError?.(err.message)
+        }
+      }
+    })()
+
+    return { cancel: () => controller.abort() }
   },
 
   /**
@@ -608,6 +717,9 @@ export interface ToolCallEvent {
   esl_decision: 'APPROVED' | 'MODIFIED' | 'VETOED' | null
   latency_ms: number | null
   created_at: string
+  planner_run_id?: string | null
+  step_index?: number | null
+  action_index?: number | null
 }
 
 export const transparencyApi = {
@@ -1477,6 +1589,38 @@ export const onboardingApi = {
     apiRequest<{ onboarded_at: string }>('/api/onboarding/complete', { method: 'POST' }),
 }
 
+// ==================== Safety Settings API (Sprint J) ====================
+
+export interface SafetyState {
+  safe_mode_enabled: boolean
+  categories: string[]
+  tools: string[]
+  available_tools: Array<{ name: string; category: string }>
+}
+
+export const safetyApi = {
+  state: (): Promise<SafetyState> =>
+    apiRequest<SafetyState>('/api/settings/safety'),
+
+  setSafeMode: (enabled: boolean): Promise<void> =>
+    apiRequest<void>('/api/settings/safety/safe-mode', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    }),
+
+  setCategory: (category: string, requires_confirmation: boolean): Promise<void> =>
+    apiRequest<void>(`/api/settings/safety/categories/${encodeURIComponent(category)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ requires_confirmation }),
+    }),
+
+  setTool: (tool_name: string, requires_confirmation: boolean): Promise<void> =>
+    apiRequest<void>(`/api/settings/safety/tools/${encodeURIComponent(tool_name)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ requires_confirmation }),
+    }),
+}
+
 export function listConnectors() {
   return connectorsApi.list()
 }
@@ -1513,6 +1657,7 @@ export const api = {
   weeklyReview: weeklyReviewApi,
   today: todayApi,
   onboarding: onboardingApi,
+  safety: safetyApi,
 };
 
 export default api;

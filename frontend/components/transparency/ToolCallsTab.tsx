@@ -50,6 +50,36 @@ function prettyJson(value: unknown): string {
   }
 }
 
+// Sprint K Task 9: shape of the episodic memory hits recorded into
+// `tool_call_events.output.memory_used` (or `output.plan_steps[0].memory_used`
+// for planner-step events) when EPISODIC_MEMORY_ENABLED is true and recall
+// returns matches.
+type MemoryUsedEntry = {
+  planner_run_id?: string | null
+  message_text?: string
+  plan_summary?: string
+  similarity?: number
+}
+
+function extractMemoryUsed(event: ToolCallEvent | null): MemoryUsedEntry[] | null {
+  if (!event) return null
+  const out = event.output as unknown
+  if (!out || typeof out !== 'object') return null
+  const o = out as Record<string, unknown>
+  // Check direct output.memory_used first
+  if (Array.isArray(o.memory_used) && o.memory_used.length > 0) {
+    return o.memory_used as MemoryUsedEntry[]
+  }
+  // Fall back to output.plan_steps[0].memory_used (planner-level event)
+  if (Array.isArray(o.plan_steps) && o.plan_steps.length > 0) {
+    const firstStep = o.plan_steps[0] as Record<string, unknown>
+    if (firstStep && Array.isArray(firstStep.memory_used) && firstStep.memory_used.length > 0) {
+      return firstStep.memory_used as MemoryUsedEntry[]
+    }
+  }
+  return null
+}
+
 // Sprint G Task 4: shape of the retrieval breadcrumb trace recorded into
 // `tool_call_events.output.trace` for `search_documents` calls.
 type RetrievalTrace = {
@@ -76,10 +106,58 @@ function extractTrace(event: ToolCallEvent | null): RetrievalTrace | null {
   return maybe as RetrievalTrace
 }
 
+function groupByStep(events: ToolCallEvent[]) {
+  const groups = new Map<string, { runId: string | null; stepIndex: number | null; events: ToolCallEvent[] }>()
+  for (const ev of events) {
+    if (!ev.planner_run_id || ev.step_index == null) {
+      const key = `legacy:${ev.id}`
+      groups.set(key, { runId: null, stepIndex: null, events: [ev] })
+      continue
+    }
+    const key = `${ev.planner_run_id}:${ev.step_index}`
+    const g = groups.get(key)
+    if (g) {
+      g.events.push(ev)
+    } else {
+      groups.set(key, { runId: ev.planner_run_id, stepIndex: ev.step_index, events: [ev] })
+    }
+  }
+  return Array.from(groups.entries()).map(([key, g]) => ({ key, ...g }))
+}
+
 function shortUuid(uuid: string | null | undefined): string {
   if (!uuid) return '—'
   if (uuid.length <= 12) return uuid
   return `${uuid.slice(0, 8)}…${uuid.slice(-4)}`
+}
+
+function MemoryUsedSection({ entries }: { entries: MemoryUsedEntry[] }) {
+  return (
+    <div>
+      <p className="text-xs font-medium uppercase tracking-wide text-[#9e9e9e] mb-1">
+        Drew on past plans
+      </p>
+      <div className="rounded-lg p-3 bg-[#fafafa]" style={{ border: '1px solid rgba(0,0,0,0.06)' }}>
+        <ul className="space-y-1.5">
+          {entries.map((m, i) => (
+            <li key={m.planner_run_id ?? i} className="text-xs">
+              <div className="text-[#0a0a0a]">
+                &ldquo;{m.message_text}&rdquo;
+              </div>
+              <div className="text-[#6b6b6b]">
+                {m.plan_summary}
+                {typeof m.similarity === 'number' && (
+                  <span className="ml-2 text-[#9e9e9e]">
+                    · similarity {m.similarity.toFixed(2)}
+                  </span>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  )
 }
 
 function RetrievalTraceSection({ trace }: { trace: RetrievalTrace }) {
@@ -199,6 +277,7 @@ export default function ToolCallsTab() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<ToolCallEvent | null>(null)
+  const [planView, setPlanView] = useState(true)
 
   useEffect(() => {
     let cancelled = false
@@ -222,10 +301,25 @@ export default function ToolCallsTab() {
   return (
     <Card className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
       <CardHeader>
-        <CardTitle className="text-[#0a0a0a]">Tool Calls</CardTitle>
-        <CardDescription className="text-[#6b6b6b]">
-          Every tool invocation across chat and scheduled flows
-        </CardDescription>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <CardTitle className="text-[#0a0a0a]">Tool Calls</CardTitle>
+            <CardDescription className="text-[#6b6b6b]">
+              Every tool invocation across chat and scheduled flows
+            </CardDescription>
+          </div>
+          <button
+            onClick={() => setPlanView(v => !v)}
+            className="text-xs px-2.5 py-1 rounded-full transition-colors whitespace-nowrap"
+            style={{
+              background: planView ? 'rgba(74,124,89,0.10)' : 'var(--ec-surface-2, #f5f5f5)',
+              color: planView ? '#4A7C59' : 'var(--ec-text-muted, #9e9e9e)',
+              border: `1px solid ${planView ? 'rgba(74,124,89,0.20)' : 'var(--ec-card-border, rgba(0,0,0,0.08))'}`,
+            }}
+          >
+            {planView ? 'Plan view ✓' : 'Plan view'}
+          </button>
+        </div>
       </CardHeader>
       <CardContent>
         {loading ? (
@@ -260,38 +354,85 @@ export default function ToolCallsTab() {
                 </tr>
               </thead>
               <tbody>
-                {events.map((evt) => {
-                  const statusClass = STATUS_PILL[evt.status] || 'bg-[#f5f5f5] text-[#6b6b6b] border-[#e5e5e5]'
-                  const eslClass = evt.esl_decision
-                    ? ESL_PILL[evt.esl_decision] || 'bg-[#f5f5f5] text-[#6b6b6b] border-[#e5e5e5]'
-                    : 'bg-[#f5f5f5] text-[#9e9e9e] border-[#e5e5e5]'
-                  return (
-                    <tr
-                      key={evt.id}
-                      className="border-b border-[rgba(0,0,0,0.04)] last:border-0 hover:bg-[#fafafa] cursor-pointer"
-                      onClick={() => setSelected(evt)}
-                    >
-                      <td className="py-3 px-4 text-sm text-[#6b6b6b] whitespace-nowrap">
-                        {formatTime(evt.created_at)}
-                      </td>
-                      <td className="py-3 px-4 text-sm font-medium text-[#0a0a0a]">{evt.tool_name}</td>
-                      <td className="py-3 px-4 text-sm text-[#6b6b6b]">{evt.source}</td>
-                      <td className="py-3 px-4">
-                        <Badge variant="outline" className={`${statusClass} rounded-full px-2.5 py-0.5 text-xs`}>
-                          {evt.status}
-                        </Badge>
-                      </td>
-                      <td className="py-3 px-4 text-sm text-[#6b6b6b]">
-                        {evt.latency_ms !== null ? `${evt.latency_ms} ms` : '—'}
-                      </td>
-                      <td className="py-3 px-4">
-                        <Badge variant="outline" className={`${eslClass} rounded-full px-2.5 py-0.5 text-xs`}>
-                          {evt.esl_decision || 'n/a'}
-                        </Badge>
-                      </td>
-                    </tr>
-                  )
-                })}
+                {planView
+                  ? groupByStep(events).map(group => (
+                      <>
+                        {group.runId != null && group.stepIndex != null && (
+                          <tr key={`header:${group.key}`}>
+                            <td colSpan={6} className="pt-4 pb-1 px-4">
+                              <span className="text-xs font-medium text-[#9e9e9e]">
+                                Step {group.stepIndex} · {group.events.length} action{group.events.length === 1 ? '' : 's'}
+                              </span>
+                            </td>
+                          </tr>
+                        )}
+                        {group.events.map((evt) => {
+                          const statusClass = STATUS_PILL[evt.status] || 'bg-[#f5f5f5] text-[#6b6b6b] border-[#e5e5e5]'
+                          const eslClass = evt.esl_decision
+                            ? ESL_PILL[evt.esl_decision] || 'bg-[#f5f5f5] text-[#6b6b6b] border-[#e5e5e5]'
+                            : 'bg-[#f5f5f5] text-[#9e9e9e] border-[#e5e5e5]'
+                          return (
+                            <tr
+                              key={evt.id}
+                              className="border-b border-[rgba(0,0,0,0.04)] last:border-0 hover:bg-[#fafafa] cursor-pointer"
+                              onClick={() => setSelected(evt)}
+                            >
+                              <td className="py-3 px-4 text-sm text-[#6b6b6b] whitespace-nowrap">
+                                {formatTime(evt.created_at)}
+                              </td>
+                              <td className="py-3 px-4 text-sm font-medium text-[#0a0a0a]">{evt.tool_name}</td>
+                              <td className="py-3 px-4 text-sm text-[#6b6b6b]">{evt.source}</td>
+                              <td className="py-3 px-4">
+                                <Badge variant="outline" className={`${statusClass} rounded-full px-2.5 py-0.5 text-xs`}>
+                                  {evt.status}
+                                </Badge>
+                              </td>
+                              <td className="py-3 px-4 text-sm text-[#6b6b6b]">
+                                {evt.latency_ms !== null ? `${evt.latency_ms} ms` : '—'}
+                              </td>
+                              <td className="py-3 px-4">
+                                <Badge variant="outline" className={`${eslClass} rounded-full px-2.5 py-0.5 text-xs`}>
+                                  {evt.esl_decision || 'n/a'}
+                                </Badge>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </>
+                    ))
+                  : events.map((evt) => {
+                      const statusClass = STATUS_PILL[evt.status] || 'bg-[#f5f5f5] text-[#6b6b6b] border-[#e5e5e5]'
+                      const eslClass = evt.esl_decision
+                        ? ESL_PILL[evt.esl_decision] || 'bg-[#f5f5f5] text-[#6b6b6b] border-[#e5e5e5]'
+                        : 'bg-[#f5f5f5] text-[#9e9e9e] border-[#e5e5e5]'
+                      return (
+                        <tr
+                          key={evt.id}
+                          className="border-b border-[rgba(0,0,0,0.04)] last:border-0 hover:bg-[#fafafa] cursor-pointer"
+                          onClick={() => setSelected(evt)}
+                        >
+                          <td className="py-3 px-4 text-sm text-[#6b6b6b] whitespace-nowrap">
+                            {formatTime(evt.created_at)}
+                          </td>
+                          <td className="py-3 px-4 text-sm font-medium text-[#0a0a0a]">{evt.tool_name}</td>
+                          <td className="py-3 px-4 text-sm text-[#6b6b6b]">{evt.source}</td>
+                          <td className="py-3 px-4">
+                            <Badge variant="outline" className={`${statusClass} rounded-full px-2.5 py-0.5 text-xs`}>
+                              {evt.status}
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-4 text-sm text-[#6b6b6b]">
+                            {evt.latency_ms !== null ? `${evt.latency_ms} ms` : '—'}
+                          </td>
+                          <td className="py-3 px-4">
+                            <Badge variant="outline" className={`${eslClass} rounded-full px-2.5 py-0.5 text-xs`}>
+                              {evt.esl_decision || 'n/a'}
+                            </Badge>
+                          </td>
+                        </tr>
+                      )
+                    })
+                }
               </tbody>
             </table>
           </div>
@@ -351,6 +492,10 @@ export default function ToolCallsTab() {
               {(() => {
                 const trace = extractTrace(selected)
                 return trace ? <RetrievalTraceSection trace={trace} /> : null
+              })()}
+              {(() => {
+                const memoryUsed = extractMemoryUsed(selected)
+                return memoryUsed ? <MemoryUsedSection entries={memoryUsed} /> : null
               })()}
             </div>
           )}

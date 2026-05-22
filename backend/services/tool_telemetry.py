@@ -23,8 +23,9 @@ logger = logging.getLogger(__name__)
 _INSERT_SQL = """
 INSERT INTO tool_call_events
     (user_id, tool_name, source, source_ref, input, output,
-     status, error_message, esl_decision, latency_ms)
-VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+     status, error_message, esl_decision, latency_ms,
+     planner_run_id, step_index, action_index)
+VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 RETURNING id;
 """
 
@@ -56,6 +57,12 @@ class ToolTelemetryService:
         error_message: Optional[str] = None,
         esl_decision: Optional[str] = None,
         latency_ms: Optional[int] = None,
+        # Sprint I — breadcrumbs back to the parent planner_runs row.
+        # All three are optional and default to NULL so callers from
+        # outside the orchestrator (e.g. scheduled flows) need no change.
+        planner_run_id: Optional[str] = None,
+        step_index: Optional[int] = None,
+        action_index: Optional[int] = None,
     ) -> str:
         """Insert one ``tool_call_events`` row and return its UUID.
 
@@ -79,6 +86,9 @@ class ToolTelemetryService:
                             error_message,
                             esl_decision,
                             latency_ms,
+                            planner_run_id,
+                            step_index,
+                            action_index,
                         ),
                     )
                     row = cur.fetchone()
