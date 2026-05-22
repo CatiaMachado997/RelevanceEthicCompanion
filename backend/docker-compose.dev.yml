@@ -1,0 +1,12 @@
+# Dev overlay — adds a one-shot seed service to docker-compose.yml
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm seed
+services:
+  seed:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python -m scripts.seed_dev
+    depends_on:
+      - db
+    env_file: .env
+    restart: "no"
