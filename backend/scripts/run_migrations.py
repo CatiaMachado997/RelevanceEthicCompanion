@@ -6,6 +6,7 @@ Tracks applied migrations in a `schema_migrations` table to ensure idempotency.
 
 Usage:
     python -m scripts.run_migrations
+    python -m scripts.run_migrations --dry-run
     python -m scripts.run_migrations --migrations-dir /path/to/migrations
 """
 
@@ -26,6 +27,15 @@ def get_db_connection():
     return _get()
 
 
+def _ensure_migrations_table(cur) -> None:
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            filename   TEXT PRIMARY KEY,
+            applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    """)
+
+
 def run_migrations(migrations_dir: str | None = None) -> None:
     """Apply all pending .sql files in migrations_dir."""
     if migrations_dir is None:
@@ -40,12 +50,7 @@ def run_migrations(migrations_dir: str | None = None) -> None:
     # Ensure the tracking table exists and get already-applied set.
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS schema_migrations (
-                    filename   TEXT PRIMARY KEY,
-                    applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-                )
-            """)
+            _ensure_migrations_table(cur)
             cur.execute("SELECT filename FROM schema_migrations")
             applied = {row["filename"] for row in cur.fetchall()}
 
@@ -89,12 +94,7 @@ def dry_run_migrations(migrations_dir: str | None = None) -> list[tuple[str, str
 
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS schema_migrations (
-                    filename   TEXT PRIMARY KEY,
-                    applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-                )
-            """)
+            _ensure_migrations_table(cur)
             cur.execute("SELECT filename FROM schema_migrations")
             applied = {row["filename"] for row in cur.fetchall()}
 

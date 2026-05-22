@@ -1,11 +1,8 @@
 """Tests for run_migrations dry-run flag."""
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 
 def _make_migration_files(tmp_path: Path, filenames: list[str]) -> str:
@@ -58,7 +55,7 @@ class TestDryRunMigrations:
         # cursor.execute should only have been called for the tracking-table
         # setup and SELECT — never for the migration SQL itself
         execute_calls = mock_cur.execute.call_args_list
-        called_sqls = [str(c) for c in execute_calls]
+        called_sqls = [c.args[0] for c in execute_calls if c.args]
         assert not any("SELECT 1" in s for s in called_sqls)
 
     def test_dry_run_all_applied_returns_empty(self, tmp_path):
