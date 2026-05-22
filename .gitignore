@@ -20,12 +20,12 @@ build/
 .turbo/
 coverage/
 
-# Env files
+# Env files — never commit real secrets
 .env
 .env.local
 backend/.env
 frontend/.env.local
-frontend/.env.local.example
+# .env.*.example files should be committed so others know what vars are needed
 
 # General
 .DS_Store
