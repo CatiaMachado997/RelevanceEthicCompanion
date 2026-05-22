@@ -164,6 +164,18 @@ class Settings(BaseSettings):
     # which requires the PostgresSaver checkpointer to be wired up.
     STREAMING_REASONING_ENABLED: bool = False
 
+    # Sprint K — episodic tool memory. When False (default), no
+    # PlannerRunMemory writes, no recall queries, no prompt augmentation.
+    # When True, the planner gets a short SystemMessage at the start of
+    # every step listing the top-K most similar past completed runs.
+    EPISODIC_MEMORY_ENABLED: bool = False
+    # Max past runs returned per recall.
+    EPISODIC_MEMORY_TOP_K: int = 3
+    # Hybrid-score floor for a match to make the cut.
+    EPISODIC_MEMORY_MIN_SIMILARITY: float = 0.6
+    # Recency window: ignore matches older than this many days.
+    EPISODIC_MEMORY_MAX_AGE_DAYS: int = 90
+
     # Backend URL for OAuth redirects
     BACKEND_URL: str = "http://localhost:8000"
 
