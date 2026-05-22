@@ -50,6 +50,36 @@ function prettyJson(value: unknown): string {
   }
 }
 
+// Sprint K Task 9: shape of the episodic memory hits recorded into
+// `tool_call_events.output.memory_used` (or `output.plan_steps[0].memory_used`
+// for planner-step events) when EPISODIC_MEMORY_ENABLED is true and recall
+// returns matches.
+type MemoryUsedEntry = {
+  planner_run_id?: string | null
+  message_text?: string
+  plan_summary?: string
+  similarity?: number
+}
+
+function extractMemoryUsed(event: ToolCallEvent | null): MemoryUsedEntry[] | null {
+  if (!event) return null
+  const out = event.output as unknown
+  if (!out || typeof out !== 'object') return null
+  const o = out as Record<string, unknown>
+  // Check direct output.memory_used first
+  if (Array.isArray(o.memory_used) && o.memory_used.length > 0) {
+    return o.memory_used as MemoryUsedEntry[]
+  }
+  // Fall back to output.plan_steps[0].memory_used (planner-level event)
+  if (Array.isArray(o.plan_steps) && o.plan_steps.length > 0) {
+    const firstStep = o.plan_steps[0] as Record<string, unknown>
+    if (firstStep && Array.isArray(firstStep.memory_used) && firstStep.memory_used.length > 0) {
+      return firstStep.memory_used as MemoryUsedEntry[]
+    }
+  }
+  return null
+}
+
 // Sprint G Task 4: shape of the retrieval breadcrumb trace recorded into
 // `tool_call_events.output.trace` for `search_documents` calls.
 type RetrievalTrace = {
@@ -99,6 +129,35 @@ function shortUuid(uuid: string | null | undefined): string {
   if (!uuid) return '—'
   if (uuid.length <= 12) return uuid
   return `${uuid.slice(0, 8)}…${uuid.slice(-4)}`
+}
+
+function MemoryUsedSection({ entries }: { entries: MemoryUsedEntry[] }) {
+  return (
+    <div>
+      <p className="text-xs font-medium uppercase tracking-wide text-[#9e9e9e] mb-1">
+        Drew on past plans
+      </p>
+      <div className="rounded-lg p-3 bg-[#fafafa]" style={{ border: '1px solid rgba(0,0,0,0.06)' }}>
+        <ul className="space-y-1.5">
+          {entries.map((m, i) => (
+            <li key={m.planner_run_id ?? i} className="text-xs">
+              <div className="text-[#0a0a0a]">
+                &ldquo;{m.message_text}&rdquo;
+              </div>
+              <div className="text-[#6b6b6b]">
+                {m.plan_summary}
+                {typeof m.similarity === 'number' && (
+                  <span className="ml-2 text-[#9e9e9e]">
+                    · similarity {m.similarity.toFixed(2)}
+                  </span>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  )
 }
 
 function RetrievalTraceSection({ trace }: { trace: RetrievalTrace }) {
@@ -433,6 +492,10 @@ export default function ToolCallsTab() {
               {(() => {
                 const trace = extractTrace(selected)
                 return trace ? <RetrievalTraceSection trace={trace} /> : null
+              })()}
+              {(() => {
+                const memoryUsed = extractMemoryUsed(selected)
+                return memoryUsed ? <MemoryUsedSection entries={memoryUsed} /> : null
               })()}
             </div>
           )}
