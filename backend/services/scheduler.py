@@ -1481,9 +1481,39 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                     )
                     audit_deleted = cur.rowcount or 0
 
+                    # Sprint J — prune LangGraph checkpoint tables. We give
+                    # pauses 24h to be resolved; older rows are abandoned (the
+                    # user can always start a fresh turn). IF EXISTS handles
+                    # installations where STREAMING_REASONING_ENABLED has
+                    # never been on (tables only created on first async use).
+                    cp_deleted = 0
+                    cp_writes_deleted = 0
+                    try:
+                        cur.execute(
+                            "DELETE FROM checkpoints "
+                            "WHERE checkpoint_id IN ("
+                            "  SELECT checkpoint_id FROM checkpoints "
+                            "  WHERE created_at < NOW() - INTERVAL '24 hours'"
+                            ")"
+                        )
+                        cp_deleted = cur.rowcount or 0
+                    except Exception as exc:
+                        logger.debug(f"checkpoint prune skipped: {exc}")
+                    try:
+                        cur.execute(
+                            "DELETE FROM checkpoint_writes "
+                            "WHERE checkpoint_id NOT IN (SELECT checkpoint_id FROM checkpoints)"
+                        )
+                        cp_writes_deleted = cur.rowcount or 0
+                    except Exception as exc:
+                        logger.debug(f"checkpoint_writes prune skipped: {exc}")
+
             logger.info(
                 f"pruned {tool_deleted} tool_call_events, "
-                f"{audit_deleted} esl_audit_log rows older than {days}d"
+                f"{audit_deleted} esl_audit_log, "
+                f"{cp_deleted} checkpoints, "
+                f"{cp_writes_deleted} checkpoint_writes "
+                f"older than thresholds"
             )
         except Exception as e:
             logger.error(f"[Scheduler] prune_old_telemetry failed: {e}")
