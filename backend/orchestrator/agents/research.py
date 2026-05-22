@@ -34,8 +34,8 @@ def build_research_tools(user_id: str, context_manager: Any) -> list[BaseTool]:
                     user_id=user_id,
                 )
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Tavily web search tool not available: {e}")
 
     tools.append(MemoryQueryTool(context_manager=context_manager, user_id=user_id))
 

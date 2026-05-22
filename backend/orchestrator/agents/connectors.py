@@ -26,12 +26,21 @@ def build_connector_tools(user_id: str, connected_tool_ids: set[str]) -> list[Ba
     try:
         from services.composio_tools import get_composio_tools_for_user
         import asyncio
-        tools = asyncio.get_event_loop().run_until_complete(
-            get_composio_tools_for_user(
-                user_id=user_id,
-                connected_tool_ids=connected_tool_ids,
-            )
+        import concurrent.futures
+
+        coro = get_composio_tools_for_user(
+            user_id=user_id,
+            connected_tool_ids=connected_tool_ids,
         )
+        try:
+            asyncio.get_running_loop()
+            # Already inside a running loop — use a thread to avoid deadlock
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                tools = pool.submit(asyncio.run, coro).result(timeout=10)
+        except RuntimeError:
+            # No running loop — safe to use asyncio.run directly
+            tools = asyncio.run(coro)
+
         return tools or []
     except Exception as e:
         logger.warning(f"Could not load Composio tools: {e}")
@@ -42,6 +51,7 @@ def build_agent(
     llm: Any,
     checkpointer: Any,
     user_id: str = "",
+    context_manager: Any = None,
     connected_tool_ids: set[str] | None = None,
 ):
     """Return a compiled ConnectorsAgent graph."""
