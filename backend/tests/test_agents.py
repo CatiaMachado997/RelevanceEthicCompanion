@@ -86,3 +86,18 @@ def test_document_agent_has_search_tool():
     tools = build_document_tools(user_id="u1", context_manager=MagicMock())
     names = [t.name for t in tools]
     assert "search_documents" in names
+
+
+def test_connectors_agent_builds():
+    from orchestrator.agents.connectors import build_agent
+    checkpointer = MemorySaver()
+    agent = build_agent(llm=_mock_llm(), checkpointer=checkpointer)
+    assert agent is not None
+
+
+def test_connectors_agent_returns_empty_tools_when_no_composio_key():
+    from orchestrator.agents.connectors import build_connector_tools
+    with patch("orchestrator.agents.connectors.settings") as mock_settings:
+        mock_settings.COMPOSIO_API_KEY = None
+        tools = build_connector_tools(user_id="u1", connected_tool_ids=set())
+    assert tools == []
