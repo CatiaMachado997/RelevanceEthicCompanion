@@ -581,7 +581,29 @@ async def tool_execution_node(state: AgentState) -> dict:
                 # "Trust this tool from now on" — clear ONLY the per-tool
                 # row. Higher layers (master / category) remain.
                 SafetyPreferencesService().delete_tool(user_id, tool_name=tool_name)
-            # else: chosen == "approve" — fall through to normal execution
+            # approve (with or without trust) — execute the tool now and
+            # skip the marketplace ESL gate below (this is NOT a marketplace tool).
+            obs = await _execute_with_retry(t, tool_input)
+            if obs["status"] == "ok":
+                results.append({"tool": tool_name, "result": str(obs["result"])})
+                events.append({"event": "tool_result", "tool": tool_name})
+                _record_telemetry(
+                    user_id, conversation_id, tool_name, tool_input,
+                    obs["result"] if isinstance(obs["result"], (dict, list)) else str(obs["result"]),
+                    status="success", latency_ms=obs["latency_ms"],
+                    planner_run_id=planner_run_id, step_index=step_index, action_index=ai,
+                )
+            else:
+                results.append({"tool": tool_name, "result": f"Error: {obs['error']}"})
+                _record_telemetry(
+                    user_id, conversation_id, tool_name, tool_input,
+                    f"Error: {obs['error']}", status="error", latency_ms=obs["latency_ms"],
+                    error_message=obs["error"],
+                    planner_run_id=planner_run_id, step_index=step_index, action_index=ai,
+                )
+            if current_step is not None:
+                current_step["observations"].append(obs)
+            continue
 
         tool_id = meta["tool_id"]
         action_name = meta["action_name"]
