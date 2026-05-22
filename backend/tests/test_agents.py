@@ -58,3 +58,17 @@ def test_calendar_agent_has_query_tool():
     tools = build_calendar_tools(user_id="u1", context_manager=MagicMock())
     names = [t.name for t in tools]
     assert "query_calendar" in names
+
+
+def test_goals_agent_builds():
+    from orchestrator.agents.goals import build_agent
+    checkpointer = MemorySaver()
+    agent = build_agent(llm=_mock_llm(), checkpointer=checkpointer)
+    assert agent is not None
+
+
+def test_goals_agent_has_get_goals_tool():
+    from orchestrator.agents.goals import build_goals_tools
+    tools = build_goals_tools(user_id="u1", context_manager=MagicMock())
+    names = [t.name for t in tools]
+    assert "get_user_goals" in names
