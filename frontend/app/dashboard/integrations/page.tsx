@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { toolMarketplaceApi, ToolDefinition, ConnectedTool } from '@/lib/api'
+import { toolMarketplaceApi, ToolDefinition, ConnectedTool, connectorsApi, ConnectorIndexStatus } from '@/lib/api'
 import { CatalogueCard } from '@/components/CatalogueCard'
 import { RefreshCw, CheckCircle2, AlertCircle, Zap, Plug } from 'lucide-react'
 import { toast } from '@/lib/toast'

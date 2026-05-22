@@ -1,0 +1,125 @@
+<h2>How should the login page look?</h2>
+<p class="subtitle">Three directions — pick the one that feels right for Ethic Companion</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0f0f0f; padding: 1.5rem; display:flex; gap:0;">
+      <!-- Left panel -->
+      <div style="width:45%; background:#111; border-radius:8px 0 0 8px; padding:1.5rem; display:flex; flex-direction:column; justify-content:center; gap:0.5rem;">
+        <div style="width:28px;height:28px;background:#7c3aed;border-radius:6px;margin-bottom:0.5rem;"></div>
+        <div style="color:#fff;font-size:0.85rem;font-weight:600;">Ethic Companion</div>
+        <div style="color:#888;font-size:0.65rem;margin-top:0.25rem;">"Trust over engagement"</div>
+        <div style="margin-top:auto;color:#555;font-size:0.6rem;">Your AI partner in decision-making</div>
+      </div>
+      <!-- Right panel -->
+      <div style="width:55%; background:#1a1a1a; border-radius:0 8px 8px 0; padding:1.25rem; display:flex; flex-direction:column; gap:0.5rem;">
+        <div style="color:#fff;font-size:0.75rem;font-weight:600;margin-bottom:0.25rem;">Sign in</div>
+        <div style="background:#2a2a2a;border-radius:5px;padding:0.4rem 0.6rem;display:flex;align-items:center;gap:0.4rem;">
+          <div style="width:10px;height:10px;background:#4285F4;border-radius:50%;"></div>
+          <div style="color:#ccc;font-size:0.6rem;">Continue with Google</div>
+        </div>
+        <div style="background:#2a2a2a;border-radius:5px;padding:0.4rem 0.6rem;display:flex;align-items:center;gap:0.4rem;">
+          <div style="width:10px;height:10px;background:#0078D4;border-radius:50%;"></div>
+          <div style="color:#ccc;font-size:0.6rem;">Continue with Microsoft</div>
+        </div>
+        <div style="background:#2a2a2a;border-radius:5px;padding:0.4rem 0.6rem;display:flex;align-items:center;gap:0.4rem;">
+          <div style="width:10px;height:10px;background:#fff;border-radius:50%;"></div>
+          <div style="color:#ccc;font-size:0.6rem;">Continue with GitHub</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.4rem;margin-top:0.25rem;">
+          <div style="flex:1;height:1px;background:#333;"></div>
+          <div style="color:#555;font-size:0.55rem;">or</div>
+          <div style="flex:1;height:1px;background:#333;"></div>
+        </div>
+        <div style="background:#2a2a2a;border-radius:5px;padding:0.35rem 0.6rem;">
+          <div style="color:#555;font-size:0.6rem;">your@email.com</div>
+        </div>
+        <div style="background:#7c3aed;border-radius:5px;padding:0.35rem;text-align:center;">
+          <div style="color:#fff;font-size:0.6rem;">Send magic link</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Split panel (current style)</h3>
+      <p>Dark left panel with branding, right panel with auth. Keeps your existing design, just adds the provider buttons.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#f8f7f4; padding:1.5rem; display:flex; align-items:center; justify-content:center;">
+      <div style="background:#fff;border-radius:12px;padding:1.5rem;width:75%;box-shadow:0 4px 24px rgba(0,0,0,0.08);display:flex;flex-direction:column;gap:0.5rem;align-items:center;">
+        <div style="width:32px;height:32px;background:#7c3aed;border-radius:8px;margin-bottom:0.25rem;"></div>
+        <div style="color:#111;font-size:0.75rem;font-weight:700;">Welcome back</div>
+        <div style="color:#888;font-size:0.6rem;margin-bottom:0.25rem;">Sign in to Ethic Companion</div>
+        <div style="width:100%;background:#f4f4f5;border-radius:6px;padding:0.4rem 0.6rem;display:flex;align-items:center;gap:0.4rem;border:1px solid #e5e5e5;">
+          <div style="width:10px;height:10px;background:#4285F4;border-radius:50%;"></div>
+          <div style="color:#444;font-size:0.6rem;">Continue with Google</div>
+        </div>
+        <div style="width:100%;background:#f4f4f5;border-radius:6px;padding:0.4rem 0.6rem;display:flex;align-items:center;gap:0.4rem;border:1px solid #e5e5e5;">
+          <div style="width:10px;height:10px;background:#0078D4;border-radius:50%;"></div>
+          <div style="color:#444;font-size:0.6rem;">Continue with Microsoft</div>
+        </div>
+        <div style="width:100%;background:#f4f4f5;border-radius:6px;padding:0.4rem 0.6rem;display:flex;align-items:center;gap:0.4rem;border:1px solid #e5e5e5;">
+          <div style="width:10px;height:10px;background:#111;border-radius:50%;"></div>
+          <div style="color:#444;font-size:0.6rem;">Continue with GitHub</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.4rem;width:100%;margin:0.1rem 0;">
+          <div style="flex:1;height:1px;background:#e5e5e5;"></div>
+          <div style="color:#aaa;font-size:0.55rem;">or email</div>
+          <div style="flex:1;height:1px;background:#e5e5e5;"></div>
+        </div>
+        <div style="width:100%;background:#f4f4f5;border-radius:6px;padding:0.35rem 0.6rem;border:1px solid #e5e5e5;">
+          <div style="color:#aaa;font-size:0.6rem;">your@email.com</div>
+        </div>
+        <div style="width:100%;background:#7c3aed;border-radius:6px;padding:0.35rem;text-align:center;">
+          <div style="color:#fff;font-size:0.6rem;">Send magic link</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Centered card, light</h3>
+      <p>Clean white card on a warm background. Minimal, modern. Provider buttons are prominent. Feels like Notion or Linear.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:linear-gradient(135deg,#1e1b4b 0%,#312e81 50%,#4c1d95 100%); padding:1.5rem; display:flex; align-items:center; justify-content:center;">
+      <div style="display:flex;flex-direction:column;gap:0.5rem;align-items:center;width:80%;">
+        <div style="width:36px;height:36px;background:rgba(255,255,255,0.15);border-radius:10px;margin-bottom:0.25rem;display:flex;align-items:center;justify-content:center;">
+          <div style="width:18px;height:18px;background:#a78bfa;border-radius:4px;"></div>
+        </div>
+        <div style="color:#fff;font-size:0.8rem;font-weight:700;text-align:center;">Ethic Companion</div>
+        <div style="color:#c4b5fd;font-size:0.6rem;text-align:center;margin-bottom:0.25rem;">Your AI partner in decision-making</div>
+        <div style="width:100%;background:rgba(255,255,255,0.1);border-radius:6px;padding:0.4rem 0.6rem;display:flex;align-items:center;gap:0.4rem;border:1px solid rgba(255,255,255,0.15);backdrop-filter:blur(4px);">
+          <div style="width:10px;height:10px;background:#4285F4;border-radius:50%;"></div>
+          <div style="color:#fff;font-size:0.6rem;">Continue with Google</div>
+        </div>
+        <div style="width:100%;background:rgba(255,255,255,0.1);border-radius:6px;padding:0.4rem 0.6rem;display:flex;align-items:center;gap:0.4rem;border:1px solid rgba(255,255,255,0.15);">
+          <div style="width:10px;height:10px;background:#0078D4;border-radius:50%;"></div>
+          <div style="color:#fff;font-size:0.6rem;">Continue with Microsoft</div>
+        </div>
+        <div style="width:100%;background:rgba(255,255,255,0.1);border-radius:6px;padding:0.4rem 0.6rem;display:flex;align-items:center;gap:0.4rem;border:1px solid rgba(255,255,255,0.15);">
+          <div style="width:10px;height:10px;background:#fff;border-radius:50%;"></div>
+          <div style="color:#fff;font-size:0.6rem;">Continue with GitHub</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.4rem;width:100%;margin:0.1rem 0;">
+          <div style="flex:1;height:1px;background:rgba(255,255,255,0.2);"></div>
+          <div style="color:rgba(255,255,255,0.4);font-size:0.55rem;">or email</div>
+          <div style="flex:1;height:1px;background:rgba(255,255,255,0.2);"></div>
+        </div>
+        <div style="width:100%;background:rgba(255,255,255,0.1);border-radius:6px;padding:0.35rem 0.6rem;border:1px solid rgba(255,255,255,0.15);">
+          <div style="color:rgba(255,255,255,0.4);font-size:0.6rem;">your@email.com</div>
+        </div>
+        <div style="width:100%;background:#7c3aed;border-radius:6px;padding:0.35rem;text-align:center;">
+          <div style="color:#fff;font-size:0.6rem;">Send magic link</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Full gradient, immersive</h3>
+      <p>Deep purple gradient full-page. Glassmorphism buttons. Bold and distinct — makes a strong first impression.</p>
+    </div>
+  </div>
+
+</div>
