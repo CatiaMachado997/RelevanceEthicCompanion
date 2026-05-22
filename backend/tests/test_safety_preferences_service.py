@@ -25,9 +25,9 @@ def _mock_db(execute_results):
 def test_load_for_user_empty_returns_default_off():
     """A user with no rows in any layer gets safe_mode_enabled=False and empty sets."""
     conn, _ = _mock_db([
-        ({"safe_mode_enabled": False}, None),  # users SELECT
-        (None, []),                            # categories SELECT
-        (None, []),                            # tools SELECT
+        (None, [{"safe_mode_enabled": False}]),  # users SELECT
+        (None, []),                              # categories SELECT
+        (None, []),                              # tools SELECT
     ])
     with patch("services.safety_preferences.get_db_connection", return_value=conn):
         svc = SafetyPreferencesService()
@@ -39,7 +39,7 @@ def test_load_for_user_empty_returns_default_off():
 
 def test_load_for_user_with_master_on():
     conn, _ = _mock_db([
-        ({"safe_mode_enabled": True}, None),
+        (None, [{"safe_mode_enabled": True}]),
         (None, []),
         (None, []),
     ])
@@ -50,7 +50,7 @@ def test_load_for_user_with_master_on():
 
 def test_load_for_user_with_categories_and_tools():
     conn, _ = _mock_db([
-        ({"safe_mode_enabled": False}, None),
+        (None, [{"safe_mode_enabled": False}]),
         (None, [
             {"category": "write-external", "requires_confirmation": True},
             {"category": "read-external",  "requires_confirmation": True},
