@@ -77,11 +77,11 @@ export function CommandPalette() {
     queryKey: ["documents"],
     queryFn: () => api.documents.list(),
   })
-  const conversations: Conversation[] = convData?.conversations ?? []
-  const folders: Folder[] = folderData?.folders ?? []
-  const goals: Goal[] = goalData?.goals ?? []
-  const tasks: Task[] = Array.isArray(taskData) ? taskData : []
-  const documents: Document[] = Array.isArray(docData) ? docData : []
+  const conversations: Conversation[] = useMemo(() => convData?.conversations ?? [], [convData])
+  const folders: Folder[] = useMemo(() => folderData?.folders ?? [], [folderData])
+  const goals: Goal[] = useMemo(() => goalData?.goals ?? [], [goalData])
+  const tasks: Task[] = useMemo(() => (Array.isArray(taskData) ? taskData : []), [taskData])
+  const documents: Document[] = useMemo(() => (Array.isArray(docData) ? docData : []), [docData])
 
   const inputRef = useRef<HTMLInputElement>(null)
 

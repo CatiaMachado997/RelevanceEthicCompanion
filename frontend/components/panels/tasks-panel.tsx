@@ -10,7 +10,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import {
-  ArrowRight, CheckSquare, Square, Check, AlertTriangle, Flag,
+  ArrowRight, CheckSquare, Check, AlertTriangle, Flag,
 } from "lucide-react"
 import { api, type Task } from "@/lib/api"
 

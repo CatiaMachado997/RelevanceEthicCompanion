@@ -43,9 +43,6 @@ class CandidateItem(BaseModel):
         default_factory=dict, description="Additional metadata"
     )
 
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat()}
-
 
 class ScoredItem(BaseModel):
     """
@@ -121,9 +118,6 @@ class RelevanceFeedback(BaseModel):
     context_snapshot: Dict[str, Any] = Field(
         default_factory=dict, description="Context when feedback was given"
     )
-
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat()}
 
 
 class ContentSafetyCheck(BaseModel):
