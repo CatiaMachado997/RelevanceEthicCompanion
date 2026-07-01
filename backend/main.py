@@ -314,6 +314,7 @@ from routes import (
     weekly_review,
     today,
     onboarding,
+    safety_preferences,
 )
 from routes import settings as settings_router
 from routes.insight import router as insight_router
@@ -348,6 +349,7 @@ app.include_router(
 )
 app.include_router(today.router, prefix="/api/today", tags=["today"])
 app.include_router(onboarding.router)
+app.include_router(safety_preferences.router)
 
 from routes import tool_marketplace
 

@@ -17,7 +17,7 @@ async def test_stream_langgraph_yields_tokens():
     mock_chunk = MagicMock()
     mock_chunk.content = "Hello world"
 
-    async def fake_astream_events(state, version="v2"):
+    async def fake_astream_events(state, config=None, *, version="v2"):
         # Simulate on_chat_model_stream from tool_planner (a RESPONSE_NODE)
         yield {
             "event": "on_chat_model_stream",
