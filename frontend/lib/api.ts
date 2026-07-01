@@ -611,6 +611,9 @@ export interface ToolCallEvent {
   esl_decision: 'APPROVED' | 'MODIFIED' | 'VETOED' | null
   latency_ms: number | null
   created_at: string
+  planner_run_id?: string | null
+  step_index?: number | null
+  action_index?: number | null
 }
 
 export const transparencyApi = {

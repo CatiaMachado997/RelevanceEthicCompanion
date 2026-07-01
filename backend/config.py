@@ -149,6 +149,13 @@ class Settings(BaseSettings):
     JINA_API_KEY: str = ""
     RERANK_MODEL: str = "jina-reranker-v2-base-multilingual"
 
+    # Sprint I — explicit ReAct + parallel actions. When False (default),
+    # the planner emits one tool call per step (legacy behavior) and the
+    # executor runs them serially. When True, planner emits {thought,
+    # actions: [...]} and actions in a step run in parallel via
+    # asyncio.gather with one auto-retry per failed action.
+    PLANNER_PARALLEL_ENABLED: bool = False
+
     # Backend URL for OAuth redirects
     BACKEND_URL: str = "http://localhost:8000"
 

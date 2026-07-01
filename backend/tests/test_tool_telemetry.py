@@ -126,3 +126,35 @@ def test_list_tool_calls_filters_by_tool_name(mock_get_db):
     assert "ORDER BY created_at DESC" in sql
     # user_id, tool_name, then limit (no source/since filters).
     assert params == (USER_ID, "search_documents", 25)
+
+
+def test_record_tool_call_persists_planner_run_breadcrumbs():
+    """Sprint I Task 7: record_tool_call accepts planner_run_id, step_index, action_index."""
+    from services.tool_telemetry import ToolTelemetryService
+
+    cur = MagicMock()
+    cur.fetchone.return_value = {"id": "row-uuid"}
+    db_ctx, _ = _mock_db(cur)
+    with patch("services.tool_telemetry.get_db_connection", return_value=db_ctx):
+        svc = ToolTelemetryService()
+        svc.record_tool_call(
+            user_id="user-1",
+            tool_name="search_documents",
+            source="chat",
+            source_ref="conv-1",
+            input={"q": "x"},
+            output={"r": 1},
+            status="success",
+            latency_ms=42,
+            planner_run_id="run-1",
+            step_index=1,
+            action_index=0,
+        )
+    sql = cur.execute.call_args[0][0]
+    params = cur.execute.call_args[0][1]
+    assert "planner_run_id" in sql
+    assert "step_index" in sql
+    assert "action_index" in sql
+    assert "run-1" in params
+    assert 1 in params
+    assert 0 in params
