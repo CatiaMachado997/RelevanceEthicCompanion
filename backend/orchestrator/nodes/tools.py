@@ -14,6 +14,7 @@ from orchestrator.nodes.context import get_context_manager
 from config import settings
 from config import settings as _j_settings
 from services.safety_preferences import SafetyPreferencesService, SafetyPreferences
+from services.planner_run_memory import PlannerRunMemoryService
 
 logger = logging.getLogger(__name__)
 
@@ -317,6 +318,39 @@ async def tool_planner_node(state: AgentState) -> dict:
             )
         )
 
+    memory_used: list = []
+    if _j_settings.EPISODIC_MEMORY_ENABLED and len(plan_steps) == 0:
+        try:
+            past_runs = await PlannerRunMemoryService().recall(
+                user_id=user_id,
+                message=state["message"],
+                k=_j_settings.EPISODIC_MEMORY_TOP_K,
+                min_similarity=_j_settings.EPISODIC_MEMORY_MIN_SIMILARITY,
+                max_age_days=_j_settings.EPISODIC_MEMORY_MAX_AGE_DAYS,
+            )
+        except Exception as exc:
+            logger.warning("episodic memory recall failed: %s", exc)
+            past_runs = []
+        if past_runs:
+            memory_used = [
+                {
+                    "planner_run_id": r.planner_run_id,
+                    "message_text": r.message_text,
+                    "plan_summary": r.plan_summary,
+                    "similarity": r.similarity,
+                }
+                for r in past_runs
+            ]
+            lines = [f'- "{r.message_text}" → {r.plan_summary}' for r in past_runs]
+            mem_block = (
+                "You've handled similar questions before. Past examples "
+                "(most recent first, may be stale):\n"
+                + "\n".join(lines)
+                + "\n\nUse these as hints, not rules — the current question "
+                "may need a different plan."
+            )
+            messages.insert(0, SystemMessage(content=mem_block))
+
     # Lazy import to keep tests fast and avoid circulars
     from services.planner_runs import PlannerRunsService
 
@@ -360,6 +394,7 @@ async def tool_planner_node(state: AgentState) -> dict:
         "actions": parsed["actions"],
         "observations": [],  # filled in by tool_execution_node
         "started_at": datetime.now(UTC).isoformat(),
+        "memory_used": memory_used,  # Sprint K — empty list on non-first or flag-off
     }
     plan_steps.append(step)
 
@@ -373,6 +408,7 @@ async def tool_planner_node(state: AgentState) -> dict:
         "planner_step": next_step_index,
         "plan_steps": plan_steps,
         "planner_run_id": planner_run_id,
+        "memory_used": memory_used,  # Sprint K — empty list on non-first or flag-off
     }
 
 
