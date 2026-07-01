@@ -331,6 +331,16 @@ function IntegrationsContent() {
     } finally {
       if (mountedRef.current) setLoading(false)
     }
+
+    try {
+      const { connectors } = await connectorsApi.list()
+      if (!mountedRef.current) return
+      const counts: Record<string, number> = {}
+      for (const c of connectors) counts[c.source_type] = c.items_count
+      setStats(counts)
+    } catch (e) {
+      console.error('[connectors] failed to load item counts', e)
+    }
   }
 
   async function loadMarketplace() {
