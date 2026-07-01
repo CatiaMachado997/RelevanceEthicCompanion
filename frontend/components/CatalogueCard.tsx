@@ -25,6 +25,10 @@ export function CatalogueCard({ tool, isConnected, onConnect, onDisconnect }: Pr
           style={{ background: '#f5f2ef', border: '1px solid rgba(0,0,0,0.08)' }}
         >
           {tool.icon_url ? (
+            // next/image requires allowlisting remote domains; icon_url comes
+            // from an open-ended set of integration providers, so a plain
+            // <img> avoids breaking on any host we haven't pre-configured.
+            // eslint-disable-next-line @next/next/no-img-element
             <img src={tool.icon_url} alt={tool.name} className="w-6 h-6 rounded" />
           ) : (
             <span className="text-sm font-semibold" style={{ color: '#6b6b6b' }}>

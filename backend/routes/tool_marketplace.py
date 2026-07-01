@@ -157,15 +157,16 @@ async def composio_callback(
     tool_key = toolkit or "unknown"
 
     # Treat as failure only when there's an explicit error or no account established
-    is_success = (
-        status in ("success", "connected", "active")
-        or (account_id and not error)
+    is_success = status in ("success", "connected", "active") or (
+        account_id and not error
     )
 
     if not is_success or error:
         logger.warning(
             "Composio callback non-success: toolkit=%s status=%s error=%s",
-            tool_key, status, error,
+            tool_key,
+            status,
+            error,
         )
         _err = f"{tool_key}_composio_failed"
         return RedirectResponse(
@@ -176,7 +177,12 @@ async def composio_callback(
         user_id = _extract_user_from_state(state, f"composio_{tool_key}")
         credentials = json.dumps({"composio_account_id": account_id})
         _store_connection(user_id=user_id, tool_id=tool_key, credentials=credentials)
-        logger.info("Composio connected: toolkit=%s user=%s account=%s", tool_key, user_id, account_id)
+        logger.info(
+            "Composio connected: toolkit=%s user=%s account=%s",
+            tool_key,
+            user_id,
+            account_id,
+        )
         return RedirectResponse(
             url=f"{settings.FRONTEND_URL}/dashboard/integrations?connected={quote(tool_key, safe='')}",
             status_code=302,
@@ -296,9 +302,7 @@ async def sync_tool(
             )
             row = cur.fetchone()
     if not row:
-        raise HTTPException(
-            status_code=404, detail=f"Tool not connected: {tool_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Tool not connected: {tool_id}")
 
     count = await composio_sync.sync_tool_data(user_id=user_id, tool_id=tool_id)
     return {"synced": count, "tool_id": tool_id}

@@ -367,7 +367,7 @@ export const chatApi = {
         }
       }
 
-      es.onerror = (e) => {
+      es.onerror = () => {
         es!.close()
         // EventSource readyState 2 = CLOSED (never connected)
         const msg = (es as EventSource).readyState === 2 || !navigator.onLine

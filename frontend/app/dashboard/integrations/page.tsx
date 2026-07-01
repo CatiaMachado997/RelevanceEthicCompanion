@@ -419,7 +419,7 @@ function IntegrationsContent() {
     setSyncing(type)
     try {
       await toolMarketplaceApi.syncTool(toolIdMap[type])
-    } catch (e) {
+    } catch {
       const label = INTEGRATIONS.find(i => i.type === type)?.label ?? type
       setErrorFlash(`Sync failed for ${label}.`)
       setTimeout(() => setErrorFlash(null), 6000)
@@ -433,7 +433,7 @@ function IntegrationsContent() {
     try {
       const url = await toolMarketplaceApi.connectComposio(toolIdMap[type])
       if (url) window.location.href = url
-    } catch (e) {
+    } catch {
       const label = INTEGRATIONS.find(i => i.type === type)?.label ?? type
       setErrorFlash(`Could not start ${label} reconnection. Make sure the backend is running.`)
       setTimeout(() => setErrorFlash(null), 6000)

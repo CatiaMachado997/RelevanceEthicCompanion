@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
-  MessageSquare, Plug, Settings, LogOut, User, Sun, Moon,
+  MessageSquare, Plug, Settings, LogOut, Sun, Moon,
   Plus, Pencil, Trash2, Check, X, FolderPlus, Folder as FolderIcon,
   ChevronRight, ChevronDown, Bell, Eye, UserCircle,
   LayoutDashboard, MoreHorizontal, Target, CheckSquare, FolderOpen,
@@ -12,7 +12,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/useAuth"
 import { useTheme } from "next-themes"
-import { useEffect, useState, useCallback, useRef } from "react"
+import { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import type { Folder } from "@/lib/api"
@@ -87,7 +87,7 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
     queryFn: () => api.folders.list(),
   })
   const conversations: Conversation[] = convData?.conversations ?? []
-  const folders: Folder[] = folderData?.folders ?? []
+  const folders: Folder[] = useMemo(() => folderData?.folders ?? [], [folderData])
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
@@ -218,7 +218,6 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
   // Classic hydration gate: flip to true after mount so the first client
   // render matches the server output. The single extra render is the
   // intended behavior.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setMounted(true) }, [])
 
   // Re-validate when navigating to a new route

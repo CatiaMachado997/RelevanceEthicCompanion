@@ -297,28 +297,23 @@ class BackgroundScheduler:
             synced = failed = 0
             for user_id in users:
                 try:
-                    r = await self.data_ingestion.sync_data_source(
-                        user_id, source_type
-                    )
+                    r = await self.data_ingestion.sync_data_source(user_id, source_type)
                     if r.get("success"):
                         synced += 1
                     else:
                         failed += 1
                 except Exception as e:
                     failed += 1
-                    logger.error(
-                        f"❌ {source_type} sync failed for {user_id}: {e}"
-                    )
+                    logger.error(f"❌ {source_type} sync failed for {user_id}: {e}")
             logger.info(
                 f"✅ Scheduled {source_type} sync: {synced} ok, {failed} failed"
             )
         except Exception as e:
-            logger.error(
-                f"❌ Critical error in {source_type} sync: {e}", exc_info=True
-            )
+            logger.error(f"❌ Critical error in {source_type} sync: {e}", exc_info=True)
 
     async def _get_users_with_source(self, source_type: str) -> list:
         from utils.db import get_db_connection
+
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -442,9 +437,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                         "VETOED"
                         if not should_send
                         else (
-                            "MODIFIED"
-                            if final_content != brief_content
-                            else "APPROVED"
+                            "MODIFIED" if final_content != brief_content else "APPROVED"
                         )
                     )
                     ToolTelemetryService().record_tool_call(
@@ -452,16 +445,16 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                         tool_name="weekly_digest",
                         source="scheduled",
                         source_ref="weekly_digest",
-                        input={"prompt_inputs": {"goals": goal_text, "values": value_text}},
+                        input={
+                            "prompt_inputs": {"goals": goal_text, "values": value_text}
+                        },
                         output={"content": final_content},
                         status="success" if should_send else "vetoed",
                         esl_decision=esl_decision,
                         latency_ms=None,
                     )
                     if not should_send:
-                        logger.info(
-                            f"⛔ ESL vetoed weekly_digest for user {user_id}"
-                        )
+                        logger.info(f"⛔ ESL vetoed weekly_digest for user {user_id}")
                         continue
                     content = final_content
                     with get_db_connection() as conn:
@@ -567,9 +560,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                         if event_start.tzinfo is not None
                         else event_start.replace(tzinfo=timezone.utc)
                     )
-                    minutes_until = int(
-                        (event_start_aware - now).total_seconds() / 60
-                    )
+                    minutes_until = int((event_start_aware - now).total_seconds() / 60)
                     location_note = f" at {event_location}" if event_location else ""
 
                     prompt = (
@@ -604,9 +595,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                         "VETOED"
                         if not should_send
                         else (
-                            "MODIFIED"
-                            if final_content != brief_content
-                            else "APPROVED"
+                            "MODIFIED" if final_content != brief_content else "APPROVED"
                         )
                     )
                     ToolTelemetryService().record_tool_call(
@@ -760,9 +749,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                         "VETOED"
                         if not should_send
                         else (
-                            "MODIFIED"
-                            if final_content != brief_content
-                            else "APPROVED"
+                            "MODIFIED" if final_content != brief_content else "APPROVED"
                         )
                     )
                     ToolTelemetryService().record_tool_call(
@@ -889,11 +876,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                 esl_decision = (
                     "VETOED"
                     if not should_send
-                    else (
-                        "MODIFIED"
-                        if final_content != brief_content
-                        else "APPROVED"
-                    )
+                    else ("MODIFIED" if final_content != brief_content else "APPROVED")
                 )
                 ToolTelemetryService().record_tool_call(
                     user_id=user_id,
@@ -913,9 +896,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                     latency_ms=None,
                 )
                 if not should_send:
-                    logger.info(
-                        f"⛔ ESL vetoed deadline_warning for user {user_id}"
-                    )
+                    logger.info(f"⛔ ESL vetoed deadline_warning for user {user_id}")
                     continue
                 message = final_content
 
@@ -1053,9 +1034,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                         "VETOED"
                         if not should_send
                         else (
-                            "MODIFIED"
-                            if final_content != brief_content
-                            else "APPROVED"
+                            "MODIFIED" if final_content != brief_content else "APPROVED"
                         )
                     )
                     ToolTelemetryService().record_tool_call(
@@ -1268,9 +1247,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                         "VETOED"
                         if not should_send
                         else (
-                            "MODIFIED"
-                            if final_content != brief_content
-                            else "APPROVED"
+                            "MODIFIED" if final_content != brief_content else "APPROVED"
                         )
                     )
                     ToolTelemetryService().record_tool_call(
@@ -1278,7 +1255,9 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                         tool_name="related_items_cluster",
                         source="scheduled",
                         source_ref="related_items_cluster",
-                        input={"prompt_inputs": {"cluster_keywords": [kw for kw, _ in top]}},
+                        input={
+                            "prompt_inputs": {"cluster_keywords": [kw for kw, _ in top]}
+                        },
                         output={"content": final_content},
                         status="success" if should_send else "vetoed",
                         esl_decision=esl_decision,
@@ -1411,9 +1390,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                 esl_decision = (
                     "VETOED"
                     if not should_send
-                    else (
-                        "MODIFIED" if final_content != brief_text else "APPROVED"
-                    )
+                    else ("MODIFIED" if final_content != brief_text else "APPROVED")
                 )
                 ToolTelemetryService().record_tool_call(
                     user_id=user_id,
@@ -1428,9 +1405,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
                 )
 
                 if not should_send:
-                    logger.info(
-                        f"⛔ ESL vetoed weekly_review_brief for user {user_id}"
-                    )
+                    logger.info(f"⛔ ESL vetoed weekly_review_brief for user {user_id}")
                     continue
 
                 with get_db_connection() as conn:

@@ -130,6 +130,8 @@ export default function ValuesPage() {
   const removeTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
   useEffect(() => {
+    const timers = removeTimers.current
+
     api.values.list()
       .then((r: UserValue[] | { values?: UserValue[] }) => {
         const items = Array.isArray(r) ? r : (r as { values?: UserValue[] }).values ?? []
@@ -144,7 +146,7 @@ export default function ValuesPage() {
       .finally(() => setLoading(false))
 
     return () => {
-      removeTimers.current.forEach(t => clearTimeout(t))
+      timers.forEach(t => clearTimeout(t))
     }
   }, [])
 

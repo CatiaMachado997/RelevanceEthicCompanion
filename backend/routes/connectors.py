@@ -117,7 +117,9 @@ async def trigger_backfill(
     polling endpoint.
     """
     if source_type not in SUPPORTED:
-        raise HTTPException(status_code=400, detail=f"unsupported source: {source_type}")
+        raise HTTPException(
+            status_code=400, detail=f"unsupported source: {source_type}"
+        )
 
     since_dt: Optional[datetime] = None
     if body and body.since:
@@ -155,7 +157,9 @@ async def connector_status(
     sync→index pipeline.
     """
     if source_type not in SUPPORTED:
-        raise HTTPException(status_code=400, detail=f"unsupported source: {source_type}")
+        raise HTTPException(
+            status_code=400, detail=f"unsupported source: {source_type}"
+        )
 
     with get_db_connection() as conn:
         with conn.cursor() as cur:
@@ -187,7 +191,11 @@ async def connector_status(
     last_sync_at = row.get("last_sync_at")
     return {
         "source": source_type,
-        "last_sync_at": last_sync_at.isoformat() if hasattr(last_sync_at, "isoformat") and last_sync_at else None,
+        "last_sync_at": (
+            last_sync_at.isoformat()
+            if hasattr(last_sync_at, "isoformat") and last_sync_at
+            else None
+        ),
         "total_items": int(row.get("total_items") or 0),
         "indexed": int(row.get("indexed") or 0),
         "failed": int(row.get("failed") or 0),
@@ -213,7 +221,9 @@ async def reindex_source(
     `tool_telemetry.record_tool_call` precedent.
     """
     if source_type not in SUPPORTED:
-        raise HTTPException(status_code=400, detail=f"unsupported source: {source_type}")
+        raise HTTPException(
+            status_code=400, detail=f"unsupported source: {source_type}"
+        )
 
     rows: list[dict] = []
     with get_db_connection() as conn:
@@ -241,6 +251,7 @@ async def reindex_source(
             if isinstance(metadata, str):
                 # Defensive: psycopg may return JSONB as text in some configs.
                 import json as _json
+
                 try:
                     metadata = _json.loads(metadata)
                 except Exception:
@@ -254,7 +265,9 @@ async def reindex_source(
                 title=row.get("title") or "",
                 body=row.get("body"),
                 metadata=metadata,
-                item_at=item_at.isoformat() if hasattr(item_at, "isoformat") else item_at,
+                item_at=(
+                    item_at.isoformat() if hasattr(item_at, "isoformat") else item_at
+                ),
                 embedding_status=row.get("embedding_status") or "pending",
                 sensitivity=row.get("sensitivity") or 0,
             )
@@ -274,12 +287,16 @@ async def reindex_source(
                         )
                     conn.commit()
             except Exception as db_exc:
-                logger.warning(f"⚠️ reindex indexed-update failed for {item.external_id}: {db_exc}")
+                logger.warning(
+                    f"⚠️ reindex indexed-update failed for {item.external_id}: {db_exc}"
+                )
             succeeded += 1
         except Exception as e:
             # ConnectorIndexer already wrote 'failed' + embedding_error and
             # emitted telemetry before re-raising. Just keep the batch going.
-            logger.info(f"reindex item failed ({source_type}/{row.get('external_id')}): {e}")
+            logger.info(
+                f"reindex item failed ({source_type}/{row.get('external_id')}): {e}"
+            )
 
     return {
         "processed": processed,
@@ -296,5 +313,7 @@ async def disconnect(
 ) -> Dict[str, Any]:
     """Disconnect a connector. Wipes vectors, source_items, and tokens."""
     if source_type not in SUPPORTED:
-        raise HTTPException(status_code=400, detail=f"unsupported source: {source_type}")
+        raise HTTPException(
+            status_code=400, detail=f"unsupported source: {source_type}"
+        )
     return await ingestion.disconnect_data_source(user_id, source_type)

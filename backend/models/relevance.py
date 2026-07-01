@@ -36,14 +36,12 @@ class CandidateItem(BaseModel):
         description="Source of the item (e.g., 'tavily', 'weaviate', 'google_calendar')"
     )
     timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), description="When item was created/retrieved"
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="When item was created/retrieved",
     )
     metadata: Dict[str, Any] = Field(
         default_factory=dict, description="Additional metadata"
     )
-
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat()}
 
 
 class ScoredItem(BaseModel):
@@ -120,9 +118,6 @@ class RelevanceFeedback(BaseModel):
     context_snapshot: Dict[str, Any] = Field(
         default_factory=dict, description="Context when feedback was given"
     )
-
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat()}
 
 
 class ContentSafetyCheck(BaseModel):

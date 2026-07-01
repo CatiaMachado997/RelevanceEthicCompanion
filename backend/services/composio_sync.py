@@ -151,11 +151,23 @@ def _parse_items(tool_id: str, result: Any) -> list[dict[str, Any]]:
                 title_prop = (
                     props.get("title") or props.get("Name") or props.get("name") or {}
                 )
-                title_arr = (title_prop.get("title") or []) if isinstance(title_prop, dict) else []
-                title = "".join(
-                    t.get("plain_text", "") for t in title_arr if isinstance(t, dict)
-                ) or page.get("url") or "(untitled)"
-                edited = page.get("last_edited_time") or page.get("created_time") or None
+                title_arr = (
+                    (title_prop.get("title") or [])
+                    if isinstance(title_prop, dict)
+                    else []
+                )
+                title = (
+                    "".join(
+                        t.get("plain_text", "")
+                        for t in title_arr
+                        if isinstance(t, dict)
+                    )
+                    or page.get("url")
+                    or "(untitled)"
+                )
+                edited = (
+                    page.get("last_edited_time") or page.get("created_time") or None
+                )
                 items.append(
                     {
                         "source_item_type": "notion_page",
@@ -269,9 +281,7 @@ async def sync_tool_data(user_id: str, tool_id: str) -> int:
 
     items = _parse_items(tool_id, result)
     if not items:
-        logger.info(
-            f"[composio_sync] No items returned for {tool_id} / user {user_id}"
-        )
+        logger.info(f"[composio_sync] No items returned for {tool_id} / user {user_id}")
         return 0
 
     try:

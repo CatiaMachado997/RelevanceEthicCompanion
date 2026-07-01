@@ -8,12 +8,14 @@ from fastapi.testclient import TestClient
 
 from utils.supabase_auth import get_current_read_user_id
 
-
 TEST_USER_ID = "00000000-0000-0000-0000-000000000000"
 
 
 _SAMPLE_RESULT = {
-    "period": {"start": "2026-04-20T00:00:00+00:00", "end": "2026-04-27T00:00:00+00:00"},
+    "period": {
+        "start": "2026-04-20T00:00:00+00:00",
+        "end": "2026-04-27T00:00:00+00:00",
+    },
     "completed_tasks": [],
     "completed_milestones": [],
     "carry_over_tasks": [],

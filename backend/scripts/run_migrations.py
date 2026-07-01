@@ -115,8 +115,11 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(description="Run pending SQL migrations")
     parser.add_argument("--migrations-dir", default=None)
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Print pending migrations without applying them")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print pending migrations without applying them",
+    )
     args = parser.parse_args()
     try:
         if args.dry_run:

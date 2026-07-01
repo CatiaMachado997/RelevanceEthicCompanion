@@ -9,12 +9,10 @@ Three smoke tests:
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
-
 
 TEST_USER_ID = "00000000-0000-0000-0000-000000000000"
 
@@ -70,9 +68,7 @@ def test_list_connectors_returns_status():
     ingestion_mock = MagicMock()
     app = make_app(ingestion_mock)
 
-    with patch(
-        "routes.connectors.get_db_connection", return_value=conn
-    ):
+    with patch("routes.connectors.get_db_connection", return_value=conn):
         with TestClient(app) as client:
             resp = client.get("/api/connectors")
 

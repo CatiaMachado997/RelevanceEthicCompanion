@@ -45,16 +45,6 @@ async def lifespan(app: FastAPI):
 
     open_pool()
 
-    try:
-        n_applied = run_migrations()
-        if n_applied:
-            logger.info(f"applied {n_applied} migration(s)")
-        else:
-            logger.info("schema up to date")
-    except Exception:
-        logger.exception("Migration failed on startup; refusing to serve traffic")
-        raise
-
     # Auto-migrate: ensure extra columns exist in user_settings
     try:
         from utils.db import get_db_connection
@@ -181,6 +171,16 @@ async def lifespan(app: FastAPI):
         logger.debug("V4+ tables verified")
     except Exception as e:
         logger.warning(f"Could not verify V4+ tables: {e}")
+
+    try:
+        n_applied = run_migrations()
+        if n_applied:
+            logger.info(f"applied {n_applied} migration(s)")
+        else:
+            logger.info("schema up to date")
+    except Exception:
+        logger.exception("Migration failed on startup; refusing to serve traffic")
+        raise
 
     if settings.ENVIRONMENT != "development":
         if not settings.AUTH_ENFORCEMENT_ENABLED:
@@ -343,7 +343,9 @@ app.include_router(folders.router)
 app.include_router(dashboard.router)
 app.include_router(status_router)
 app.include_router(connectors.router, prefix="/api/connectors", tags=["connectors"])
-app.include_router(weekly_review.router, prefix="/api/weekly-review", tags=["weekly-review"])
+app.include_router(
+    weekly_review.router, prefix="/api/weekly-review", tags=["weekly-review"]
+)
 app.include_router(today.router, prefix="/api/today", tags=["today"])
 app.include_router(onboarding.router)
 

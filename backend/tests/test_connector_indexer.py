@@ -2,11 +2,12 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from services.connectors.base import SourceItem
 
-
 USER_ID = "00000000-0000-0000-0000-000000000000"
 
 
-def _item(body: str, source_type: str = "gmail", external_id: str = "msg_1") -> SourceItem:
+def _item(
+    body: str, source_type: str = "gmail", external_id: str = "msg_1"
+) -> SourceItem:
     return SourceItem(
         user_id=USER_ID,
         source_type=source_type,
@@ -57,7 +58,7 @@ async def test_long_item_splits_into_multiple_chunks(mock_embed, mock_weaviate):
     embed.generate_embedding = AsyncMock(return_value=[0.1] * 768)
     mock_embed.return_value = embed
 
-    long_body = ("Sentence about the roadmap. " * 200)
+    long_body = "Sentence about the roadmap. " * 200
     indexer = ConnectorIndexer()
     n = await indexer.index(_item(long_body))
 
@@ -69,6 +70,7 @@ async def test_long_item_splits_into_multiple_chunks(mock_embed, mock_weaviate):
 @patch("services.connector_indexer.get_weaviate_client")
 async def test_returns_zero_when_weaviate_unavailable(mock_weaviate):
     from services.connector_indexer import ConnectorIndexer
+
     mock_weaviate.return_value = None
     indexer = ConnectorIndexer()
     n = await indexer.index(_item("anything"))
@@ -80,6 +82,7 @@ async def test_returns_zero_when_weaviate_unavailable(mock_weaviate):
 @patch("services.connector_indexer.get_embedding_service")
 async def test_empty_body_is_skipped(mock_embed, mock_weaviate):
     from services.connector_indexer import ConnectorIndexer
+
     weav = MagicMock()
     mock_weaviate.return_value = weav
     embed = MagicMock()
@@ -145,7 +148,8 @@ async def test_index_failure_marks_row_failed(
 
     # Row UPDATE: status=failed, error contains the exception message.
     update_calls = [
-        c for c in indexer_cur.execute.call_args_list
+        c
+        for c in indexer_cur.execute.call_args_list
         if "UPDATE source_items" in c.args[0]
     ]
     assert len(update_calls) == 1
@@ -159,7 +163,8 @@ async def test_index_failure_marks_row_failed(
 
     # Telemetry insert into tool_call_events.
     telemetry_calls = [
-        c for c in telemetry_cur.execute.call_args_list
+        c
+        for c in telemetry_cur.execute.call_args_list
         if "INSERT INTO tool_call_events" in c.args[0]
     ]
     assert len(telemetry_calls) == 1
@@ -234,8 +239,7 @@ async def test_maybe_embed_success_clears_error(mock_get_db):
         await svc._maybe_embed(item, USER_ID)
 
     update_calls = [
-        c for c in cur.execute.call_args_list
-        if "UPDATE source_items" in c.args[0]
+        c for c in cur.execute.call_args_list if "UPDATE source_items" in c.args[0]
     ]
     assert len(update_calls) == 1
     sql, params = update_calls[0].args

@@ -156,7 +156,9 @@ class WorkRollupsService:
         upcoming_end = period_end + timedelta(days=7)
 
         # Datetimes for TIMESTAMPTZ comparisons.
-        start_dt = datetime.combine(week_start, datetime.min.time(), tzinfo=timezone.utc)
+        start_dt = datetime.combine(
+            week_start, datetime.min.time(), tzinfo=timezone.utc
+        )
         end_dt = datetime.combine(period_end, datetime.min.time(), tzinfo=timezone.utc)
         upcoming_end_dt = datetime.combine(
             upcoming_end, datetime.min.time(), tzinfo=timezone.utc
@@ -167,17 +169,13 @@ class WorkRollupsService:
                 cur.execute(_COMPLETED_TASKS_SQL, (user_id, start_dt, end_dt))
                 completed_tasks = [dict(r) for r in cur.fetchall()]
 
-                cur.execute(
-                    _COMPLETED_MILESTONES_SQL, (user_id, start_dt, end_dt)
-                )
+                cur.execute(_COMPLETED_MILESTONES_SQL, (user_id, start_dt, end_dt))
                 completed_milestones = [dict(r) for r in cur.fetchall()]
 
                 cur.execute(_CARRY_OVER_TASKS_SQL, (user_id, end_dt))
                 carry_over_tasks = [dict(r) for r in cur.fetchall()]
 
-                cur.execute(
-                    _UPCOMING_TASKS_SQL, (user_id, end_dt, upcoming_end_dt)
-                )
+                cur.execute(_UPCOMING_TASKS_SQL, (user_id, end_dt, upcoming_end_dt))
                 upcoming_tasks = [dict(r) for r in cur.fetchall()]
 
                 cur.execute(
