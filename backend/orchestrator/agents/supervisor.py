@@ -1,4 +1,5 @@
 """Supervisor — routes user requests to specialised worker agents."""
+
 from __future__ import annotations
 
 import logging
@@ -46,11 +47,52 @@ def build_supervisor(
 
     # Build the five worker agents
     agent_specs = [
-        ("research_agent", build_research(llm=worker_llm, checkpointer=checkpointer, user_id=user_id, context_manager=context_manager)),
-        ("calendar_agent", build_calendar(llm=worker_llm, checkpointer=checkpointer, user_id=user_id, context_manager=context_manager)),
-        ("goals_agent", build_goals(llm=worker_llm, checkpointer=checkpointer, user_id=user_id, context_manager=context_manager)),
-        ("document_agent", build_document(llm=worker_llm, checkpointer=checkpointer, user_id=user_id, context_manager=context_manager)),
-        ("connectors_agent", build_connectors(llm=worker_llm, checkpointer=checkpointer, user_id=user_id, context_manager=context_manager, connected_tool_ids=connected_tool_ids)),
+        (
+            "research_agent",
+            build_research(
+                llm=worker_llm,
+                checkpointer=checkpointer,
+                user_id=user_id,
+                context_manager=context_manager,
+            ),
+        ),
+        (
+            "calendar_agent",
+            build_calendar(
+                llm=worker_llm,
+                checkpointer=checkpointer,
+                user_id=user_id,
+                context_manager=context_manager,
+            ),
+        ),
+        (
+            "goals_agent",
+            build_goals(
+                llm=worker_llm,
+                checkpointer=checkpointer,
+                user_id=user_id,
+                context_manager=context_manager,
+            ),
+        ),
+        (
+            "document_agent",
+            build_document(
+                llm=worker_llm,
+                checkpointer=checkpointer,
+                user_id=user_id,
+                context_manager=context_manager,
+            ),
+        ),
+        (
+            "connectors_agent",
+            build_connectors(
+                llm=worker_llm,
+                checkpointer=checkpointer,
+                user_id=user_id,
+                context_manager=context_manager,
+                connected_tool_ids=connected_tool_ids,
+            ),
+        ),
     ]
 
     # langgraph_supervisor requires each agent to carry a .name attribute for routing.
@@ -66,6 +108,7 @@ def build_supervisor(
     # Use create_supervisor if available, otherwise fall back to a react agent that acts as supervisor
     try:
         from langgraph_supervisor import create_supervisor
+
         # create_supervisor returns a StateGraph; .compile() gives us a CompiledStateGraph
         return create_supervisor(
             agents=workers,

@@ -1,4 +1,5 @@
 """GoalsAgent — reads user values and goals from M1 (PostgreSQL)."""
+
 from __future__ import annotations
 
 import logging
@@ -25,6 +26,7 @@ def build_goals_tools(user_id: str, context_manager: Any) -> list[BaseTool]:
         """Retrieve the user's active goals from the database."""
         try:
             from utils.db import get_db_connection
+
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
@@ -44,7 +46,10 @@ def build_goals_tools(user_id: str, context_manager: Any) -> list[BaseTool]:
         if not rows:
             return "No active goals found."
 
-        lines = [f"- [{row[2]}] {row[0]}" + (f": {row[1][:100]}" if row[1] else "") for row in rows]
+        lines = [
+            f"- [{row[2]}] {row[0]}" + (f": {row[1][:100]}" if row[1] else "")
+            for row in rows
+        ]
         return "\n".join(lines)
 
     @tool
@@ -52,6 +57,7 @@ def build_goals_tools(user_id: str, context_manager: Any) -> list[BaseTool]:
         """Retrieve the user's stated values and boundaries."""
         try:
             from utils.db import get_db_connection
+
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
@@ -72,9 +78,15 @@ def build_goals_tools(user_id: str, context_manager: Any) -> list[BaseTool]:
     return tools
 
 
-def build_agent(llm: Any, checkpointer: Any, user_id: str = "", context_manager: Any = None):
+def build_agent(
+    llm: Any, checkpointer: Any, user_id: str = "", context_manager: Any = None
+):
     """Return a compiled GoalsAgent graph."""
-    tools = build_goals_tools(user_id=user_id, context_manager=context_manager) if context_manager else []
+    tools = (
+        build_goals_tools(user_id=user_id, context_manager=context_manager)
+        if context_manager
+        else []
+    )
     return create_react_agent(
         model=llm,
         tools=tools,

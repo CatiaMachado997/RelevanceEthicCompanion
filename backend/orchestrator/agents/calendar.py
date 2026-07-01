@@ -1,4 +1,5 @@
 """CalendarAgent — reads Google Calendar events for the user."""
+
 from __future__ import annotations
 
 import logging
@@ -25,6 +26,7 @@ def build_calendar_tools(user_id: str, context_manager: Any) -> list[BaseTool]:
         """Retrieve Google Calendar events relevant to the query."""
         try:
             from utils.db import get_db_connection
+
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
@@ -48,7 +50,9 @@ def build_calendar_tools(user_id: str, context_manager: Any) -> list[BaseTool]:
 
         lines = []
         for title, start, end, desc in rows:
-            lines.append(f"- {title}: {start} → {end}" + (f" ({desc[:80]})" if desc else ""))
+            lines.append(
+                f"- {title}: {start} → {end}" + (f" ({desc[:80]})" if desc else "")
+            )
         return "\n".join(lines)
 
     tools: list[BaseTool] = [query_calendar]
@@ -56,9 +60,15 @@ def build_calendar_tools(user_id: str, context_manager: Any) -> list[BaseTool]:
     return tools
 
 
-def build_agent(llm: Any, checkpointer: Any, user_id: str = "", context_manager: Any = None):
+def build_agent(
+    llm: Any, checkpointer: Any, user_id: str = "", context_manager: Any = None
+):
     """Return a compiled CalendarAgent graph."""
-    tools = build_calendar_tools(user_id=user_id, context_manager=context_manager) if context_manager else []
+    tools = (
+        build_calendar_tools(user_id=user_id, context_manager=context_manager)
+        if context_manager
+        else []
+    )
     return create_react_agent(
         model=llm,
         tools=tools,

@@ -1,4 +1,5 @@
 """DocumentAgent — semantic search over user-uploaded documents."""
+
 from __future__ import annotations
 
 import logging
@@ -46,9 +47,15 @@ def build_document_tools(user_id: str, context_manager: Any) -> list[BaseTool]:
     return tools
 
 
-def build_agent(llm: Any, checkpointer: Any, user_id: str = "", context_manager: Any = None):
+def build_agent(
+    llm: Any, checkpointer: Any, user_id: str = "", context_manager: Any = None
+):
     """Return a compiled DocumentAgent graph."""
-    tools = build_document_tools(user_id=user_id, context_manager=context_manager) if context_manager else []
+    tools = (
+        build_document_tools(user_id=user_id, context_manager=context_manager)
+        if context_manager
+        else []
+    )
     return create_react_agent(
         model=llm,
         tools=tools,

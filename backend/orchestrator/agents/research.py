@@ -1,4 +1,5 @@
 """ResearchAgent — web search + semantic memory retrieval."""
+
 from __future__ import annotations
 
 import logging
@@ -21,11 +22,13 @@ SYSTEM_PROMPT = (
 
 def build_research_tools(user_id: str, context_manager: Any) -> list[BaseTool]:
     from services.langchain_tools import MemoryQueryTool, WebSearchTool
+
     tools: list[BaseTool] = []
 
     if getattr(settings, "TAVILY_API_KEY", None):
         try:
             from tavily import TavilyClient
+
             tavily_client = TavilyClient(api_key=settings.TAVILY_API_KEY)
             tools.append(
                 WebSearchTool(
@@ -42,9 +45,15 @@ def build_research_tools(user_id: str, context_manager: Any) -> list[BaseTool]:
     return tools
 
 
-def build_agent(llm: Any, checkpointer: Any, user_id: str = "", context_manager: Any = None):
+def build_agent(
+    llm: Any, checkpointer: Any, user_id: str = "", context_manager: Any = None
+):
     """Return a compiled ResearchAgent graph."""
-    tools = build_research_tools(user_id=user_id, context_manager=context_manager) if context_manager else []
+    tools = (
+        build_research_tools(user_id=user_id, context_manager=context_manager)
+        if context_manager
+        else []
+    )
     return create_react_agent(
         model=llm,
         tools=tools,

@@ -103,6 +103,7 @@ def build_multi_agent_graph():
     worker_llm = None
     try:
         from langchain_groq import ChatGroq
+
         routing_llm = ChatGroq(
             model="llama-3.1-8b-instant",
             api_key=SecretStr(_settings.GROQ_API_KEY),
@@ -143,15 +144,19 @@ def build_multi_agent_graph():
 async def get_checkpointer():
     """Return MemorySaver in test/development, AsyncPostgresSaver in production."""
     from langgraph.checkpoint.memory import MemorySaver
+
     if getattr(_settings, "ENVIRONMENT", "development") in ("test", "development"):
         return MemorySaver()
     try:
         from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+
         saver = await AsyncPostgresSaver.from_conn_string(_settings.database_url)
         await saver.setup()
         return saver
     except Exception as e:
-        logger.warning(f"AsyncPostgresSaver unavailable, falling back to MemorySaver: {e}")
+        logger.warning(
+            f"AsyncPostgresSaver unavailable, falling back to MemorySaver: {e}"
+        )
         return MemorySaver()
 
 
