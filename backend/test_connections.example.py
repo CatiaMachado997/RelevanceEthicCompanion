@@ -7,6 +7,7 @@ with real credentials. See backend/.env.example for required env vars.
 
 Tests connections to PostgreSQL and Weaviate.
 """
+
 import os
 import sys
 import psycopg2
@@ -25,7 +26,7 @@ def test_postgres():
             port=5432,
             database="ethic-companion",
             user="postgres",
-            password=DB_PASSWORD
+            password=DB_PASSWORD,
         )
         cursor = conn.cursor()
         cursor.execute("SELECT version();")

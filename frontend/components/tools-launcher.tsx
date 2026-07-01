@@ -16,7 +16,7 @@ import {
   Target, CheckSquare, FolderOpen, Heart, FileText, Eye, Bell,
   ArrowRight, PanelRight,
 } from "lucide-react"
-import { api, type DashboardOverview } from "@/lib/api"
+import { api, transparencyApi, type DashboardOverview } from "@/lib/api"
 
 
 interface ToolCard {
@@ -36,6 +36,24 @@ export function ToolsLauncher() {
     queryKey: ["dashboard-overview"],
     queryFn: () => api.dashboard.overview(),
   })
+  // Surface the ESL approval rate on the Transparency tile so the old
+  // "ESL activity" card on the dashboard can go away. Cheap query, not
+  // tied to the overview endpoint (kept separate to avoid bloating
+  // /overview with stats that only this tile uses).
+  const { data: eslReport } = useQuery({
+    queryKey: ["esl-report-7d"],
+    queryFn: () => transparencyApi.report(7),
+    retry: false,
+    staleTime: 5 * 60_000,
+  })
+  const approvalRate =
+    eslReport && eslReport.total_decisions > 0
+      ? Math.round(
+          (eslReport.approval_rate > 1
+            ? eslReport.approval_rate
+            : eslReport.approval_rate * 100),
+        )
+      : null
 
   const tools: ToolCard[] = [
     {
@@ -91,7 +109,9 @@ export function ToolsLauncher() {
     {
       href: "/dashboard/transparency",
       title: "Transparency",
-      subtitle: "ESL audit log",
+      // Approval rate is the most informative single number for the ESL —
+      // surfaces "is the agent over-vetoing me?" at a glance.
+      subtitle: approvalRate !== null ? `${approvalRate}% approved · 7d` : "ESL audit log",
       icon: <Eye size={16} />,
       count: overview?.esl_decisions_7d ?? null,
       unit: "decisions",

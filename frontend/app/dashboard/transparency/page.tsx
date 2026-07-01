@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { motion } from 'framer-motion'
 import {
@@ -23,6 +23,9 @@ import {
 } from '@/components/ui/select'
 import { PageHeader } from '@/components/ui/page-header'
 import { FilterChips } from '@/components/ui/filter-chips'
+import { Button } from '@/components/ui/button'
+import ToolCallsTab from '@/components/transparency/ToolCallsTab'
+import SystemHealthTab from '@/components/transparency/SystemHealthTab'
 import {
   PieChart,
   Pie,
@@ -107,12 +110,9 @@ export default function TransparencyPage() {
   const [loading, setLoading] = useState(true)
   const [days, setDays] = useState('7')
   const [statusFilter, setStatusFilter] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'esl' | 'tools' | 'health'>('esl')
 
-  useEffect(() => {
-    loadData()
-  }, [days, statusFilter])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true)
     try {
       const [reportData, logsData, insightsData, statsData] = await Promise.all([
@@ -134,7 +134,11 @@ export default function TransparencyPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [days, statusFilter])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
 
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp)
@@ -183,20 +187,66 @@ export default function TransparencyPage() {
         title="Transparency"
         subtitle="See how ESL protects you"
         action={
-          <Select value={days} onValueChange={setDays}>
-            <SelectTrigger className="w-[130px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="7">Last 7 days</SelectItem>
-              <SelectItem value="14">Last 14 days</SelectItem>
-              <SelectItem value="30">Last 30 days</SelectItem>
-            </SelectContent>
-          </Select>
+          activeTab === 'esl' ? (
+            <Select value={days} onValueChange={setDays}>
+              <SelectTrigger className="w-[130px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7">Last 7 days</SelectItem>
+                <SelectItem value="14">Last 14 days</SelectItem>
+                <SelectItem value="30">Last 30 days</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : null
         }
       />
 
-      {loading ? (
+      {/* Tabs */}
+      <div className="flex items-center gap-2 border-b border-[rgba(0,0,0,0.06)]">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => setActiveTab('esl')}
+          className={`rounded-none border-b-2 px-4 py-2 text-sm ${
+            activeTab === 'esl'
+              ? 'border-[#0a0a0a] text-[#0a0a0a]'
+              : 'border-transparent text-[#6b6b6b] hover:text-[#0a0a0a]'
+          }`}
+        >
+          ESL decisions
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => setActiveTab('tools')}
+          className={`rounded-none border-b-2 px-4 py-2 text-sm ${
+            activeTab === 'tools'
+              ? 'border-[#0a0a0a] text-[#0a0a0a]'
+              : 'border-transparent text-[#6b6b6b] hover:text-[#0a0a0a]'
+          }`}
+        >
+          Tool calls
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => setActiveTab('health')}
+          className={`rounded-none border-b-2 px-4 py-2 text-sm ${
+            activeTab === 'health'
+              ? 'border-[#0a0a0a] text-[#0a0a0a]'
+              : 'border-transparent text-[#6b6b6b] hover:text-[#0a0a0a]'
+          }`}
+        >
+          System health
+        </Button>
+      </div>
+
+      {activeTab === 'tools' ? (
+        <ToolCallsTab />
+      ) : activeTab === 'health' ? (
+        <SystemHealthTab />
+      ) : loading ? (
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             {[1, 2, 3, 4].map((i) => (
@@ -216,7 +266,7 @@ export default function TransparencyPage() {
           {report && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
               <motion.div variants={itemVariants} className="h-full">
-                <Card className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)] h-full">
+                <Card className="rounded-2xl border border-[var(--ec-card-border)] bg-[var(--ec-card-bg)] shadow-[var(--ec-card-shadow)] h-full">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">
                       Total Decisions
@@ -232,7 +282,7 @@ export default function TransparencyPage() {
                 </Card>
               </motion.div>
               <motion.div variants={itemVariants} className="h-full">
-                <Card className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)] h-full">
+                <Card className="rounded-2xl border border-[var(--ec-card-border)] bg-[var(--ec-card-bg)] shadow-[var(--ec-card-shadow)] h-full">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">
                       Approval Rate
@@ -250,7 +300,7 @@ export default function TransparencyPage() {
                 </Card>
               </motion.div>
               <motion.div variants={itemVariants} className="h-full">
-                <Card className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)] h-full">
+                <Card className="rounded-2xl border border-[var(--ec-card-border)] bg-[var(--ec-card-bg)] shadow-[var(--ec-card-shadow)] h-full">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">Protected</CardTitle>
                     <div className="w-8 h-8 rounded-xl bg-[#f5f5f5] flex items-center justify-center">
@@ -264,7 +314,7 @@ export default function TransparencyPage() {
                 </Card>
               </motion.div>
               <motion.div variants={itemVariants} className="h-full">
-                <Card className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)] h-full">
+                <Card className="rounded-2xl border border-[var(--ec-card-border)] bg-[var(--ec-card-bg)] shadow-[var(--ec-card-shadow)] h-full">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">Modified</CardTitle>
                     <div className="w-8 h-8 rounded-xl bg-[#f5f5f5] flex items-center justify-center">
@@ -355,8 +405,8 @@ export default function TransparencyPage() {
         </motion.div>
       )}
 
-      {/* Audit Log — always rendered so filter chips are accessible */}
-      <Card className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+      {activeTab === 'esl' && (
+      <Card className="rounded-2xl border border-[var(--ec-card-border)] bg-[var(--ec-card-bg)] shadow-[var(--ec-card-shadow)]">
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
@@ -434,6 +484,7 @@ export default function TransparencyPage() {
           )}
         </CardContent>
       </Card>
+      )}
     </div>
   )
 }

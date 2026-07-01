@@ -58,7 +58,9 @@ TEST_CONVERSATIONS = [
 def _load_surface(surface_path: Path) -> Optional[ModuleType]:
     """Dynamically load surface.py as a module."""
     try:
-        spec = importlib.util.spec_from_file_location("prompt_opt_surface", surface_path)
+        spec = importlib.util.spec_from_file_location(
+            "prompt_opt_surface", surface_path
+        )
         if spec is None or spec.loader is None:
             return None
         module = importlib.util.module_from_spec(spec)
@@ -184,5 +186,7 @@ def evaluate_prompts(surface_path: Path) -> Optional[float]:
         return None
 
     mean_score = sum(scores) / len(scores)
-    logger.info(f"Prompt eval complete — mean score: {mean_score:.4f} over {len(scores)} conversations")
+    logger.info(
+        f"Prompt eval complete — mean score: {mean_score:.4f} over {len(scores)} conversations"
+    )
     return mean_score

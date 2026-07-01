@@ -68,10 +68,7 @@ TEST_PAIRS = [
 
 
 def _dcg(relevances: list, k: int = 5) -> float:
-    return sum(
-        rel / math.log2(i + 2)
-        for i, rel in enumerate(relevances[:k])
-    )
+    return sum(rel / math.log2(i + 2) for i, rel in enumerate(relevances[:k]))
 
 
 def _ndcg(retrieved_texts: list, expected_keywords: list, k: int = 5) -> float:
@@ -105,6 +102,7 @@ def evaluate_context_config(surface_path: Path) -> Optional[float]:
 
     try:
         from utils.weaviate_client import get_weaviate_client
+
         wc = get_weaviate_client()
         if wc is None or not wc.is_ready():
             logger.info("Weaviate not ready — skipping context scoring trial")

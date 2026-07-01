@@ -20,7 +20,7 @@
 import { useEffect, useMemo, useState } from "react"
 import {
   Target, CheckSquare, FolderOpen, Shield, Eye, Bell, FileText,
-  Plus, FolderPlus, X, Sparkles,
+  Plus, FolderPlus, X, Sparkles, BookOpen,
 } from "lucide-react"
 import { api } from "@/lib/api"
 import { toast } from "@/lib/toast"
@@ -188,6 +188,20 @@ const COMMANDS: Command[] = [
     },
   },
   {
+    id: "ask", keyword: "ask",
+    label: "Ask your documents", description: 'e.g. "/ask what does the report say about Q1?"',
+    icon: <BookOpen size={14} />,
+    takesArgs: true,
+    argsPlaceholder: "Question — forces a grounded retrieval over your documents",
+    // The actual retrieval happens in the chat page's handleSend, which detects
+    // the `/ask ` prefix and sets force_retrieval on the stream. Here we just
+    // dispatch an event the chat page listens for so the user doesn't have to
+    // press Enter twice.
+    run: ({ input }) => {
+      window.dispatchEvent(new CustomEvent("ec:slash-submit", { detail: { message: input } }))
+    },
+  },
+  {
     id: "clear", keyword: "clear-input", aliases: ["clear"],
     label: "Clear input", description: "Empty the chat textarea",
     icon: <X size={14} />,
@@ -267,9 +281,13 @@ export function SlashCommands({ input, setInput, onClearChat, onKeyDownRef }: Pr
   const argsMode = parsed?.args !== null && parsed?.args !== undefined
   const activeArgs = parsed?.args ?? ""
 
+  // Clamp cursor if results shrink. Intentional synchronous setState —
+  // produces at most one extra render when results shorten past the cursor.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (cursor >= results.length) setCursor(Math.max(0, results.length - 1))
   }, [results.length, cursor])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Expose a keydown handler via ref so the chat page's textarea can intercept
   // arrow keys / Enter / Escape without us owning focus.

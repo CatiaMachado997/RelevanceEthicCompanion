@@ -55,9 +55,27 @@ def _provision_user(access_token: str) -> None:
 @router.get("/me", response_model=dict)
 @limiter.limit("30/minute")
 async def get_me(request: Request, user: UserPrincipal = Depends(get_current_user)):
+    # Include onboarded_at so the frontend can route first-time users into the
+    # wizard on first paint without waiting for a separate /api/onboarding/state
+    # roundtrip. Best-effort: a missing row (test fixtures, mock auth) is fine.
+    onboarded_at = None
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT onboarded_at FROM users WHERE id = %s",
+                    (user.user_id,),
+                )
+                row = cur.fetchone() or {}
+                ts = row.get("onboarded_at")
+                onboarded_at = ts.isoformat() if ts else None
+    except Exception as exc:
+        logger.warning("Failed to load onboarded_at for /me: %s", exc)
+
     return {
         "user_id": user.user_id,
         "email": user.email,
+        "onboarded_at": onboarded_at,
     }
 
 

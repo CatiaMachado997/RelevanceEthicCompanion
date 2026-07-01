@@ -7,6 +7,7 @@ import { SlidePanelHost } from '@/components/slide-panel'
 import { supabase } from '@/lib/supabase'
 import { configureApiAuth } from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
+import { useOnboardingState } from '@/hooks/useOnboardingState'
 import { useRouter, usePathname } from 'next/navigation'
 import { Menu, X, Search } from 'lucide-react'
 
@@ -55,6 +56,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [loading, isAuthenticated, router])
 
+  // First-run guard: a user who has never been onboarded AND has no data
+  // anywhere yet (no source connected, no value declared, no goal set) is
+  // pushed into the wizard. The triple-AND on the has_* flags is intentional:
+  // a returning user who skipped the wizard but later added even one value
+  // by hand should NOT be re-trapped.
+  const { data: onboarding } = useOnboardingState()
+  useEffect(() => {
+    if (loading || !isAuthenticated || !onboarding) return
+    const stillEmpty =
+      !onboarding.onboarded_at &&
+      !onboarding.has_data_source &&
+      !onboarding.has_value &&
+      !onboarding.has_goal
+    if (stillEmpty) router.replace('/onboarding')
+  }, [loading, isAuthenticated, onboarding, router])
+
   // Close mobile sidebar on route change. Intentional synchronous
   // setState — produces at most one extra render when the sidebar was
   // previously open, which is exactly the desired UX.
@@ -87,11 +104,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="absolute left-0 top-0 h-full shadow-xl">
             <div className="relative">
               <button
-                className="absolute top-3 right-[-40px] w-8 h-8 flex items-center justify-center rounded-full bg-white shadow"
+                className="absolute top-3 right-[-40px] w-8 h-8 flex items-center justify-center rounded-full shadow"
                 onClick={() => setSidebarOpen(false)}
                 aria-label="Close menu"
+                style={{ background: 'var(--ec-card-bg)', color: 'var(--ec-text)' }}
               >
-                <X size={14} style={{ color: '#1a1a1a' }} />
+                <X size={14} />
               </button>
               <SidebarNav onClose={() => setSidebarOpen(false)} />
             </div>

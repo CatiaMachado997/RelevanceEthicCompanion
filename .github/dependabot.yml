@@ -1,0 +1,67 @@
+# Dependabot keeps dependencies fresh by opening PRs against new versions.
+# We scan three ecosystems weekly: npm (frontend), pip (backend), and the
+# Actions runner itself. Security updates open PRs immediately regardless of
+# schedule; the weekly cadence is for non-security version bumps.
+#
+# Auto-merge is intentionally NOT enabled. The maintainer reviews every
+# Dependabot PR — a public release-ready project shouldn't auto-pull
+# transitive updates without a human glance at the changelog.
+
+version: 2
+updates:
+  # Next.js, React, Tailwind, Radix, React Query, …
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "07:00"
+      timezone: "Europe/Lisbon"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "frontend"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      # Roll patch-level bumps for stable deps into one PR each week so the
+      # PR list doesn't drown in micro-bumps. Majors and minors still get
+      # their own PRs.
+      patch-bumps:
+        update-types:
+          - "patch"
+
+  # FastAPI, LangGraph, psycopg, Weaviate client, …
+  - package-ecosystem: "pip"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "07:00"
+      timezone: "Europe/Lisbon"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "backend"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      patch-bumps:
+        update-types:
+          - "patch"
+
+  # GitHub Actions versions (actions/checkout, actions/setup-node, …)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "07:00"
+      timezone: "Europe/Lisbon"
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "chore(ci)"

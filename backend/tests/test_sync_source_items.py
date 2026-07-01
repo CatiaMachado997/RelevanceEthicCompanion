@@ -1,3 +1,7 @@
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
 from services.connectors.google_calendar import GoogleCalendarConnector
 from services.connectors.gmail import GmailConnector
 from services import data_ingestion
@@ -78,3 +82,28 @@ def test_sync_returns_recent_items():
     """sync_data_source return value includes a 'recent' key."""
     source = inspect.getsource(data_ingestion.DataIngestionService.sync_data_source)
     assert '"recent"' in source or "'recent'" in source
+
+
+@pytest.mark.asyncio
+@patch("services.data_ingestion.ConnectorIndexer")
+async def test_sync_routes_items_through_connector_indexer(mock_indexer_cls):
+    from services.data_ingestion import DataIngestionService
+    from services.connectors.base import SourceItem
+
+    mock_indexer = MagicMock()
+    mock_indexer.index = AsyncMock(return_value=3)
+    mock_indexer_cls.return_value = mock_indexer
+
+    cm = MagicMock()
+    svc = DataIngestionService(cm)
+    item = SourceItem(
+        user_id="00000000-0000-0000-0000-000000000000",
+        source_type="gmail",
+        source_item_type="email",
+        external_id="msg_xyz",
+        title="Test",
+        body="A body that should be indexed.",
+    )
+    await svc._maybe_embed(item, item.user_id)
+
+    mock_indexer.index.assert_awaited_once_with(item)

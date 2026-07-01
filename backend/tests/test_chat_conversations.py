@@ -19,6 +19,7 @@ TEST_USER_ID = "00000000-0000-0000-0000-000000000000"
 
 def _make_app_and_client():
     from routes.chat import router as chat_router
+
     app = FastAPI()
     app.include_router(chat_router)
     app.dependency_overrides[get_current_read_user_id] = lambda: TEST_USER_ID

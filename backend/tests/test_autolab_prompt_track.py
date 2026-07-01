@@ -1,25 +1,22 @@
 """Tests for the prompt optimisation experiment track."""
 
 import importlib.util
-import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 SURFACE_PATH = (
-    Path(__file__).parent.parent
-    / "autolab" / "tracks" / "prompt_opt" / "surface.py"
+    Path(__file__).parent.parent / "autolab" / "tracks" / "prompt_opt" / "surface.py"
 )
 EVALUATOR_PATH = (
-    Path(__file__).parent.parent
-    / "autolab" / "tracks" / "prompt_opt" / "evaluator.py"
+    Path(__file__).parent.parent / "autolab" / "tracks" / "prompt_opt" / "evaluator.py"
 )
 
 
 def _load_module(path: Path, name: str):
     spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None and spec.loader is not None, f"Could not load module from {path}"
+    assert (
+        spec is not None and spec.loader is not None
+    ), f"Could not load module from {path}"
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)  # type: ignore[union-attr]
     return module
@@ -52,6 +49,7 @@ def test_surface_config_has_required_keys():
 def test_evaluate_prompts_returns_none_without_api_key(tmp_path):
     """evaluate_prompts returns None when GROQ_API_KEY is not set."""
     import shutil
+
     shutil.copy(SURFACE_PATH, tmp_path / "surface.py")
 
     evaluator = _load_module(EVALUATOR_PATH, "prompt_opt_evaluator_nokey")
@@ -82,6 +80,7 @@ def test_evaluate_prompts_returns_none_on_bad_surface(tmp_path):
 def test_evaluate_prompts_returns_float_in_range(tmp_path):
     """evaluate_prompts returns a float in [0.0, 1.0] when Groq is mocked."""
     import shutil
+
     shutil.copy(SURFACE_PATH, tmp_path / "surface.py")
 
     evaluator = _load_module(EVALUATOR_PATH, "prompt_opt_evaluator_happy")
@@ -100,9 +99,7 @@ def test_evaluate_prompts_returns_float_in_range(tmp_path):
     # First call (assistant response) returns "Helpful response."
     # Second call (judge) returns "0.8"
     mock_client.chat.completions.create.side_effect = [
-        _make_completion("Helpful response.")
-        if i % 2 == 0
-        else _make_completion("0.8")
+        _make_completion("Helpful response.") if i % 2 == 0 else _make_completion("0.8")
         for i in range(60)  # 30 conversations × 2 calls each
     ]
 

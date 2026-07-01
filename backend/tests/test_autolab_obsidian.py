@@ -1,9 +1,6 @@
 """Tests for Obsidian vault client with fallback."""
 
 import json
-import os
-import tempfile
-from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest

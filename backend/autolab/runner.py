@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 class TrialOutcome(str, Enum):
     WIN = "WIN"
     LOSS = "LOSS"
-    SKIP = "SKIP"   # evaluator returned None (dependency unavailable)
+    SKIP = "SKIP"  # evaluator returned None (dependency unavailable)
     ERROR = "ERROR"  # diff apply failed or evaluator crashed
 
 
@@ -80,7 +80,9 @@ class HillClimbingRunner:
             return TrialOutcome.SKIP
         if self.baseline_score is None:
             self.baseline_score = current_score
-            logger.info(f"[{self.track_name}] Initial baseline: {self.baseline_score:.4f}")
+            logger.info(
+                f"[{self.track_name}] Initial baseline: {self.baseline_score:.4f}"
+            )
 
         # Ask Claude for a diff
         try:
@@ -110,14 +112,14 @@ class HillClimbingRunner:
 
         if new_score > self.baseline_score:
             outcome = TrialOutcome.WIN
-            old_baseline = self.baseline_score          # capture before updating
+            old_baseline = self.baseline_score  # capture before updating
             self.baseline_score = new_score
             result = ExperimentResult(
                 track=self.track_name,
                 trial=trial_num,
                 score=new_score,
-                baseline=old_baseline,                  # pre-update baseline
-                delta=new_score - old_baseline,         # correct delta
+                baseline=old_baseline,  # pre-update baseline
+                delta=new_score - old_baseline,  # correct delta
                 outcome=outcome.value,
                 hypothesis=hypothesis,
             )
@@ -200,9 +202,8 @@ class HillClimbingRunner:
     def _apply_diff(self, diff: str) -> None:
         """Apply a unified diff to surface_path using the `patch` CLI tool."""
         import os
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".patch", delete=False
-        ) as f:
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".patch", delete=False) as f:
             f.write(diff)
             patch_file = f.name
         try:

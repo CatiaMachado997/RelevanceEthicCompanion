@@ -8,7 +8,7 @@ like event summaries for meetings starting soon.
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 from services.context_manager import ContextManager
 
@@ -62,7 +62,7 @@ async def scan(
             user_id=str(user_id),
             window_minutes=window_minutes,
             results=results,
-            scanned_at=datetime.utcnow().isoformat(),
+            scanned_at=datetime.now(timezone.utc).isoformat(),
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Scan failed: {e}")

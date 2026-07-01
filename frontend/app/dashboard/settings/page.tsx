@@ -41,7 +41,11 @@ function ToggleRow({
         <Label className="text-sm font-medium" style={{ color: '#0a0a0a' }}>{label}</Label>
         <p className="text-xs mt-0.5" style={{ color: '#9e9e9e' }}>{description}</p>
       </div>
-      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+      <Switch
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+        aria-label={label}
+      />
     </div>
   )
 }

@@ -29,25 +29,25 @@ export function SecondarySidebar({
   return (
     <aside
       className={cn(
-        "hidden lg:flex flex-col h-screen w-80 bg-white border-r border-[#E5E5E5] shrink-0",
+        "hidden lg:flex flex-col h-screen w-80 bg-[var(--ec-sidebar-bg)] border-r border-[var(--ec-sidebar-border)] shrink-0",
         className
       )}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-6 h-20 border-b border-[#E5E5E5]">
-        <h2 className="text-lg font-semibold text-[#171717]">{title}</h2>
+      <div className="flex items-center justify-between px-6 h-20 border-b border-[var(--ec-sidebar-border)]">
+        <h2 className="text-lg font-semibold text-[var(--ec-text)]">{title}</h2>
         {action}
       </div>
 
       {/* Search */}
       {showSearch && (
-        <div className="px-4 py-3 border-b border-[#E5E5E5]">
+        <div className="px-4 py-3 border-b border-[var(--ec-sidebar-border)]">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#A3A3A3]" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--ec-text-subtle)]" />
             <Input
               placeholder={searchPlaceholder}
               onChange={(e) => onSearch?.(e.target.value)}
-              className="pl-10 bg-[#FAFAFA] border-[#E5E5E5] rounded-full h-10"
+              className="pl-10 bg-[var(--ec-surface-2)] border-[var(--ec-card-border)] rounded-full h-10"
             />
           </div>
         </div>
@@ -60,7 +60,7 @@ export function SecondarySidebar({
 
       {/* Footer */}
       {footer && (
-        <div className="px-4 py-4 border-t border-[#E5E5E5]">
+        <div className="px-4 py-4 border-t border-[var(--ec-sidebar-border)]">
           {footer}
         </div>
       )}
@@ -85,7 +85,7 @@ export function SecondarySidebarSection({
       {(title || action) && (
         <div className="flex items-center justify-between mb-3">
           {title && (
-            <h3 className="text-xs font-semibold text-[#171717] uppercase tracking-wider">
+            <h3 className="text-xs font-semibold text-[var(--ec-text)] uppercase tracking-wider">
               {title}
             </h3>
           )}
@@ -117,8 +117,8 @@ export function SecondarySidebarNavItem({
       className={cn(
         "flex items-center justify-between w-full px-3 py-2.5 rounded-lg text-sm transition-all duration-150",
         isActive
-          ? "bg-[#171717]/10 text-[#171717] font-medium"
-          : "text-[#525252] hover:bg-[#F5F5F5]"
+          ? "bg-[var(--ec-sidebar-active)] text-[var(--ec-sidebar-text)] font-medium"
+          : "text-[var(--ec-text-muted)] hover:bg-[var(--ec-surface-2)]"
       )}
     >
       <div className="flex items-center gap-3">
@@ -129,7 +129,9 @@ export function SecondarySidebarNavItem({
         <span
           className={cn(
             "text-xs font-medium px-2 py-0.5 rounded-full",
-            isActive ? "bg-[#171717] text-white" : "bg-[#F5F5F5] text-[#171717]"
+            isActive
+              ? "bg-[var(--ec-text)] text-[var(--ec-card-bg)]"
+              : "bg-[var(--ec-surface-2)] text-[var(--ec-text)]"
           )}
         >
           {count}

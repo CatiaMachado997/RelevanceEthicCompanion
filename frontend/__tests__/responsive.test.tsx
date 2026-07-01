@@ -30,6 +30,16 @@ jest.mock('../components/top-bar', () => ({
   },
 }))
 
+// CommandPalette + SlidePanelHost both pull in @tanstack/react-query
+// (folder/conversation queries) which would need a QueryClientProvider
+// at render time. This test only cares about layout chrome, so stub them.
+jest.mock('../components/command-palette', () => ({
+  CommandPalette: () => null,
+}))
+jest.mock('../components/slide-panel', () => ({
+  SlidePanelHost: () => null,
+}))
+
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn() }),
   usePathname: () => '/dashboard',

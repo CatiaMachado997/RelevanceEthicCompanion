@@ -25,27 +25,65 @@ def _run_esl_with_config(action, config) -> str:
     from esl.models import ESLDecisionStatus
 
     metadata = action.metadata
-    engagement_metrics = ["click_rate", "time_in_app", "daily_active", "session_length", "retention_boost"]
-    assistance_metrics = ["goal_relevance", "user_request", "time_saving", "clarity_improvement"]
+    engagement_metrics = [
+        "click_rate",
+        "time_in_app",
+        "daily_active",
+        "session_length",
+        "retention_boost",
+    ]
+    assistance_metrics = [
+        "goal_relevance",
+        "user_request",
+        "time_saving",
+        "clarity_improvement",
+    ]
 
     engagement_count = sum(1 for m in engagement_metrics if m in metadata)
     engagement_score = engagement_count / len(engagement_metrics)
-    goal_relevance_score = 1.0 if any(m in metadata for m in assistance_metrics) else 0.0
+    goal_relevance_score = (
+        1.0 if any(m in metadata for m in assistance_metrics) else 0.0
+    )
 
     # Check engagement threshold
-    if engagement_score > config.engagement_score_threshold and goal_relevance_score < config.goal_relevance_min:
+    if (
+        engagement_score > config.engagement_score_threshold
+        and goal_relevance_score < config.goal_relevance_min
+    ):
         return ESLDecisionStatus.VETOED
 
     # Check critical urgency
-    if action.urgency == "critical" and goal_relevance_score < config.critical_urgency_relevance_min:
+    if (
+        action.urgency == "critical"
+        and goal_relevance_score < config.critical_urgency_relevance_min
+    ):
         return ESLDecisionStatus.MODIFIED
 
     # Check manipulation (requires >= manipulation_signal_threshold distinct signals)
     import re
+
     content_lower = (action.content or "").lower()
-    fomo_patterns = [r"don't miss out", r"last chance", r"everyone else", r"you're missing", r"limited time", r"act now", r"before it's gone"]
-    urgency_patterns = [r"urgent(?!.*meeting)", r"act immediately", r"right now", r"can't wait"]
-    guilt_patterns = [r"you should have", r"you forgot", r"you haven't", r"disappointing"]
+    fomo_patterns = [
+        r"don't miss out",
+        r"last chance",
+        r"everyone else",
+        r"you're missing",
+        r"limited time",
+        r"act now",
+        r"before it's gone",
+    ]
+    urgency_patterns = [
+        r"urgent(?!.*meeting)",
+        r"act immediately",
+        r"right now",
+        r"can't wait",
+    ]
+    guilt_patterns = [
+        r"you should have",
+        r"you forgot",
+        r"you haven't",
+        r"disappointing",
+    ]
     violations = []
     for p in fomo_patterns:
         if re.search(p, content_lower):
@@ -71,7 +109,11 @@ def _macro_f1(y_true: list, y_pred: list, classes: list) -> float:
         fn = sum(1 for t, p in zip(y_true, y_pred) if t == cls and p != cls)
         precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-        f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
+        f1 = (
+            (2 * precision * recall / (precision + recall))
+            if (precision + recall) > 0
+            else 0.0
+        )
         f1s.append(f1)
     return sum(f1s) / len(f1s) if f1s else 0.0
 
@@ -100,5 +142,9 @@ def evaluate_esl_config(surface_path: Path) -> Optional[float]:
         y_true.append(CLASS_MAP[scenario.expected])
         y_pred.append(predicted)
 
-    classes = [ESLDecisionStatus.APPROVED, ESLDecisionStatus.VETOED, ESLDecisionStatus.MODIFIED]
+    classes = [
+        ESLDecisionStatus.APPROVED,
+        ESLDecisionStatus.VETOED,
+        ESLDecisionStatus.MODIFIED,
+    ]
     return _macro_f1(y_true, y_pred, classes)

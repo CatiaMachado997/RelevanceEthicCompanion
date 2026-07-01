@@ -60,7 +60,11 @@ class GmailSync:
         }
 
     def fetch_messages(
-        self, access_token: str, refresh_token: str, max_results: int = 50
+        self,
+        access_token: str,
+        refresh_token: str,
+        max_results: int = 50,
+        query: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Fetch recent emails (subject + snippet only, no body)"""
         creds = Credentials(
@@ -75,12 +79,14 @@ class GmailSync:
             creds.refresh(Request())
 
         service = build("gmail", "v1", credentials=creds)
-        result = (
-            service.users()
-            .messages()
-            .list(userId="me", maxResults=max_results, labelIds=["INBOX"])
-            .execute()
-        )
+        list_kwargs: Dict[str, Any] = {
+            "userId": "me",
+            "maxResults": max_results,
+            "labelIds": ["INBOX"],
+        }
+        if query:
+            list_kwargs["q"] = query
+        result = service.users().messages().list(**list_kwargs).execute()
 
         messages = []
         for msg in result.get("messages", []):

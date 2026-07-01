@@ -1,4 +1,5 @@
 """AutoResearch experiment routes."""
+
 from __future__ import annotations
 
 import json
@@ -11,7 +12,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from autolab.config import settings as autolab_settings
-from autolab.obsidian import ObsidianClient, ExperimentResult
+from autolab.obsidian import ObsidianClient
 
 router = APIRouter(prefix="/api/autolab", tags=["AutoLab"])
 logger = logging.getLogger(__name__)
@@ -29,6 +30,7 @@ SURFACE_PATHS = {
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _fallback_dir() -> Path:
     """Return the fallback results directory as a Path object."""
@@ -74,7 +76,8 @@ def _read_track_results(track: str) -> list[dict]:
             obj = json.loads(best_path.read_text())
             # Only add if not already present via JSONL
             if not any(
-                r.get("trial") == obj.get("trial") and r.get("track") == obj.get("track")
+                r.get("trial") == obj.get("trial")
+                and r.get("track") == obj.get("track")
                 for r in results
             ):
                 results.append(obj)
@@ -115,12 +118,15 @@ def _track_status(track: str) -> dict:
 def _get_evaluate_fn(track: str):
     if track == "esl_tuning":
         from autolab.tracks.esl_tuning.evaluator import evaluate_esl_config
+
         return evaluate_esl_config
     elif track == "prompt_opt":
         from autolab.tracks.prompt_opt.evaluator import evaluate_prompts
+
         return evaluate_prompts
     elif track == "context_scoring":
         from autolab.tracks.context_scoring.evaluator import evaluate_context_scoring
+
         return evaluate_context_scoring
     return None
 
@@ -137,6 +143,7 @@ def _obsidian_client() -> ObsidianClient:
 # ---------------------------------------------------------------------------
 # Background task
 # ---------------------------------------------------------------------------
+
 
 def _run_experiment(track: str, max_trials: int) -> None:
     """Run hill-climbing experiment in the background."""
@@ -164,12 +171,15 @@ def _run_experiment(track: str, max_trials: int) -> None:
         summary = runner.run(max_trials=max_trials)
         logger.info(f"[autolab] Run complete for '{track}': {summary}")
     except Exception as exc:
-        logger.error(f"[autolab] Background run failed for '{track}': {exc}", exc_info=True)
+        logger.error(
+            f"[autolab] Background run failed for '{track}': {exc}", exc_info=True
+        )
 
 
 # ---------------------------------------------------------------------------
 # Request models
 # ---------------------------------------------------------------------------
+
 
 class RunRequest(BaseModel):
     track: str
@@ -179,6 +189,7 @@ class RunRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
 
 @router.get("/status")
 async def get_autolab_status() -> dict:
@@ -251,13 +262,15 @@ async def get_insights() -> dict:
 
         # Collect recent results across all tracks
         for r in results:
-            recent_experiments.append({
-                "track": r.get("track", track),
-                "trial": r.get("trial"),
-                "score": r.get("score"),
-                "outcome": r.get("outcome"),
-                "hypothesis": r.get("hypothesis", ""),
-            })
+            recent_experiments.append(
+                {
+                    "track": r.get("track", track),
+                    "trial": r.get("trial"),
+                    "score": r.get("score"),
+                    "outcome": r.get("outcome"),
+                    "hypothesis": r.get("hypothesis", ""),
+                }
+            )
 
     # Sort recent experiments by trial descending, take top 10
     try:
@@ -270,6 +283,7 @@ async def get_insights() -> dict:
     daily_insight = "Check back later for your daily insight."
     try:
         from routes.insight import router as _insight_router  # noqa: F401
+
         # We can't call the endpoint directly without a real request/auth context,
         # so we use a static placeholder when the import succeeds but we cannot invoke it.
         daily_insight = "Your AI companion is gathering today's insights."

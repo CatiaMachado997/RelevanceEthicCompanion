@@ -20,7 +20,8 @@ async def test_store_conversation_turn(mock_db):
     call_args = mock_cur.execute.call_args[0]
     assert "INSERT INTO conversation_turns" in call_args[0]
     params = call_args[1]
-    assert params == ("00000000-0000-0000-0000-000000000000", "user", "Hello")
+    # Includes the JSONB metadata column (defaults to "{}" when not provided).
+    assert params == ("00000000-0000-0000-0000-000000000000", "user", "Hello", "{}")
 
 
 @pytest.mark.asyncio

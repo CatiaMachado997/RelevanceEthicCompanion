@@ -35,7 +35,11 @@ def test_runner_keeps_improvement(tmp_path):
     runner.baseline_score = 0.80
 
     # Mock the LLM diff proposal to increment VALUE
-    with patch.object(runner, "_propose_diff", return_value="--- a/surface.py\n+++ b/surface.py\n@@ -1,2 +1,2 @@\n # surface\n-VALUE = 1\n+VALUE = 2\n"):
+    with patch.object(
+        runner,
+        "_propose_diff",
+        return_value="--- a/surface.py\n+++ b/surface.py\n@@ -1,2 +1,2 @@\n # surface\n-VALUE = 1\n+VALUE = 2\n",
+    ):
         outcome = runner.run_one_trial(trial_num=1)
 
     assert outcome == TrialOutcome.WIN
@@ -51,7 +55,11 @@ def test_runner_reverts_regression(tmp_path):
     runner.baseline_score = 0.80
     original_content = (tmp_path / "surface.py").read_text()
 
-    with patch.object(runner, "_propose_diff", return_value="--- a/surface.py\n+++ b/surface.py\n@@ -1,2 +1,2 @@\n # surface\n-VALUE = 1\n+VALUE = 0\n"):
+    with patch.object(
+        runner,
+        "_propose_diff",
+        return_value="--- a/surface.py\n+++ b/surface.py\n@@ -1,2 +1,2 @@\n # surface\n-VALUE = 1\n+VALUE = 0\n",
+    ):
         outcome = runner.run_one_trial(trial_num=1)
 
     assert outcome == TrialOutcome.LOSS
@@ -81,7 +89,11 @@ def test_runner_skips_on_none_score(tmp_path):
     (tmp_path / "program.md").write_text("Optimize.\n")
     runner.baseline_score = 0.80
 
-    with patch.object(runner, "_propose_diff", return_value="--- a/surface.py\n+++ b/surface.py\n@@ -1 +1 @@\n-VALUE = 1\n+VALUE = 2\n"):
+    with patch.object(
+        runner,
+        "_propose_diff",
+        return_value="--- a/surface.py\n+++ b/surface.py\n@@ -1 +1 @@\n-VALUE = 1\n+VALUE = 2\n",
+    ):
         outcome = runner.run_one_trial(trial_num=1)
 
     assert outcome == TrialOutcome.SKIP
@@ -93,10 +105,14 @@ def test_runner_win_result_has_correct_baseline_and_delta(tmp_path):
     runner, obsidian = _make_runner(tmp_path, [0.80, 0.85])
     runner.baseline_score = 0.80
 
-    with patch.object(runner, "_propose_diff", return_value="--- a/surface.py\n+++ b/surface.py\n@@ -1,2 +1,2 @@\n # surface\n-VALUE = 1\n+VALUE = 2\n"):
+    with patch.object(
+        runner,
+        "_propose_diff",
+        return_value="--- a/surface.py\n+++ b/surface.py\n@@ -1,2 +1,2 @@\n # surface\n-VALUE = 1\n+VALUE = 2\n",
+    ):
         runner.run_one_trial(trial_num=1)
 
     call_args = obsidian.log_result.call_args[0][0]
-    assert call_args.baseline == pytest.approx(0.80)   # pre-update baseline
-    assert call_args.delta == pytest.approx(0.05)       # 0.85 - 0.80
+    assert call_args.baseline == pytest.approx(0.80)  # pre-update baseline
+    assert call_args.delta == pytest.approx(0.05)  # 0.85 - 0.80
     assert call_args.score == pytest.approx(0.85)

@@ -22,13 +22,13 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ExperimentResult:
-    track: str            # "esl_tuning" | "prompt_opt" | "context_scoring"
+    track: str  # "esl_tuning" | "prompt_opt" | "context_scoring"
     trial: int
     score: float
     baseline: float
-    delta: float          # score - baseline (positive = improvement)
-    outcome: str          # "WIN" | "LOSS"
-    hypothesis: str       # one-line description of the change made
+    delta: float  # score - baseline (positive = improvement)
+    outcome: str  # "WIN" | "LOSS"
+    hypothesis: str  # one-line description of the change made
     timestamp: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -50,7 +50,9 @@ class ObsidianClient:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.vault_path = vault_path.strip("/")
-        self.fallback_dir = Path(fallback_dir) if fallback_dir else Path(__file__).parent / "results"
+        self.fallback_dir = (
+            Path(fallback_dir) if fallback_dir else Path(__file__).parent / "results"
+        )
         self._headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "text/markdown",

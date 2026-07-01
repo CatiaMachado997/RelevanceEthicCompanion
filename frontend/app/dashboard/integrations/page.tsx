@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { dataSourcesApi, toolMarketplaceApi, ToolDefinition, ConnectedTool } from '@/lib/api'
+import { toolMarketplaceApi, ToolDefinition, ConnectedTool, connectorsApi, ConnectorIndexStatus } from '@/lib/api'
 import { CatalogueCard } from '@/components/CatalogueCard'
 import { RefreshCw, CheckCircle2, AlertCircle, Zap, Plug } from 'lucide-react'
+import { toast } from '@/lib/toast'
 
-type SourceType = 'google_calendar' | 'gmail' | 'slack'
+type SourceType = 'google_calendar' | 'gmail' | 'slack' | 'github' | 'notion'
 
 interface ConnectedSource {
   source_type: string
@@ -52,6 +53,26 @@ const INTEGRATIONS = [
     borderColor: '#dfc6e5',
     benefits: ['Channel context', 'Team sentiment', 'Collaboration insights'],
   },
+  {
+    type: 'github' as SourceType,
+    label: 'GitHub',
+    description: 'Read issues and PRs so ESL understands your development context and workload.',
+    icon: GitHubIcon,
+    accentColor: '#24292e',
+    bgGradient: 'linear-gradient(135deg, #f0f0f0 0%, #f9f9f9 100%)',
+    borderColor: '#d0d0d0',
+    benefits: ['Issue context', 'PR awareness', 'Workload tracking'],
+  },
+  {
+    type: 'notion' as SourceType,
+    label: 'Notion',
+    description: 'Surface notes and pages so ESL can factor your knowledge base into recommendations.',
+    icon: NotionIcon,
+    accentColor: '#000000',
+    bgGradient: 'linear-gradient(135deg, #f0f0f0 0%, #f9f9f9 100%)',
+    borderColor: '#d0d0d0',
+    benefits: ['Knowledge context', 'Notes awareness', 'Page search'],
+  },
 ]
 
 // SVG icons for each service
@@ -84,6 +105,27 @@ function SlackIcon({ size = 20 }: { size?: number }) {
       <path d="M10 10.5H9a2 2 0 010-4h1a2 2 0 010 4z" fill="#36c5f0"/>
       <path d="M17.5 9.5a2 2 0 012 2v1a2 2 0 11-4 0v-1a2 2 0 012-2z" fill="#2eb67d"/>
       <path d="M14 13.5h1a2 2 0 010 4h-1a2 2 0 010-4z" fill="#ecb22e"/>
+    </svg>
+  )
+}
+
+function GitHubIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path fillRule="evenodd" clipRule="evenodd"
+        d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.342-3.369-1.342-.454-1.155-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"
+        fill="#24292e"/>
+    </svg>
+  )
+}
+
+function NotionIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="3" width="18" height="18" rx="3" fill="white" stroke="#e5e5e5" strokeWidth="1.5"/>
+      <path d="M7 7h6.5l3.5 3.5V17H7V7z" fill="#f7f6f3" stroke="#e5e5e5" strokeWidth="1"/>
+      <path d="M13.5 7v3.5H17" stroke="#e5e5e5" strokeWidth="1"/>
+      <path d="M9 11h6M9 13h4" stroke="#333" strokeWidth="1.2" strokeLinecap="round"/>
     </svg>
   )
 }
@@ -137,12 +179,120 @@ function StatusBadge({ status }: { status: ConnectedSource['status'] }) {
   )
 }
 
+function ConnectorStatusFooter({ source, label }: { source: SourceType; label: string }) {
+  const [status, setStatus] = useState<ConnectorIndexStatus | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [reindexing, setReindexing] = useState(false)
+
+  const fetchStatus = async () => {
+    try {
+      const s = await connectorsApi.getStatus(source)
+      setStatus(s)
+    } catch (e) {
+      console.error(`[connectors] failed to load status for ${source}`, e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchStatus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source])
+
+  const handleReindex = async () => {
+    setReindexing(true)
+    try {
+      const result = await connectorsApi.reindex(source)
+      toast.success(
+        `Reindex complete for ${label}`,
+        `${result.processed} processed · ${result.succeeded} succeeded · ${result.failed} failed`,
+      )
+      await fetchStatus()
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error'
+      toast.error(`Reindex failed for ${label}`, msg)
+    } finally {
+      setReindexing(false)
+    }
+  }
+
+  if (loading) return null
+  if (!status || status.total_items === 0) return null
+
+  const reindexNeeded = status.failed > 0 || status.pending > 0
+
+  return (
+    <div className="mt-3 pt-3" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3 text-[11px]" style={{ color: '#6b6b6b' }}>
+          <span>
+            <span className="font-semibold" style={{ color: '#1a1a1a' }}>{status.total_items}</span> synced
+          </span>
+          <span style={{ color: '#cfcfcf' }}>•</span>
+          <span>
+            <span className="font-semibold" style={{ color: '#2d6a4f' }}>{status.indexed}</span> indexed
+          </span>
+          {status.failed > 0 && (
+            <>
+              <span style={{ color: '#cfcfcf' }}>•</span>
+              <span>
+                <span className="font-semibold" style={{ color: '#B04A3A' }}>{status.failed}</span> failed
+              </span>
+            </>
+          )}
+          {status.pending > 0 && (
+            <>
+              <span style={{ color: '#cfcfcf' }}>•</span>
+              <span>
+                <span className="font-semibold">{status.pending}</span> pending
+              </span>
+            </>
+          )}
+        </div>
+        <button
+          onClick={handleReindex}
+          disabled={reindexing || !reindexNeeded}
+          title={!reindexNeeded ? 'Nothing to reindex.' : undefined}
+          className="px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(0,0,0,0.1)', color: '#6b6b6b' }}
+        >
+          {reindexing ? 'Reindexing…' : 'Reindex'}
+        </button>
+      </div>
+      {status.last_error && (
+        <div className="mt-2 rounded-md p-2" style={{ background: '#fdf2f0', border: '1px solid #f5d0c8' }}>
+          <div className="text-[9px] font-semibold uppercase tracking-wide mb-0.5" style={{ color: '#B04A3A' }}>
+            Last error
+          </div>
+          <code className="text-[10px] font-mono break-all" style={{ color: '#7a3024' }}>
+            {status.last_error}
+          </code>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function IntegrationsContent() {
   const [connected, setConnected] = useState<ConnectedSource[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState<SourceType | null>(null)
   const [flash, setFlash] = useState<SourceType | null>(null)
   const [errorFlash, setErrorFlash] = useState<string | null>(null)
+  // Sprint H Task 2: when OAuth bounces a user from /onboarding back here,
+  // we surface a "Continue setup" banner that links them to step 1. The
+  // marker is set in StepConnect before redirecting to OAuth.
+  const [resumeOnboarding, setResumeOnboarding] = useState(false)
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('ec_onboarding_in_progress') === '1') {
+        setResumeOnboarding(true)
+      }
+    } catch {
+      // localStorage may be disabled — non-fatal.
+    }
+  }, [])
   const [stats, setStats] = useState<Record<string, number>>({})
   const [catalogue, setCatalogue] = useState<ToolDefinition[]>([])
   const [connectedTools, setConnectedTools] = useState<ConnectedTool[]>([])
@@ -158,15 +308,24 @@ function IntegrationsContent() {
 
   const loadConnected = async () => {
     try {
-      const r = await dataSourcesApi.list()
+      const conn = await toolMarketplaceApi.getConnected()
       if (!mountedRef.current) return
-      setConnected((r.sources ?? []) as ConnectedSource[])
-      try {
-        const s = await dataSourcesApi.stats()
-        if (mountedRef.current) setStats(s)
-      } catch {
-        // stats are non-critical
+      const toolIdToSourceType: Record<string, SourceType> = {
+        gmail_write: 'gmail',
+        google_calendar_write: 'google_calendar',
+        slack: 'slack',
+        github: 'github',
+        notion: 'notion',
       }
+      const sources: ConnectedSource[] = conn
+        .filter(c => c.tool_id in toolIdToSourceType && c.enabled)
+        .map(c => ({
+          source_type: toolIdToSourceType[c.tool_id],
+          enabled: true,
+          status: 'synced' as const,
+          last_sync: c.last_used_at ?? null,
+        }))
+      setConnected(sources)
     } catch (e) {
       console.error(e)
     } finally {
@@ -227,21 +386,29 @@ function IntegrationsContent() {
   }
   const lastSync = (type: SourceType) => sourceData(type)?.last_sync
 
+  const toolIdMap: Record<SourceType, string> = {
+    gmail: 'gmail_write',
+    google_calendar: 'google_calendar_write',
+    slack: 'slack',
+    github: 'github',
+    notion: 'notion',
+  }
+
   const handleConnect = async (type: SourceType) => {
     try {
-      const { authorization_url } = await dataSourcesApi.getAuthUrl(type)
-      window.location.href = authorization_url
+      const url = await toolMarketplaceApi.connectComposio(toolIdMap[type])
+      if (url) window.location.href = url
     } catch (e) {
       console.error(e)
       const label = INTEGRATIONS.find(i => i.type === type)?.label ?? type
-      setErrorFlash(`Could not start ${label} connection. Make sure you're signed in and try again.`)
+      setErrorFlash(`Could not start ${label} connection. Make sure the backend is running.`)
       setTimeout(() => setErrorFlash(null), 6000)
     }
   }
 
   const handleDisconnect = async (type: SourceType) => {
     try {
-      await dataSourcesApi.disconnect(type)
+      await toolMarketplaceApi.disconnect(toolIdMap[type])
       setConnected(prev => prev.filter(s => s.source_type !== type))
     } catch (e) {
       console.error(e)
@@ -251,10 +418,10 @@ function IntegrationsContent() {
   const handleSync = async (type: SourceType) => {
     setSyncing(type)
     try {
-      await dataSourcesApi.sync(type)
-    } catch (e) {
+      await toolMarketplaceApi.syncTool(toolIdMap[type])
+    } catch {
       const label = INTEGRATIONS.find(i => i.type === type)?.label ?? type
-      setErrorFlash(`Sync failed for ${label}. If the problem persists, try reconnecting.`)
+      setErrorFlash(`Sync failed for ${label}.`)
       setTimeout(() => setErrorFlash(null), 6000)
     } finally {
       setSyncing(null)
@@ -264,11 +431,11 @@ function IntegrationsContent() {
 
   const handleReconnect = async (type: SourceType) => {
     try {
-      const { authorization_url } = await dataSourcesApi.getAuthUrl(type)
-      window.location.href = authorization_url
-    } catch (e) {
+      const url = await toolMarketplaceApi.connectComposio(toolIdMap[type])
+      if (url) window.location.href = url
+    } catch {
       const label = INTEGRATIONS.find(i => i.type === type)?.label ?? type
-      setErrorFlash(`Could not start ${label} reconnection. Make sure you're signed in and try again.`)
+      setErrorFlash(`Could not start ${label} reconnection. Make sure the backend is running.`)
       setTimeout(() => setErrorFlash(null), 6000)
     }
   }
@@ -331,6 +498,27 @@ function IntegrationsContent() {
           </div>
         )}
       </div>
+
+      {/* Sprint H — onboarding resume banner */}
+      {resumeOnboarding && (
+        <div
+          className="flex items-center justify-between gap-2 px-4 py-3 rounded-xl text-sm"
+          style={{
+            background: 'rgba(74,124,89,0.08)',
+            border: '1px solid rgba(74,124,89,0.25)',
+            color: '#2d6a4f',
+          }}
+        >
+          <span>Almost done with setup — pick up where you left off.</span>
+          <a
+            href="/onboarding?step=1"
+            className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-opacity hover:opacity-90"
+            style={{ background: '#4A7C59', color: '#ffffff' }}
+          >
+            Continue setup →
+          </a>
+        </div>
+      )}
 
       {/* Flash success banner */}
       {flash && (
@@ -496,6 +684,9 @@ function IntegrationsContent() {
                     )}
                   </div>
                 </div>
+
+                {/* Connector index status footer — only shown when connected */}
+                {isConn && <ConnectorStatusFooter source={type} label={label} />}
 
                 {/* Benefits row — only shown when not connected */}
                 {!isConn && (

@@ -1,8 +1,5 @@
 """Tests for the ESL tuning track evaluator."""
 
-import pytest
-from pathlib import Path
-
 from autolab.tracks.esl_tuning.surface import ESLConfig
 from autolab.tracks.esl_tuning.evaluator import evaluate_esl_config
 from autolab.tracks.esl_tuning.benchmark import BENCHMARK_SCENARIOS, ExpectedOutcome
@@ -16,7 +13,9 @@ def test_esl_config_defaults():
 
 
 def test_benchmark_has_required_counts():
-    approved = [s for s in BENCHMARK_SCENARIOS if s.expected == ExpectedOutcome.APPROVED]
+    approved = [
+        s for s in BENCHMARK_SCENARIOS if s.expected == ExpectedOutcome.APPROVED
+    ]
     vetoed = [s for s in BENCHMARK_SCENARIOS if s.expected == ExpectedOutcome.VETOED]
     assert len(approved) >= 80
     assert len(vetoed) >= 30

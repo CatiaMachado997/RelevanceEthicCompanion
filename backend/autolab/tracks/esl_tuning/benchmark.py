@@ -7,7 +7,7 @@ Used by the evaluator to compute macro F1.
 
 from dataclasses import dataclass
 from enum import Enum
-from esl.models import ProposedAction, ActionType, UrgencyLevel
+from esl.models import ProposedAction
 
 
 class ExpectedOutcome(str, Enum):

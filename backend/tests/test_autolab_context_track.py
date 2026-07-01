@@ -1,12 +1,14 @@
 """Tests for the context scoring track."""
 
-import math
 import pytest
-from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 from autolab.tracks.context_scoring.surface import WeaviateConfig
-from autolab.tracks.context_scoring.evaluator import _ndcg, _dcg, evaluate_context_config
+from autolab.tracks.context_scoring.evaluator import (
+    _ndcg,
+    _dcg,
+    evaluate_context_config,
+)
 
 
 def test_weaviate_config_defaults():
@@ -32,7 +34,6 @@ def test_ndcg_perfect_retrieval():
 
 def test_evaluate_returns_none_when_weaviate_down(tmp_path):
     """evaluate_context_config returns None gracefully when Weaviate is unavailable."""
-    import sys
     surface_path = tmp_path / "surface.py"
     surface_path.write_text(
         "from autolab.tracks.context_scoring.surface import WeaviateConfig\nconfig = WeaviateConfig()\n"

@@ -20,11 +20,11 @@ from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 from utils.db import get_db_connection
 from utils.rate_limit import limiter
 
-
 router = APIRouter(prefix="/api/folders", tags=["Folders"])
 
 
 # ─── Request / Response models ──────────────────────────────────────────
+
 
 class FolderCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=80)
@@ -39,10 +39,13 @@ class FolderUpdate(BaseModel):
 
 
 class MoveConversationRequest(BaseModel):
-    folder_id: Optional[str] = Field(None, description="Target folder UUID, or null to un-folder")
+    folder_id: Optional[str] = Field(
+        None, description="Target folder UUID, or null to un-folder"
+    )
 
 
 # ─── Helpers ────────────────────────────────────────────────────────────
+
 
 def _serialize_folder(row) -> dict:
     return {
@@ -57,6 +60,7 @@ def _serialize_folder(row) -> dict:
 
 # ─── Endpoints ──────────────────────────────────────────────────────────
 
+
 @router.get("")
 async def list_folders(
     user_id: str = Depends(get_current_read_user_id),
@@ -64,12 +68,15 @@ async def list_folders(
     """List all folders for the current user, ordered by position then created_at."""
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT id, name, color, position, created_at, updated_at
                 FROM folders
                 WHERE user_id = %s
                 ORDER BY position ASC, created_at ASC
-            """, (user_id,))
+            """,
+                (user_id,),
+            )
             rows = cur.fetchall()
     return {"folders": [_serialize_folder(r) for r in rows]}
 
@@ -90,16 +97,20 @@ async def create_folder(
                     "SELECT COALESCE(MAX(position), -1) + 1 AS next_pos FROM folders WHERE user_id = %s",
                     (user_id,),
                 )
-                next_pos = cur.fetchone()["next_pos"]
+                row = cur.fetchone()
+                next_pos = row["next_pos"] if row else 0
             else:
                 next_pos = body.position
 
             try:
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO folders (user_id, name, color, position)
                     VALUES (%s, %s, %s, %s)
                     RETURNING id, name, color, position, created_at, updated_at
-                """, (user_id, body.name.strip(), body.color, next_pos))
+                """,
+                    (user_id, body.name.strip(), body.color, next_pos),
+                )
                 row = cur.fetchone()
             except UniqueViolation:
                 raise HTTPException(
@@ -117,8 +128,8 @@ async def update_folder(
 ) -> dict:
     """Rename, recolour, or reorder a folder."""
     # Build dynamic SET clause from provided fields.
-    updates = []
-    params = []
+    updates: list[str] = []
+    params: list = []
     if body.name is not None:
         updates.append("name = %s")
         params.append(body.name.strip())
@@ -176,6 +187,7 @@ async def delete_folder(
 
 # ─── Move conversation into / out of a folder ──────────────────────────
 
+
 @router.patch("/conversations/{conversation_id}")
 async def move_conversation(
     conversation_id: str,
@@ -195,7 +207,9 @@ async def move_conversation(
                     (body.folder_id, user_id),
                 )
                 if cur.fetchone() is None:
-                    raise HTTPException(status_code=404, detail="Target folder not found")
+                    raise HTTPException(
+                        status_code=404, detail="Target folder not found"
+                    )
 
             cur.execute(
                 """

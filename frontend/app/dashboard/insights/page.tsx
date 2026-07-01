@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Zap, TrendingUp, FlaskConical, Lightbulb } from "lucide-react"
+import { TrendingUp, FlaskConical, Lightbulb } from "lucide-react"
 import { autolabApi, InsightsResponse } from "@/lib/api"
 import { PageHeader } from "@/components/ui/page-header"
 

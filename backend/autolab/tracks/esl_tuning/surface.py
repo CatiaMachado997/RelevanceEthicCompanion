@@ -11,8 +11,8 @@ from dataclasses import dataclass
 @dataclass
 class ESLConfig:
     # EngagementDetector thresholds
-    engagement_score_threshold: float = 0.7     # flag if engagement_score > this
-    goal_relevance_min: float = 0.3             # require goal_relevance_score >= this
+    engagement_score_threshold: float = 0.7  # flag if engagement_score > this
+    goal_relevance_min: float = 0.3  # require goal_relevance_score >= this
 
     # ManipulationDetector: min signals before flagging
     manipulation_signal_threshold: int = 2
