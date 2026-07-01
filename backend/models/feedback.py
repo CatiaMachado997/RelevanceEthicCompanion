@@ -6,7 +6,7 @@ Models for user feedback on content and AI responses.
 
 from enum import Enum
 from typing import Optional, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
 
 
@@ -38,8 +38,8 @@ class FeedbackSubmission(BaseModel):
     feedback_type: FeedbackType = Field(..., description="Type of feedback")
     additional_notes: Optional[str] = Field(None, description="Optional user notes")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "item_id": "response-123",
                 "item_type": "chat_response",
@@ -47,6 +47,7 @@ class FeedbackSubmission(BaseModel):
                 "additional_notes": "Very helpful response!",
             }
         }
+    )
 
 
 class FeedbackRecord(BaseModel):
@@ -74,8 +75,8 @@ class FeedbackAnalytics(BaseModel):
     satisfaction_rate: float = 0.0
     days_analyzed: int = 30
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "thumbs_up_count": 45,
                 "thumbs_down_count": 5,
@@ -87,3 +88,4 @@ class FeedbackAnalytics(BaseModel):
                 "days_analyzed": 30,
             }
         }
+    )

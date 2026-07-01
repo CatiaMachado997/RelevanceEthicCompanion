@@ -89,7 +89,6 @@ export function StepConnect({ onContinue, onSkip }: StepConnectProps) {
     const onFocus = () => refresh()
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleConnect = async (type: SourceType) => {
