@@ -32,7 +32,13 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
-SUPPORTED_CONTENT_TYPES = {"application/pdf", "text/plain"}
+SUPPORTED_CONTENT_TYPES = {
+    "application/pdf",
+    "text/plain",
+    "text/markdown",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/msword",
+}
 MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 
 

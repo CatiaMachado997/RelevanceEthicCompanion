@@ -229,6 +229,12 @@ WEAVIATE_SCHEMAS: List[Dict[str, Any]] = [
                 "indexFilterable": True,
                 "indexSearchable": False,
             },
+            {
+                "name": "source_type",
+                "dataType": ["text"],
+                "indexFilterable": True,
+                "indexSearchable": False,
+            },
         ],
     },
 ]

@@ -1,7 +1,7 @@
 # backend/services/connectors/gmail.py
 """Gmail connector — wraps GmailSync, implements BaseConnector."""
 
-from datetime import timezone
+from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, Dict, List, Optional
 
@@ -42,10 +42,13 @@ class GmailConnector(BaseConnector):
         self,
         access_token: str,
         refresh_token: Optional[str] = None,
+        since: Optional[datetime] = None,
     ) -> List[Dict[str, Any]]:
+        query = f"after:{since.strftime('%Y/%m/%d')}" if since else None
         return self._sync.fetch_messages(
             access_token=access_token,
             refresh_token=refresh_token or "",
+            query=query,
         )
 
     def normalize_to_source_item(self, raw: Dict[str, Any], user_id: str) -> SourceItem:

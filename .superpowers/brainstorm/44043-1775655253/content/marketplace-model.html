@@ -1,0 +1,40 @@
+<h2>What kind of tool marketplace?</h2>
+<p class="subtitle">Ethic Companion needs to know what model you're imagining for how users connect external tools</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Curated catalogue</h3>
+      <p>EC ships a growing list of pre-built integrations (Notion, Linear, Slack, GitHub, Todoist…). Users browse and toggle them on. You control quality — each connector is purpose-built and tested. Think <strong>Zapier's app directory</strong> or Claude's built-in tools.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Reliable, well-tested</li><li>Consistent UX</li><li>Easy to add ethical guardrails</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>You build every connector</li><li>Slow to expand</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>MCP / open protocol</h3>
+      <p>Users point EC at any <strong>MCP server</strong> (Model Context Protocol — the open standard Claude uses). Thousands of community-built tools instantly available. Users paste a URL or run a local server.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Massive ecosystem now</li><li>Zero connector code for you</li><li>Standard protocol</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Security surface is wide</li><li>ESL needs careful gating</li><li>Quality varies</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Both — catalogue + MCP escape hatch</h3>
+      <p>A curated catalogue for common tools (Google, Notion, Linear…), plus an <strong>advanced option</strong> to connect any MCP server for power users. Best of both worlds — great out-of-the-box, unlimited ceiling.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Safe defaults + power-user ceiling</li><li>Grow catalogue over time</li><li>MCP gives you the ecosystem</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>More to build initially</li><li>Two code paths to maintain</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>

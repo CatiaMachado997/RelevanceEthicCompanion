@@ -20,7 +20,7 @@
 import { useEffect, useMemo, useState } from "react"
 import {
   Target, CheckSquare, FolderOpen, Shield, Eye, Bell, FileText,
-  Plus, FolderPlus, X, Sparkles,
+  Plus, FolderPlus, X, Sparkles, BookOpen,
 } from "lucide-react"
 import { api } from "@/lib/api"
 import { toast } from "@/lib/toast"
@@ -185,6 +185,20 @@ const COMMANDS: Command[] = [
         console.error("create folder failed", e)
         toast.error("Couldn't create folder", e instanceof Error ? e.message : undefined)
       }
+    },
+  },
+  {
+    id: "ask", keyword: "ask",
+    label: "Ask your documents", description: 'e.g. "/ask what does the report say about Q1?"',
+    icon: <BookOpen size={14} />,
+    takesArgs: true,
+    argsPlaceholder: "Question — forces a grounded retrieval over your documents",
+    // The actual retrieval happens in the chat page's handleSend, which detects
+    // the `/ask ` prefix and sets force_retrieval on the stream. Here we just
+    // dispatch an event the chat page listens for so the user doesn't have to
+    // press Enter twice.
+    run: ({ input }) => {
+      window.dispatchEvent(new CustomEvent("ec:slash-submit", { detail: { message: input } }))
     },
   },
   {

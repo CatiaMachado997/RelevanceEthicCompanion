@@ -1,4 +1,5 @@
 """Tests for run_migrations dry-run flag."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -32,9 +33,7 @@ class TestDryRunMigrations:
         )
         mock_conn, mock_cur = _make_mock_conn({"001_init.sql"})
 
-        with patch(
-            "scripts.run_migrations.get_db_connection", return_value=mock_conn
-        ):
+        with patch("scripts.run_migrations.get_db_connection", return_value=mock_conn):
             from scripts.run_migrations import dry_run_migrations
 
             pending = dry_run_migrations(migrations_dir=migrations_dir)
@@ -45,9 +44,7 @@ class TestDryRunMigrations:
         migrations_dir = _make_migration_files(tmp_path, ["001_init.sql"])
         mock_conn, mock_cur = _make_mock_conn(set())
 
-        with patch(
-            "scripts.run_migrations.get_db_connection", return_value=mock_conn
-        ):
+        with patch("scripts.run_migrations.get_db_connection", return_value=mock_conn):
             from scripts.run_migrations import dry_run_migrations
 
             dry_run_migrations(migrations_dir=migrations_dir)
@@ -62,9 +59,7 @@ class TestDryRunMigrations:
         migrations_dir = _make_migration_files(tmp_path, ["001_init.sql"])
         mock_conn, _ = _make_mock_conn({"001_init.sql"})
 
-        with patch(
-            "scripts.run_migrations.get_db_connection", return_value=mock_conn
-        ):
+        with patch("scripts.run_migrations.get_db_connection", return_value=mock_conn):
             from scripts.run_migrations import dry_run_migrations
 
             pending = dry_run_migrations(migrations_dir=migrations_dir)

@@ -1,6 +1,7 @@
 # backend/services/connectors/slack.py
 """Slack connector — wraps SlackSync, implements BaseConnector."""
 
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from services.connectors.base import BaseConnector, SourceItem
@@ -23,8 +24,10 @@ class SlackConnector(BaseConnector):
         self,
         access_token: str,
         refresh_token: Optional[str] = None,
+        since: Optional[datetime] = None,
     ) -> List[Dict[str, Any]]:
-        return self._sync.fetch_messages(access_token=access_token)
+        oldest = str(since.timestamp()) if since else None
+        return self._sync.fetch_messages(access_token=access_token, oldest=oldest)
 
     def normalize_to_source_item(self, raw: Dict[str, Any], user_id: str) -> SourceItem:
         channel = raw.get("channel", "")

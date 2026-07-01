@@ -27,7 +27,10 @@ class GoogleCalendarConnector(BaseConnector):
         self,
         access_token: str,
         refresh_token: Optional[str] = None,
+        since: Optional[datetime] = None,
     ) -> List[Dict[str, Any]]:
+        # `since` accepted for signature consistency; calendar already filters
+        # server-side via its own date range and ignores this hint.
         return await self._sync.fetch_events(
             access_token=access_token,
             refresh_token=refresh_token or "",
