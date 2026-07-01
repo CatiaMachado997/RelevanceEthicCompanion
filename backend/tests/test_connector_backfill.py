@@ -8,7 +8,6 @@ import uuid
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 
-
 USER_ID = "00000000-0000-0000-0000-000000000000"
 JOB_ID = uuid.UUID("11111111-1111-1111-1111-111111111111")
 

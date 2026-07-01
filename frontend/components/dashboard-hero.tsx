@@ -36,7 +36,6 @@ export function DashboardHero() {
   useEffect(() => {
     // Hydration gate — server-rendered as `null`, populated client-side
     // to avoid SSR/CSR mismatch on the time-aware greeting.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setNow(new Date())
     const interval = setInterval(() => setNow(new Date()), 60_000)
     return () => clearInterval(interval)

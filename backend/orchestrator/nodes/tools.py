@@ -156,7 +156,11 @@ def _parse_planner_response(response: Any) -> dict:
         {"tool": tc.get("name", ""), "params": tc.get("args", {}) or {}}
         for tc in tool_calls
     ]
-    return {"thought": thought.strip(), "actions": actions, "raw_tool_calls": tool_calls}
+    return {
+        "thought": thought.strip(),
+        "actions": actions,
+        "raw_tool_calls": tool_calls,
+    }
 
 
 def _build_system_prompt(state: AgentState) -> str:
@@ -314,23 +318,6 @@ async def tool_planner_node(state: AgentState) -> dict:
             )
         )
 
-    # Lazy import to keep tests fast and avoid circulars
-    from services.planner_runs import PlannerRunsService
-
-    # First invocation: create the planner_runs parent row.
-    planner_run_id = state.get("planner_run_id") or ""
-    if not planner_run_id:
-        planner_run_id = PlannerRunsService().create(
-            user_id=user_id,
-            conversation_id=state.get("conversation_id"),
-            intent=state.get("intent") or "chat",
-        )
-
-    # Sprint K — episodic memory: on the FIRST planner step of the turn,
-    # consult past completed runs for this user and prepend a brief
-    # SystemMessage with the matches. The LLM retains full agency. We
-    # inject only on the first step (when plan_steps is empty before we
-    # append the new step) to bias the initial plan, not nag every step.
     memory_used: list = []
     if _j_settings.EPISODIC_MEMORY_ENABLED and len(plan_steps) == 0:
         try:
@@ -341,7 +328,7 @@ async def tool_planner_node(state: AgentState) -> dict:
                 min_similarity=_j_settings.EPISODIC_MEMORY_MIN_SIMILARITY,
                 max_age_days=_j_settings.EPISODIC_MEMORY_MAX_AGE_DAYS,
             )
-        except Exception as exc:  # defense-in-depth — recall already swallows
+        except Exception as exc:
             logger.warning("episodic memory recall failed: %s", exc)
             past_runs = []
         if past_runs:
@@ -354,10 +341,7 @@ async def tool_planner_node(state: AgentState) -> dict:
                 }
                 for r in past_runs
             ]
-            lines = [
-                f'- "{r.message_text}" → {r.plan_summary}'
-                for r in past_runs
-            ]
+            lines = [f'- "{r.message_text}" → {r.plan_summary}' for r in past_runs]
             mem_block = (
                 "You've handled similar questions before. Past examples "
                 "(most recent first, may be stale):\n"
@@ -366,6 +350,18 @@ async def tool_planner_node(state: AgentState) -> dict:
                 "may need a different plan."
             )
             messages.insert(0, SystemMessage(content=mem_block))
+
+    # Lazy import to keep tests fast and avoid circulars
+    from services.planner_runs import PlannerRunsService
+
+    # First invocation: create the planner_runs parent row.
+    planner_run_id = state.get("planner_run_id") or ""
+    if not planner_run_id:
+        planner_run_id = PlannerRunsService().create(
+            user_id=user_id,
+            conversation_id=state.get("conversation_id"),
+            intent=state.get("intent") or "chat",
+        )
 
     response = await llm_with_tools.ainvoke(messages)
     parsed = _parse_planner_response(response)
@@ -376,7 +372,10 @@ async def tool_planner_node(state: AgentState) -> dict:
         if not already:
             parsed["actions"].insert(
                 0,
-                {"tool": "search_documents", "params": {"query": state["message"], "k": 5}},
+                {
+                    "tool": "search_documents",
+                    "params": {"query": state["message"], "k": 5},
+                },
             )
             # Also reflect into raw_tool_calls so downstream legacy paths see it
             parsed["raw_tool_calls"].insert(
@@ -395,7 +394,6 @@ async def tool_planner_node(state: AgentState) -> dict:
         "actions": parsed["actions"],
         "observations": [],  # filled in by tool_execution_node
         "started_at": datetime.now(UTC).isoformat(),
-        "memory_used": memory_used,  # Sprint K — empty list on non-first or flag-off
     }
     plan_steps.append(step)
 
@@ -409,6 +407,7 @@ async def tool_planner_node(state: AgentState) -> dict:
         "planner_step": next_step_index,
         "plan_steps": plan_steps,
         "planner_run_id": planner_run_id,
+        "memory_used": memory_used,  # Sprint K — empty list on non-first or flag-off
     }
 
 
@@ -512,14 +511,26 @@ async def tool_execution_node(state: AgentState) -> dict:
         tool_name = action.get("tool", "")
         if tool_name not in tool_map:
             results.append({"tool": tool_name, "result": "Tool not found"})
-            obs = {"status": "error", "error": "Tool not found", "latency_ms": 0, "attempts": 1}
+            obs = {
+                "status": "error",
+                "error": "Tool not found",
+                "latency_ms": 0,
+                "attempts": 1,
+            }
             if current_step is not None:
                 current_step["observations"].append(obs)
             _record_telemetry(
-                user_id, conversation_id, tool_name, action.get("params", {}),
-                "Tool not found", status="error", latency_ms=0,
+                user_id,
+                conversation_id,
+                tool_name,
+                action.get("params", {}),
+                "Tool not found",
+                status="error",
+                latency_ms=0,
                 error_message="Tool not found",
-                planner_run_id=planner_run_id, step_index=step_index, action_index=ai,
+                planner_run_id=planner_run_id,
+                step_index=step_index,
+                action_index=ai,
             )
             continue
 
@@ -542,7 +553,10 @@ async def tool_execution_node(state: AgentState) -> dict:
     # --- Parallel fan-out for read-only tools ---
     if parallel_actions:
         obs_list = await asyncio.gather(
-            *[_execute_with_retry(t, a.get("params", {})) for _, a, t, _c, _n in parallel_actions],
+            *[
+                _execute_with_retry(t, a.get("params", {}))
+                for _, a, t, _c, _n in parallel_actions
+            ],
             return_exceptions=False,
         )
         for (ai, action, t, _category, _needs), obs in zip(parallel_actions, obs_list):
@@ -552,26 +566,39 @@ async def tool_execution_node(state: AgentState) -> dict:
                 results.append({"tool": tool_name, "result": str(obs["result"])})
                 events.append({"event": "tool_result", "tool": tool_name})
                 telemetry_output: Any = (
-                    obs["result"] if isinstance(obs["result"], (dict, list))
+                    obs["result"]
+                    if isinstance(obs["result"], (dict, list))
                     else str(obs["result"])
                 )
                 trace = getattr(t, "last_trace", None)
                 if tool_name == "search_documents" and trace is not None:
                     telemetry_output = {"result": str(obs["result"]), "trace": trace}
                 _record_telemetry(
-                    user_id, conversation_id, tool_name, params,
-                    telemetry_output, status="success",
+                    user_id,
+                    conversation_id,
+                    tool_name,
+                    params,
+                    telemetry_output,
+                    status="success",
                     latency_ms=obs["latency_ms"],
-                    planner_run_id=planner_run_id, step_index=step_index, action_index=ai,
+                    planner_run_id=planner_run_id,
+                    step_index=step_index,
+                    action_index=ai,
                 )
             else:
                 results.append({"tool": tool_name, "result": f"Error: {obs['error']}"})
                 _record_telemetry(
-                    user_id, conversation_id, tool_name, params,
-                    f"Error: {obs['error']}", status="error",
+                    user_id,
+                    conversation_id,
+                    tool_name,
+                    params,
+                    f"Error: {obs['error']}",
+                    status="error",
                     latency_ms=obs["latency_ms"],
                     error_message=obs["error"],
-                    planner_run_id=planner_run_id, step_index=step_index, action_index=ai,
+                    planner_run_id=planner_run_id,
+                    step_index=step_index,
+                    action_index=ai,
                 )
             if current_step is not None:
                 current_step["observations"].append(obs)
@@ -589,17 +616,19 @@ async def tool_execution_node(state: AgentState) -> dict:
         if needs_confirm and not (meta.get("tool_id") and meta.get("action_name")):
             from langgraph.types import interrupt
 
-            decision = interrupt({
-                "kind": "user_confirmation",
-                "step": step_index,
-                "action_index": ai,
-                "tool": tool_name,
-                "category": category,
-                "params": tool_input,
-                "reason": safety_prefs.explain_reason(
-                    tool_name=tool_name, category=category
-                ),
-            })
+            decision = interrupt(
+                {
+                    "kind": "user_confirmation",
+                    "step": step_index,
+                    "action_index": ai,
+                    "tool": tool_name,
+                    "category": category,
+                    "params": tool_input,
+                    "reason": safety_prefs.explain_reason(
+                        tool_name=tool_name, category=category
+                    ),
+                }
+            )
             # On resume, `decision` is whatever was passed to Command(resume=...).
             chosen = (decision or {}).get("action", "approve")
             if chosen == "cancel":
@@ -612,8 +641,10 @@ async def tool_execution_node(state: AgentState) -> dict:
                 break
             if chosen == "skip":
                 obs = {
-                    "status": "skipped", "reason": "user",
-                    "latency_ms": 0, "attempts": 0,
+                    "status": "skipped",
+                    "reason": "user",
+                    "latency_ms": 0,
+                    "attempts": 0,
                 }
                 if current_step is not None:
                     current_step["observations"].append(obs)
@@ -631,18 +662,35 @@ async def tool_execution_node(state: AgentState) -> dict:
                 results.append({"tool": tool_name, "result": str(obs["result"])})
                 events.append({"event": "tool_result", "tool": tool_name})
                 _record_telemetry(
-                    user_id, conversation_id, tool_name, tool_input,
-                    obs["result"] if isinstance(obs["result"], (dict, list)) else str(obs["result"]),
-                    status="success", latency_ms=obs["latency_ms"],
-                    planner_run_id=planner_run_id, step_index=step_index, action_index=ai,
+                    user_id,
+                    conversation_id,
+                    tool_name,
+                    tool_input,
+                    (
+                        obs["result"]
+                        if isinstance(obs["result"], (dict, list))
+                        else str(obs["result"])
+                    ),
+                    status="success",
+                    latency_ms=obs["latency_ms"],
+                    planner_run_id=planner_run_id,
+                    step_index=step_index,
+                    action_index=ai,
                 )
             else:
                 results.append({"tool": tool_name, "result": f"Error: {obs['error']}"})
                 _record_telemetry(
-                    user_id, conversation_id, tool_name, tool_input,
-                    f"Error: {obs['error']}", status="error", latency_ms=obs["latency_ms"],
+                    user_id,
+                    conversation_id,
+                    tool_name,
+                    tool_input,
+                    f"Error: {obs['error']}",
+                    status="error",
+                    latency_ms=obs["latency_ms"],
                     error_message=obs["error"],
-                    planner_run_id=planner_run_id, step_index=step_index, action_index=ai,
+                    planner_run_id=planner_run_id,
+                    step_index=step_index,
+                    action_index=ai,
                 )
             if current_step is not None:
                 current_step["observations"].append(obs)
@@ -656,43 +704,76 @@ async def tool_execution_node(state: AgentState) -> dict:
         gate = ESLToolGate()
         preview = f"{tool_name}: {json.dumps(tool_input)[:200]}"
         decision = await gate.check(
-            user_id=user_id, tool_id=tool_id, action_name=action_name,
-            risk_level=risk_level, preview=preview,
+            user_id=user_id,
+            tool_id=tool_id,
+            action_name=action_name,
+            risk_level=risk_level,
+            preview=preview,
         )
         if decision.status == GateResult.VETOED:
-            results.append({"tool": tool_name, "result": "Action not permitted by user settings."})
+            results.append(
+                {"tool": tool_name, "result": "Action not permitted by user settings."}
+            )
             events.append({"event": "tool_vetoed", "tool": tool_name})
-            await _audit_tool_action(user_id, tool_id, action_name, "VETOED", "User denied this action")
+            await _audit_tool_action(
+                user_id, tool_id, action_name, "VETOED", "User denied this action"
+            )
             obs = {"status": "error", "error": "vetoed", "latency_ms": 0, "attempts": 1}
             if current_step is not None:
                 current_step["observations"].append(obs)
             _record_telemetry(
-                user_id, conversation_id, tool_name, tool_input,
+                user_id,
+                conversation_id,
+                tool_name,
+                tool_input,
                 "Action not permitted by user settings.",
-                status="vetoed", latency_ms=0, esl_decision="VETOED",
-                planner_run_id=planner_run_id, step_index=step_index, action_index=ai,
+                status="vetoed",
+                latency_ms=0,
+                esl_decision="VETOED",
+                planner_run_id=planner_run_id,
+                step_index=step_index,
+                action_index=ai,
             )
             continue
         if decision.status == GateResult.PENDING_CONFIRMATION:
             pending_confirmation = {
-                "tool_id": tool_id, "action_name": action_name,
-                "tool_name": tool_name, "preview": decision.preview,
-                "params": tool_input, "risk_level": risk_level,
+                "tool_id": tool_id,
+                "action_name": action_name,
+                "tool_name": tool_name,
+                "preview": decision.preview,
+                "params": tool_input,
+                "risk_level": risk_level,
             }
-            events.append({
-                "event": "tool_pending_confirmation", "tool": tool_name,
-                "tool_id": tool_id, "tool_name": tool_name,
-                "action_name": action_name, "preview": decision.preview,
-            })
-            results.append({"tool": tool_name, "result": f"Awaiting your confirmation: {decision.preview}"})
+            events.append(
+                {
+                    "event": "tool_pending_confirmation",
+                    "tool": tool_name,
+                    "tool_id": tool_id,
+                    "tool_name": tool_name,
+                    "action_name": action_name,
+                    "preview": decision.preview,
+                }
+            )
+            results.append(
+                {
+                    "tool": tool_name,
+                    "result": f"Awaiting your confirmation: {decision.preview}",
+                }
+            )
             obs = {"status": "pending", "latency_ms": 0, "attempts": 1}
             if current_step is not None:
                 current_step["observations"].append(obs)
             _record_telemetry(
-                user_id, conversation_id, tool_name, tool_input,
-                {"preview": decision.preview}, status="pending_confirmation",
+                user_id,
+                conversation_id,
+                tool_name,
+                tool_input,
+                {"preview": decision.preview},
+                status="pending_confirmation",
                 latency_ms=0,
-                planner_run_id=planner_run_id, step_index=step_index, action_index=ai,
+                planner_run_id=planner_run_id,
+                step_index=step_index,
+                action_index=ai,
             )
             continue
 
@@ -700,20 +781,40 @@ async def tool_execution_node(state: AgentState) -> dict:
         if obs["status"] == "ok":
             results.append({"tool": tool_name, "result": str(obs["result"])})
             events.append({"event": "tool_result", "tool": tool_name})
-            await _audit_tool_action(user_id, tool_id, action_name, "APPROVED", "Marketplace tool executed")
+            await _audit_tool_action(
+                user_id, tool_id, action_name, "APPROVED", "Marketplace tool executed"
+            )
             _record_telemetry(
-                user_id, conversation_id, tool_name, tool_input,
-                obs["result"] if isinstance(obs["result"], (dict, list)) else str(obs["result"]),
-                status="success", latency_ms=obs["latency_ms"], esl_decision="APPROVED",
-                planner_run_id=planner_run_id, step_index=step_index, action_index=ai,
+                user_id,
+                conversation_id,
+                tool_name,
+                tool_input,
+                (
+                    obs["result"]
+                    if isinstance(obs["result"], (dict, list))
+                    else str(obs["result"])
+                ),
+                status="success",
+                latency_ms=obs["latency_ms"],
+                esl_decision="APPROVED",
+                planner_run_id=planner_run_id,
+                step_index=step_index,
+                action_index=ai,
             )
         else:
             results.append({"tool": tool_name, "result": f"Error: {obs['error']}"})
             _record_telemetry(
-                user_id, conversation_id, tool_name, tool_input,
-                f"Error: {obs['error']}", status="error", latency_ms=obs["latency_ms"],
+                user_id,
+                conversation_id,
+                tool_name,
+                tool_input,
+                f"Error: {obs['error']}",
+                status="error",
+                latency_ms=obs["latency_ms"],
                 error_message=obs["error"],
-                planner_run_id=planner_run_id, step_index=step_index, action_index=ai,
+                planner_run_id=planner_run_id,
+                step_index=step_index,
+                action_index=ai,
             )
         if current_step is not None:
             current_step["observations"].append(obs)

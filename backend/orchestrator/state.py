@@ -1,6 +1,7 @@
 """AgentState — typed state dict carried through every LangGraph node."""
 
-from typing import TypedDict, Optional
+from typing import TypedDict, Optional, Annotated
+from langgraph.graph.message import add_messages
 from esl.models import ESLDecision
 
 
@@ -76,3 +77,8 @@ class AgentState(TypedDict):
     # `planner_step >= max_planner_steps`, preventing runaway loops.
     planner_step: int
     max_planner_steps: int
+
+    # Multi-agent fields
+    messages: Annotated[list, add_messages]
+    active_agent: str
+    agent_outputs: dict

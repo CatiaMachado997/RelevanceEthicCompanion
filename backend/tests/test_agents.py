@@ -1,0 +1,135 @@
+"""Tests for multi-agent orchestrator components."""
+
+from orchestrator.state import AgentState
+from typing import get_type_hints
+
+
+def test_agent_state_has_messages_field():
+    hints = get_type_hints(AgentState)
+    assert "messages" in hints, "AgentState must have a 'messages' field"
+
+
+def test_agent_state_has_active_agent_field():
+    hints = get_type_hints(AgentState)
+    assert "active_agent" in hints
+
+
+def test_agent_state_has_agent_outputs_field():
+    hints = get_type_hints(AgentState)
+    assert "agent_outputs" in hints
+
+
+from unittest.mock import MagicMock, patch
+from langgraph.checkpoint.memory import MemorySaver
+
+
+def _mock_llm():
+    llm = MagicMock()
+    llm.bind_tools = MagicMock(return_value=llm)
+    return llm
+
+
+def test_research_agent_builds():
+    """build_agent returns a compiled graph without raising."""
+    from orchestrator.agents.research import build_agent
+
+    checkpointer = MemorySaver()
+    agent = build_agent(llm=_mock_llm(), checkpointer=checkpointer)
+    assert agent is not None
+
+
+def test_research_agent_has_tavily_tool():
+    from orchestrator.agents.research import build_research_tools
+
+    with patch("orchestrator.agents.research.settings") as mock_settings:
+        mock_settings.TAVILY_API_KEY = "test-key"
+        tools = build_research_tools(user_id="u1", context_manager=MagicMock())
+    names = [t.name for t in tools]
+    assert "web_search" in names
+
+
+def test_calendar_agent_builds():
+    from orchestrator.agents.calendar import build_agent
+
+    checkpointer = MemorySaver()
+    agent = build_agent(llm=_mock_llm(), checkpointer=checkpointer)
+    assert agent is not None
+
+
+def test_calendar_agent_has_query_tool():
+    from orchestrator.agents.calendar import build_calendar_tools
+
+    tools = build_calendar_tools(user_id="u1", context_manager=MagicMock())
+    names = [t.name for t in tools]
+    assert "query_calendar" in names
+
+
+def test_goals_agent_builds():
+    from orchestrator.agents.goals import build_agent
+
+    checkpointer = MemorySaver()
+    agent = build_agent(llm=_mock_llm(), checkpointer=checkpointer)
+    assert agent is not None
+
+
+def test_goals_agent_has_get_goals_tool():
+    from orchestrator.agents.goals import build_goals_tools
+
+    tools = build_goals_tools(user_id="u1", context_manager=MagicMock())
+    names = [t.name for t in tools]
+    assert "get_user_goals" in names
+
+
+def test_document_agent_builds():
+    from orchestrator.agents.document import build_agent
+
+    checkpointer = MemorySaver()
+    agent = build_agent(llm=_mock_llm(), checkpointer=checkpointer)
+    assert agent is not None
+
+
+def test_document_agent_has_search_tool():
+    from orchestrator.agents.document import build_document_tools
+
+    tools = build_document_tools(user_id="u1", context_manager=MagicMock())
+    names = [t.name for t in tools]
+    assert "search_documents" in names
+
+
+def test_connectors_agent_builds():
+    from orchestrator.agents.connectors import build_agent
+
+    checkpointer = MemorySaver()
+    agent = build_agent(llm=_mock_llm(), checkpointer=checkpointer)
+    assert agent is not None
+
+
+def test_connectors_agent_returns_empty_tools_when_no_composio_key():
+    from orchestrator.agents.connectors import build_connector_tools
+
+    with patch("orchestrator.agents.connectors.settings") as mock_settings:
+        mock_settings.COMPOSIO_API_KEY = None
+        tools = build_connector_tools(user_id="u1", connected_tool_ids=set())
+    assert tools == []
+
+
+def test_supervisor_builds():
+    from orchestrator.agents.supervisor import build_supervisor
+
+    checkpointer = MemorySaver()
+    llm = _mock_llm()
+    supervisor = build_supervisor(
+        routing_llm=llm,
+        worker_llm=llm,
+        checkpointer=checkpointer,
+    )
+    assert supervisor is not None
+
+
+def test_supervisor_system_prompt_mentions_active_sources():
+    from orchestrator.agents.supervisor import SUPERVISOR_SYSTEM_PROMPT
+
+    assert (
+        "active_sources" in SUPERVISOR_SYSTEM_PROMPT.lower()
+        or "authorised" in SUPERVISOR_SYSTEM_PROMPT.lower()
+    )

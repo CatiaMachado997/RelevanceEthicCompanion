@@ -6,7 +6,6 @@ The scheduler test mocks the module-level singleton accessor.
 
 from unittest.mock import MagicMock, patch
 
-
 USER_ID = "11111111-1111-1111-1111-111111111111"
 
 

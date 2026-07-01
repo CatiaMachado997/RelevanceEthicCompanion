@@ -6,12 +6,12 @@ from fastapi.testclient import TestClient
 
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 
-
 TEST_USER_ID = "00000000-0000-0000-0000-000000000000"
 
 
 def _make_app():
     from routes.safety_preferences import router
+
     app = FastAPI()
     app.include_router(router)
     app.dependency_overrides[get_current_user_id] = lambda: TEST_USER_ID
@@ -27,13 +27,11 @@ def test_get_safety_returns_shape():
     fake_prefs.categories = {"write-external"}
     fake_prefs.tools = {"create_note"}
 
-    with patch(
-        "routes.safety_preferences.SafetyPreferencesService"
-    ) as MockSvc, patch(
+    with patch("routes.safety_preferences.SafetyPreferencesService") as MockSvc, patch(
         "routes.safety_preferences._list_available_tools",
         return_value=[
             {"name": "query_calendar", "category": "read-personal"},
-            {"name": "create_note",    "category": "write-personal"},
+            {"name": "create_note", "category": "write-personal"},
         ],
     ):
         MockSvc.return_value.load_for_user.return_value = fake_prefs

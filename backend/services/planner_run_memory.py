@@ -120,7 +120,8 @@ class PlannerRunMemoryService:
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "planner_run_memory: write failed for run %s: %s",
-                planner_run_id, exc,
+                planner_run_id,
+                exc,
             )
 
     async def recall(
@@ -185,13 +186,15 @@ class PlannerRunMemoryService:
                 score = _extract_score(m)
                 if score < min_similarity:
                     continue
-                results.append(PastRun(
-                    planner_run_id=props.get("planner_run_id", ""),
-                    message_text=props.get("message_text", ""),
-                    plan_summary=props.get("plan_summary", ""),
-                    similarity=score,
-                    created_at=created_at,
-                ))
+                results.append(
+                    PastRun(
+                        planner_run_id=props.get("planner_run_id", ""),
+                        message_text=props.get("message_text", ""),
+                        plan_summary=props.get("plan_summary", ""),
+                        similarity=score,
+                        created_at=created_at,
+                    )
+                )
                 if len(results) >= k:
                     break
             return results

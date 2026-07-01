@@ -27,32 +27,42 @@ async def test_streaming_events_emitted_in_order():
             yield {
                 "event": "on_chain_end",
                 "metadata": {"langgraph_node": "tool_planner"},
-                "data": {"output": {
-                    "plan_steps": [{
-                        "step": 1, "thought": "x",
-                        "actions": [{"tool": "query_calendar", "params": {}}],
-                        "observations": [],
-                    }],
-                    "planner_run_id": "run-1",
-                }},
+                "data": {
+                    "output": {
+                        "plan_steps": [
+                            {
+                                "step": 1,
+                                "thought": "x",
+                                "actions": [{"tool": "query_calendar", "params": {}}],
+                                "observations": [],
+                            }
+                        ],
+                        "planner_run_id": "run-1",
+                    }
+                },
             }
             yield {
                 "event": "on_chain_end",
                 "metadata": {"langgraph_node": "tool_execution"},
-                "data": {"output": {
-                    "plan_steps": [{
-                        "step": 1, "thought": "x",
-                        "actions": [{"tool": "query_calendar", "params": {}}],
-                        "observations": [{"status": "ok", "latency_ms": 42}],
-                    }],
-                    "planner_run_id": "run-1",
-                    "response_events": [
-                        {"event": "tool_use", "tool": "query_calendar"},
-                        {"event": "tool_result", "tool": "query_calendar"},
-                    ],
-                    "citations": [],
-                    "document_sources": [],
-                }},
+                "data": {
+                    "output": {
+                        "plan_steps": [
+                            {
+                                "step": 1,
+                                "thought": "x",
+                                "actions": [{"tool": "query_calendar", "params": {}}],
+                                "observations": [{"status": "ok", "latency_ms": 42}],
+                            }
+                        ],
+                        "planner_run_id": "run-1",
+                        "response_events": [
+                            {"event": "tool_use", "tool": "query_calendar"},
+                            {"event": "tool_result", "tool": "query_calendar"},
+                        ],
+                        "citations": [],
+                        "document_sources": [],
+                    }
+                },
             }
             yield {
                 "event": "on_chat_model_stream",
@@ -67,12 +77,15 @@ async def test_streaming_events_emitted_in_order():
 
         fake_graph.astream_events = fake_astream
 
-        with patch("orchestrator.graph.get_graph_async", AsyncMock(return_value=fake_graph)), \
-             patch("orchestrator.graph._post_stream_store", AsyncMock(return_value=None)):
+        with patch(
+            "orchestrator.graph.get_graph_async", AsyncMock(return_value=fake_graph)
+        ), patch("orchestrator.graph._post_stream_store", AsyncMock(return_value=None)):
             events = []
             async for ev in graph_mod.stream_langgraph(
-                user_id="u-1", message="what's on my calendar?",
-                model="x", conversation_id="c-1",
+                user_id="u-1",
+                message="what's on my calendar?",
+                model="x",
+                conversation_id="c-1",
             ):
                 events.append(ev)
 

@@ -5,7 +5,6 @@ import {
   SecondarySidebar,
   SecondarySidebarSection,
   SecondarySidebarNavItem,
-  SecondarySidebarPromo,
 } from "@/components/secondary-sidebar"
 import { Button } from "@/components/ui/button"
 import {
@@ -14,7 +13,6 @@ import {
   ShieldAlert,
   FileEdit,
   MessageSquare,
-  ArrowRight,
 } from "lucide-react"
 import Link from "next/link"
 import { transparencyApi } from "@/lib/api"

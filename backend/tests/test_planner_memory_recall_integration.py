@@ -9,7 +9,6 @@ from orchestrator.state import AgentState
 from orchestrator.nodes.tools import tool_planner_node
 from services.planner_run_memory import PastRun
 
-
 USER_ID = "00000000-0000-0000-0000-000000000000"
 
 
@@ -71,14 +70,18 @@ async def test_planner_prepends_memory_system_message_when_recall_hits():
     llm.bind_tools = MagicMock(return_value=llm)
     llm.ainvoke = fake_ainvoke
 
-    with patch("orchestrator.nodes.tools._j_settings") as flag, \
-         patch("orchestrator.nodes.tools.get_context_manager",
-               MagicMock(return_value=MagicMock())), \
-         patch("services.langchain_tools.create_langchain_tools",
-               AsyncMock(return_value=[])), \
-         patch("orchestrator.nodes.tools.PlannerRunMemoryService") as MemCls, \
-         patch("services.planner_runs.PlannerRunsService") as RunsCls, \
-         patch("langchain_groq.ChatGroq", return_value=llm):
+    with patch("orchestrator.nodes.tools._j_settings") as flag, patch(
+        "orchestrator.nodes.tools.get_context_manager",
+        MagicMock(return_value=MagicMock()),
+    ), patch(
+        "services.langchain_tools.create_langchain_tools", AsyncMock(return_value=[])
+    ), patch(
+        "orchestrator.nodes.tools.PlannerRunMemoryService"
+    ) as MemCls, patch(
+        "services.planner_runs.PlannerRunsService"
+    ) as RunsCls, patch(
+        "langchain_groq.ChatGroq", return_value=llm
+    ):
         flag.STREAMING_REASONING_ENABLED = False
         flag.EPISODIC_MEMORY_ENABLED = True
         flag.EPISODIC_MEMORY_TOP_K = 3
@@ -91,15 +94,16 @@ async def test_planner_prepends_memory_system_message_when_recall_hits():
 
     contents = [getattr(m, "content", "") for m in captured_messages]
     assert any(
-        "handled similar questions" in (c or "").lower()
-        for c in contents
+        "handled similar questions" in (c or "").lower() for c in contents
     ), f"missing memory SystemMessage; saw: {contents[:3]}"
     assert any("query_calendar" in (c or "") for c in contents)
 
     ps = result.get("plan_steps") or []
     assert ps, "plan_steps missing"
     first = ps[0]
-    assert first.get("memory_used"), f"memory_used not folded into step; first step: {first}"
+    assert first.get(
+        "memory_used"
+    ), f"memory_used not folded into step; first step: {first}"
 
 
 @pytest.mark.asyncio
@@ -122,14 +126,18 @@ async def test_planner_skips_memory_when_flag_off():
     mem_cls = MagicMock()
     mem_cls.return_value.recall = AsyncMock(return_value=[])
 
-    with patch("orchestrator.nodes.tools._j_settings") as flag, \
-         patch("orchestrator.nodes.tools.get_context_manager",
-               MagicMock(return_value=MagicMock())), \
-         patch("services.langchain_tools.create_langchain_tools",
-               AsyncMock(return_value=[])), \
-         patch("orchestrator.nodes.tools.PlannerRunMemoryService", mem_cls), \
-         patch("services.planner_runs.PlannerRunsService") as RunsCls, \
-         patch("langchain_groq.ChatGroq", return_value=llm):
+    with patch("orchestrator.nodes.tools._j_settings") as flag, patch(
+        "orchestrator.nodes.tools.get_context_manager",
+        MagicMock(return_value=MagicMock()),
+    ), patch(
+        "services.langchain_tools.create_langchain_tools", AsyncMock(return_value=[])
+    ), patch(
+        "orchestrator.nodes.tools.PlannerRunMemoryService", mem_cls
+    ), patch(
+        "services.planner_runs.PlannerRunsService"
+    ) as RunsCls, patch(
+        "langchain_groq.ChatGroq", return_value=llm
+    ):
         flag.STREAMING_REASONING_ENABLED = False
         flag.EPISODIC_MEMORY_ENABLED = False
         flag.EPISODIC_MEMORY_TOP_K = 3
@@ -141,6 +149,4 @@ async def test_planner_skips_memory_when_flag_off():
 
     mem_cls.return_value.recall.assert_not_called()
     contents = [getattr(m, "content", "") for m in captured_messages]
-    assert not any(
-        "handled similar questions" in (c or "").lower() for c in contents
-    )
+    assert not any("handled similar questions" in (c or "").lower() for c in contents)

@@ -240,8 +240,8 @@ WEAVIATE_SCHEMAS: List[Dict[str, Any]] = [
     {
         "class": "PlannerRunMemory",
         "description": "Per-user record of past completed planner runs, "
-                       "embedded for similarity recall at planner-step start. "
-                       "Sprint K.",
+        "embedded for similarity recall at planner-step start. "
+        "Sprint K.",
         "vectorizer": "none",
         "properties": [
             {

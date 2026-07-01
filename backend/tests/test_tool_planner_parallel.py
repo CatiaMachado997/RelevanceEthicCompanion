@@ -89,9 +89,11 @@ async def test_two_independent_actions_run_in_parallel():
         "services.langchain_tools.create_langchain_tools",
         AsyncMock(return_value=[docs_tool, cal_tool]),
     ), patch(
-        "orchestrator.nodes.tools._record_telemetry", MagicMock(),
+        "orchestrator.nodes.tools._record_telemetry",
+        MagicMock(),
     ), patch(
-        "langchain_groq.ChatGroq", _mk_synth_llm(),
+        "langchain_groq.ChatGroq",
+        _mk_synth_llm(),
     ):
         started = time.perf_counter()
         result = await tool_execution_node(_base_state())
@@ -135,9 +137,11 @@ async def test_one_action_fails_other_succeeds_step_proceeds():
         "services.langchain_tools.create_langchain_tools",
         AsyncMock(return_value=[docs_tool, cal_tool]),
     ), patch(
-        "orchestrator.nodes.tools._record_telemetry", MagicMock(),
+        "orchestrator.nodes.tools._record_telemetry",
+        MagicMock(),
     ), patch(
-        "langchain_groq.ChatGroq", _mk_synth_llm(),
+        "langchain_groq.ChatGroq",
+        _mk_synth_llm(),
     ):
         result = await tool_execution_node(_base_state())
 

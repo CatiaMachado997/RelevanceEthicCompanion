@@ -16,15 +16,13 @@ import json
 import logging
 from typing import List, Optional
 
-from utils.db import get_db_connection
 from config import settings as _settings
+from utils.db import get_db_connection
 
 logger = logging.getLogger(__name__)
 
 
-_VALID_STATUSES = frozenset(
-    {"running", "completed", "cap_hit", "error", "vetoed"}
-)
+_VALID_STATUSES = frozenset({"running", "completed", "cap_hit", "error", "vetoed"})
 
 
 class PlannerRunsService:
@@ -58,9 +56,7 @@ class PlannerRunsService:
                 return ""
             return str(row["id"])
         except Exception as exc:  # noqa: BLE001 — telemetry must not raise
-            logger.warning(
-                "planner_runs: create failed for user %s: %s", user_id, exc
-            )
+            logger.warning("planner_runs: create failed for user %s: %s", user_id, exc)
             return ""
 
     def finalize(
@@ -110,9 +106,7 @@ class PlannerRunsService:
                     )
                 conn.commit()
         except Exception as exc:  # noqa: BLE001 — telemetry must not raise
-            logger.warning(
-                "planner_runs: finalize failed for run %s: %s", run_id, exc
-            )
+            logger.warning("planner_runs: finalize failed for run %s: %s", run_id, exc)
             return
 
         # Sprint K — schedule a fire-and-forget memory write if this run
@@ -151,11 +145,13 @@ class PlannerRunsService:
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "planner_run_memory: finalize lookup failed for %s: %s",
-                run_id, exc,
+                run_id,
+                exc,
             )
             return
         try:
             import asyncio
+
             from services.planner_run_memory import PlannerRunMemoryService
 
             loop = asyncio.get_event_loop()

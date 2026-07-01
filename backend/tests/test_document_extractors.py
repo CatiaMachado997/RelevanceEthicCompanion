@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 
 import pytest
 
@@ -13,8 +12,6 @@ from services.document_extractors import extract_text
 @pytest.fixture
 def pdf_fixture(tmp_path):
     """Generate a 1-page PDF containing 'Hello PDF world.' text."""
-    from pypdf import PdfWriter
-
     # pypdf can't create text from scratch, but reportlab is heavy.
     # Use the lower-level approach: build a minimal PDF via reportlab if
     # available, otherwise fall back to pypdf merging an in-memory drawn page.

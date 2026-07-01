@@ -16,12 +16,14 @@ from pydantic import BaseModel
 from services.safety_preferences import SafetyPreferencesService
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 
-
 router = APIRouter(prefix="/api/settings/safety", tags=["safety"])
 
 
 _VALID_CATEGORIES = {
-    "read-personal", "read-external", "write-personal", "write-external",
+    "read-personal",
+    "read-external",
+    "write-personal",
+    "write-external",
 }
 
 
@@ -40,18 +42,29 @@ def _list_available_tools() -> List[Dict[str, str]]:
     stack which we don't want to pull in for route module import time.
     """
     from services.langchain_tools import (
-        MemoryQueryTool, CalendarQueryTool, UserGoalsTool,
-        SearchDocumentsTool, WebSearchTool, NoteCreateTool,
+        MemoryQueryTool,
+        CalendarQueryTool,
+        UserGoalsTool,
+        SearchDocumentsTool,
+        WebSearchTool,
+        NoteCreateTool,
     )
+
     out: List[Dict[str, str]] = []
     for cls in (
-        MemoryQueryTool, CalendarQueryTool, UserGoalsTool,
-        SearchDocumentsTool, WebSearchTool, NoteCreateTool,
+        MemoryQueryTool,
+        CalendarQueryTool,
+        UserGoalsTool,
+        SearchDocumentsTool,
+        WebSearchTool,
+        NoteCreateTool,
     ):
         # BaseTool is a Pydantic v2 model; read field defaults via model_fields.
         fields = getattr(cls, "model_fields", {}) or {}
         name = fields.get("name").default if "name" in fields else cls.__name__.lower()
-        category = fields.get("category").default if "category" in fields else "write-external"
+        category = (
+            fields.get("category").default if "category" in fields else "write-external"
+        )
         out.append({"name": name, "category": category})
     return out
 
@@ -89,9 +102,7 @@ async def put_category(
     user_id: str = Depends(get_current_user_id),
 ) -> Dict[str, Any]:
     if category not in _VALID_CATEGORIES:
-        raise HTTPException(
-            status_code=422, detail=f"unknown category: {category}"
-        )
+        raise HTTPException(status_code=422, detail=f"unknown category: {category}")
     SafetyPreferencesService().set_category(
         user_id,
         category=category,
