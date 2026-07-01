@@ -48,6 +48,7 @@
       "Bash(/Users/catiamachado/RelevanceEthicCompanion/backend/venv/bin/python3 -m pytest tests/test_auth_cookie.py tests/test_health.py tests/test_rate_limiting.py -q --tb=no)",
       "Bash(gh pr *)",
       "Bash(psql --version)",
+      "Bash(gh run *)",
       "Bash(rm -rf venv)",
       "Bash(/usr/local/bin/python3.12 -m venv venv)",
       "Bash(./venv/bin/python --version)",
