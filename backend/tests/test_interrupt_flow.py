@@ -2,14 +2,12 @@
 
 Each sub-test verifies one resolution path (approve / skip / cancel / trust)."""
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from orchestrator.state import AgentState
 from orchestrator.nodes.tools import tool_execution_node
-
 
 USER_ID = "00000000-0000-0000-0000-000000000000"
 
@@ -39,13 +37,15 @@ def _state_with_calendar_action() -> AgentState:
         "force_retrieval": False,
         "planner_step": 1,
         "max_planner_steps": 3,
-        "plan_steps": [{
-            "step": 1,
-            "thought": "I need to check the calendar.",
-            "actions": [{"tool": "query_calendar", "params": {"days_back": 7}}],
-            "observations": [],
-            "started_at": "2026-05-20T12:00:00+00:00",
-        }],
+        "plan_steps": [
+            {
+                "step": 1,
+                "thought": "I need to check the calendar.",
+                "actions": [{"tool": "query_calendar", "params": {"days_back": 7}}],
+                "observations": [],
+                "started_at": "2026-05-20T12:00:00+00:00",
+            }
+        ],
         "planner_run_id": "run-1",
     }
     return state
@@ -67,7 +67,6 @@ def _mk_synth_llm():
     return MagicMock(return_value=inner)
 
 
-
 @pytest.mark.asyncio
 async def test_interrupt_fires_when_tool_in_per_tool_prefs():
     """If safety_prefs.should_confirm returns True, interrupt() is called and
@@ -86,15 +85,20 @@ async def test_interrupt_fires_when_tool_in_per_tool_prefs():
         return_value="tool 'query_calendar' is set to ask before running"
     )
 
-    with patch("orchestrator.nodes.tools._j_settings") as flag, \
-         patch("orchestrator.nodes.tools.SafetyPreferencesService") as PrefsCls, \
-         patch("orchestrator.nodes.tools.get_context_manager",
-               MagicMock(return_value=MagicMock())), \
-         patch("services.langchain_tools.create_langchain_tools",
-               AsyncMock(return_value=[cal])), \
-         patch("orchestrator.nodes.tools._record_telemetry", MagicMock()), \
-         patch("langchain_groq.ChatGroq", _mk_synth_llm()), \
-         patch("langgraph.types.interrupt", side_effect=fake_interrupt):
+    with patch("orchestrator.nodes.tools._j_settings") as flag, patch(
+        "orchestrator.nodes.tools.SafetyPreferencesService"
+    ) as PrefsCls, patch(
+        "orchestrator.nodes.tools.get_context_manager",
+        MagicMock(return_value=MagicMock()),
+    ), patch(
+        "services.langchain_tools.create_langchain_tools", AsyncMock(return_value=[cal])
+    ), patch(
+        "orchestrator.nodes.tools._record_telemetry", MagicMock()
+    ), patch(
+        "langchain_groq.ChatGroq", _mk_synth_llm()
+    ), patch(
+        "langgraph.types.interrupt", side_effect=fake_interrupt
+    ):
         flag.STREAMING_REASONING_ENABLED = True
         PrefsCls.return_value.load_for_user.return_value = fake_prefs
 
@@ -114,15 +118,20 @@ async def test_skip_decision_marks_observation_and_continues():
     fake_prefs.should_confirm = MagicMock(return_value=True)
     fake_prefs.explain_reason = MagicMock(return_value="x")
 
-    with patch("orchestrator.nodes.tools._j_settings") as flag, \
-         patch("orchestrator.nodes.tools.SafetyPreferencesService") as PrefsCls, \
-         patch("orchestrator.nodes.tools.get_context_manager",
-               MagicMock(return_value=MagicMock())), \
-         patch("services.langchain_tools.create_langchain_tools",
-               AsyncMock(return_value=[cal])), \
-         patch("orchestrator.nodes.tools._record_telemetry", MagicMock()), \
-         patch("langchain_groq.ChatGroq", _mk_synth_llm()), \
-         patch("langgraph.types.interrupt", return_value={"action": "skip"}):
+    with patch("orchestrator.nodes.tools._j_settings") as flag, patch(
+        "orchestrator.nodes.tools.SafetyPreferencesService"
+    ) as PrefsCls, patch(
+        "orchestrator.nodes.tools.get_context_manager",
+        MagicMock(return_value=MagicMock()),
+    ), patch(
+        "services.langchain_tools.create_langchain_tools", AsyncMock(return_value=[cal])
+    ), patch(
+        "orchestrator.nodes.tools._record_telemetry", MagicMock()
+    ), patch(
+        "langchain_groq.ChatGroq", _mk_synth_llm()
+    ), patch(
+        "langgraph.types.interrupt", return_value={"action": "skip"}
+    ):
         flag.STREAMING_REASONING_ENABLED = True
         PrefsCls.return_value.load_for_user.return_value = fake_prefs
 
@@ -140,15 +149,20 @@ async def test_cancel_decision_aborts_step():
     fake_prefs.should_confirm = MagicMock(return_value=True)
     fake_prefs.explain_reason = MagicMock(return_value="x")
 
-    with patch("orchestrator.nodes.tools._j_settings") as flag, \
-         patch("orchestrator.nodes.tools.SafetyPreferencesService") as PrefsCls, \
-         patch("orchestrator.nodes.tools.get_context_manager",
-               MagicMock(return_value=MagicMock())), \
-         patch("services.langchain_tools.create_langchain_tools",
-               AsyncMock(return_value=[cal])), \
-         patch("orchestrator.nodes.tools._record_telemetry", MagicMock()), \
-         patch("langchain_groq.ChatGroq", _mk_synth_llm()), \
-         patch("langgraph.types.interrupt", return_value={"action": "cancel"}):
+    with patch("orchestrator.nodes.tools._j_settings") as flag, patch(
+        "orchestrator.nodes.tools.SafetyPreferencesService"
+    ) as PrefsCls, patch(
+        "orchestrator.nodes.tools.get_context_manager",
+        MagicMock(return_value=MagicMock()),
+    ), patch(
+        "services.langchain_tools.create_langchain_tools", AsyncMock(return_value=[cal])
+    ), patch(
+        "orchestrator.nodes.tools._record_telemetry", MagicMock()
+    ), patch(
+        "langchain_groq.ChatGroq", _mk_synth_llm()
+    ), patch(
+        "langgraph.types.interrupt", return_value={"action": "cancel"}
+    ):
         flag.STREAMING_REASONING_ENABLED = True
         PrefsCls.return_value.load_for_user.return_value = fake_prefs
 
@@ -166,16 +180,20 @@ async def test_trust_decision_deletes_per_tool_row():
     fake_prefs.should_confirm = MagicMock(return_value=True)
     fake_prefs.explain_reason = MagicMock(return_value="x")
 
-    with patch("orchestrator.nodes.tools._j_settings") as flag, \
-         patch("orchestrator.nodes.tools.SafetyPreferencesService") as PrefsCls, \
-         patch("orchestrator.nodes.tools.get_context_manager",
-               MagicMock(return_value=MagicMock())), \
-         patch("services.langchain_tools.create_langchain_tools",
-               AsyncMock(return_value=[cal])), \
-         patch("orchestrator.nodes.tools._record_telemetry", MagicMock()), \
-         patch("langchain_groq.ChatGroq", _mk_synth_llm()), \
-         patch("langgraph.types.interrupt",
-               return_value={"action": "approve", "trust": True}):
+    with patch("orchestrator.nodes.tools._j_settings") as flag, patch(
+        "orchestrator.nodes.tools.SafetyPreferencesService"
+    ) as PrefsCls, patch(
+        "orchestrator.nodes.tools.get_context_manager",
+        MagicMock(return_value=MagicMock()),
+    ), patch(
+        "services.langchain_tools.create_langchain_tools", AsyncMock(return_value=[cal])
+    ), patch(
+        "orchestrator.nodes.tools._record_telemetry", MagicMock()
+    ), patch(
+        "langchain_groq.ChatGroq", _mk_synth_llm()
+    ), patch(
+        "langgraph.types.interrupt", return_value={"action": "approve", "trust": True}
+    ):
         flag.STREAMING_REASONING_ENABLED = True
         PrefsCls.return_value.load_for_user.return_value = fake_prefs
 

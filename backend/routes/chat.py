@@ -255,7 +255,11 @@ async def chat_resume(
                     content = getattr(chunk, "content", "") if chunk else ""
                     if isinstance(content, list):
                         content = "".join(
-                            block.get("text", "") if isinstance(block, dict) else str(block)
+                            (
+                                block.get("text", "")
+                                if isinstance(block, dict)
+                                else str(block)
+                            )
                             for block in content
                         )
                     if isinstance(content, str) and content:

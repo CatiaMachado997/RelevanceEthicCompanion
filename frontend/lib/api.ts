@@ -296,14 +296,17 @@ export const chatApi = {
     let settled = false
     let rejectRef: ((err: Error) => void) | null = null
 
-    const promise = new Promise<void>((resolve, reject) => {
+    const promise = new Promise<void>(async (resolve, reject) => {
       rejectRef = reject
       const modelParam = callbacks.model ? `&model=${encodeURIComponent(callbacks.model)}` : ''
       const convParam = callbacks.conversation_id ? `&conversation_id=${encodeURIComponent(callbacks.conversation_id)}` : ''
       const sourcesParam = callbacks.active_sources?.length
         ? `&active_sources=${encodeURIComponent(callbacks.active_sources.join(','))}` : ''
+      // EventSource cannot send Authorization headers — pass token as query param
+      const token = await resolveAccessToken()
+      const tokenParam = token ? `&token=${encodeURIComponent(token)}` : ''
       const forceParam = callbacks.force_retrieval ? '&force_retrieval=true' : ''
-      const url = `${API_URL}/api/chat/stream?message=${encodeURIComponent(message)}${modelParam}${convParam}${sourcesParam}${forceParam}`
+      const url = `${API_URL}/api/chat/stream?message=${encodeURIComponent(message)}${modelParam}${convParam}${sourcesParam}${tokenParam}${forceParam}`
       es = new EventSource(url, { withCredentials: true })
 
       es.onmessage = (e) => {
@@ -392,7 +395,7 @@ export const chatApi = {
         }
       }
 
-      es.onerror = (e) => {
+      es.onerror = () => {
         es!.close()
         // EventSource readyState 2 = CLOSED (never connected)
         const msg = (es as EventSource).readyState === 2 || !navigator.onLine
@@ -1341,6 +1344,11 @@ export const toolMarketplaceApi = {
     return data.connect_url
   },
 
+  syncTool: async (toolId: string): Promise<{ synced: number }> => {
+    const res = await apiRequest<{ synced: number; tool_id: string }>(`/api/tools/${toolId}/sync`, { method: 'POST' })
+    return { synced: res.synced }
+  },
+
   disconnect: (toolId: string): Promise<void> =>
     apiRequest<void>(`/api/tools/${toolId}/disconnect`, { method: 'DELETE' }),
 
@@ -1438,6 +1446,29 @@ export const foldersApi = {
       ),
     )
   },
+}
+
+// ==================== AutoLab / Insights API ====================
+
+export interface InsightsResponse {
+  daily_insight: string
+  autolab: {
+    best_scores: Record<string, number | null>
+    total_trials: number
+    total_wins: number
+  }
+  recent_experiments: Array<{
+    track: string
+    trial: number | null
+    score: number | null
+    outcome: string | null
+    hypothesis: string
+  }>
+}
+
+export const autolabApi = {
+  insights: () => apiRequest<InsightsResponse>('/api/insights'),
+  status: () => apiRequest<Record<string, unknown>>('/api/autolab/status'),
 }
 
 // ==================== Dashboard API ====================
@@ -1653,6 +1684,7 @@ export const api = {
   folders: foldersApi,
   profile: profileApi,
   dashboard: dashboardApi,
+  autolab: autolabApi,
   connectors: connectorsApi,
   weeklyReview: weeklyReviewApi,
   today: todayApi,

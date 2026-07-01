@@ -33,7 +33,9 @@ interface OverviewPanelProps {
 export function OverviewPanel({
   images = [],
   actions = defaultActions,
-  onClose,
+  // Accepted for interface parity with sibling panels; not wired to a
+  // close control here yet.
+  onClose: _onClose,
   className,
 }: OverviewPanelProps) {
   return (
@@ -56,6 +58,9 @@ export function OverviewPanel({
           {/* Large Image */}
           <div className="h-60 w-full overflow-hidden rounded-lg border border-[#E5E5E5] bg-[#F5F5F5]">
             {images[0] ? (
+              // images come from an arbitrary, caller-supplied set of
+              // external URLs (not a domain next/image can pre-allowlist).
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={images[0].src}
                 alt={images[0].alt}
@@ -76,6 +81,7 @@ export function OverviewPanel({
                 className="h-24 flex-1 overflow-hidden rounded-lg border border-[#E5E5E5] bg-[#F5F5F5]"
               >
                 {images[i] ? (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={images[i].src}
                     alt={images[i].alt}
@@ -98,6 +104,7 @@ export function OverviewPanel({
                 className="h-24 flex-1 overflow-hidden rounded-lg border border-[#E5E5E5] bg-[#F5F5F5]"
               >
                 {images[i] ? (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={images[i].src}
                     alt={images[i].alt}

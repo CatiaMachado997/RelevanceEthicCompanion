@@ -128,9 +128,7 @@ class SafetyPreferencesService:
         requires_confirmation: bool,
     ) -> None:
         if category not in _VALID_CATEGORIES:
-            logger.warning(
-                "safety_preferences: refused unknown category %r", category
-            )
+            logger.warning("safety_preferences: refused unknown category %r", category)
             return
         try:
             with get_db_connection() as conn:

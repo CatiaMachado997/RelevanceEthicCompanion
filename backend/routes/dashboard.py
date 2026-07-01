@@ -38,11 +38,11 @@ async def overview(
         ("documents_count", "SELECT COUNT(*) AS cnt FROM documents WHERE user_id = %s"),
         (
             "esl_decisions_7d",
-            "SELECT COUNT(*) AS cnt FROM esl_audit_log WHERE user_id = %s AND created_at > NOW() - INTERVAL '7 days'",
+            "SELECT COUNT(*) AS cnt FROM esl_audit_log WHERE user_id = %s AND timestamp > NOW() - INTERVAL '7 days'",
         ),
         (
             "notifications_unread",
-            "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = %s AND read = FALSE",
+            "SELECT COUNT(*) AS cnt FROM user_notifications WHERE user_id = %s AND read = FALSE",
         ),
     ]
 

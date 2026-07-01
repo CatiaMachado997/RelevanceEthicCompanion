@@ -17,7 +17,7 @@ from utils.db import get_db_connection
 logger = logging.getLogger(__name__)
 
 DOCUMENT_COLLECTION = "DocumentMemory"
-CHUNK_SIZE = 800   # characters — matches DocumentProcessor's chunker
+CHUNK_SIZE = 800  # characters — matches DocumentProcessor's chunker
 CHUNK_OVERLAP = 100
 
 
@@ -32,7 +32,9 @@ def get_embedding_service() -> EmbeddingService:
     return _embedding_service
 
 
-def _chunk_text(text: str, size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
+def _chunk_text(
+    text: str, size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP
+) -> list[str]:
     """Naive sliding-window chunker. Mirrors document_processor's behavior so
     connector chunks and document chunks rank against one another fairly."""
     text = (text or "").strip()

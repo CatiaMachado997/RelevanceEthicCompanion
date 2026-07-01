@@ -9,7 +9,6 @@ from fastapi.testclient import TestClient
 
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 
-
 TEST_USER_ID = "00000000-0000-0000-0000-000000000000"
 TASK_A = "11111111-1111-1111-1111-111111111111"
 TASK_B = "22222222-2222-2222-2222-222222222222"
@@ -87,7 +86,8 @@ def test_create_task_with_goal_id():
 
     # Find the INSERT call and confirm goal_id was bound.
     insert_calls = [
-        c for c in cursor.execute.call_args_list
+        c
+        for c in cursor.execute.call_args_list
         if "INSERT INTO tasks" in str(c.args[0])
     ]
     assert insert_calls, "expected an INSERT INTO tasks execute call"

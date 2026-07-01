@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Sparkles, X } from 'lucide-react'
 import { useOnboardingState } from '@/hooks/useOnboardingState'
 
@@ -25,12 +25,9 @@ const DISMISSED_KEY = 'ec_onboarding_nudge_dismissed'
  */
 export function SetupNudge() {
   const { data } = useOnboardingState()
-  const [dismissed, setDismissed] = useState(true) // default true so we don't flash before reading localStorage
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    setDismissed(localStorage.getItem(DISMISSED_KEY) === '1')
-  }, [])
+  const [dismissed, setDismissed] = useState(() =>
+    typeof window === 'undefined' ? true : localStorage.getItem(DISMISSED_KEY) === '1'
+  )
 
   if (!data) return null
 

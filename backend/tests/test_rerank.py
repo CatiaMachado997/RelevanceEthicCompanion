@@ -93,9 +93,7 @@ async def test_rerank_sorts_by_jina_response():
         "services.rerank.httpx.AsyncClient",
         side_effect=_make_client_factory(transport),
     ):
-        result = await rerank(
-            "what is the answer", cands, top_k=5, api_key="fake-key"
-        )
+        result = await rerank("what is the answer", cands, top_k=5, api_key="fake-key")
 
     assert [r["chunk_uuid"] for r in result] == ["u-2", "u-0"]
     assert result[0]["rerank_score"] == 0.95

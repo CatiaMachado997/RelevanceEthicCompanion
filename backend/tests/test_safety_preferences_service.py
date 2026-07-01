@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 
 from services.safety_preferences import SafetyPreferencesService, SafetyPreferences
 
-
 TEST_USER_ID = "00000000-0000-0000-0000-000000000000"
 
 
@@ -55,7 +54,7 @@ def test_load_for_user_with_categories_and_tools():
         safe_mode=False,
         categories=[
             {"category": "write-external", "requires_confirmation": True},
-            {"category": "read-external",  "requires_confirmation": True},
+            {"category": "read-external", "requires_confirmation": True},
         ],
         tools=[{"tool_name": "create_note", "requires_confirmation": True}],
     )
@@ -66,9 +65,7 @@ def test_load_for_user_with_categories_and_tools():
 
 
 def test_should_confirm_master_on_short_circuits():
-    prefs = SafetyPreferences(
-        safe_mode_enabled=True, categories=set(), tools=set()
-    )
+    prefs = SafetyPreferences(safe_mode_enabled=True, categories=set(), tools=set())
     assert prefs.should_confirm(tool_name="anything", category="read-personal") is True
 
 
@@ -78,16 +75,26 @@ def test_should_confirm_category_match():
         categories={"write-external"},
         tools=set(),
     )
-    assert prefs.should_confirm(tool_name="send_email", category="write-external") is True
-    assert prefs.should_confirm(tool_name="query_calendar", category="read-personal") is False
+    assert (
+        prefs.should_confirm(tool_name="send_email", category="write-external") is True
+    )
+    assert (
+        prefs.should_confirm(tool_name="query_calendar", category="read-personal")
+        is False
+    )
 
 
 def test_should_confirm_tool_match():
     prefs = SafetyPreferences(
         safe_mode_enabled=False, categories=set(), tools={"web_search"}
     )
-    assert prefs.should_confirm(tool_name="web_search", category="read-external") is True
-    assert prefs.should_confirm(tool_name="query_calendar", category="read-personal") is False
+    assert (
+        prefs.should_confirm(tool_name="web_search", category="read-external") is True
+    )
+    assert (
+        prefs.should_confirm(tool_name="query_calendar", category="read-personal")
+        is False
+    )
 
 
 def test_should_confirm_explain_reason_priority():

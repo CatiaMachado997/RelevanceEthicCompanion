@@ -101,9 +101,7 @@ class TaskDependenciesService:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 # Cycle check: would adding A->B make A reachable from B?
-                cur.execute(
-                    _CYCLE_CHECK_SQL, (depends_on_task_id, task_id)
-                )
+                cur.execute(_CYCLE_CHECK_SQL, (depends_on_task_id, task_id))
                 if cur.fetchone() is not None:
                     raise ValueError(
                         f"Adding dependency {task_id} -> {depends_on_task_id} "
@@ -118,9 +116,7 @@ class TaskDependenciesService:
                     ) from exc
 
             conn.commit()
-        logger.info(
-            "Added task dependency %s -> %s", task_id, depends_on_task_id
-        )
+        logger.info("Added task dependency %s -> %s", task_id, depends_on_task_id)
 
     def remove_dependency(self, task_id: str, depends_on_task_id: str) -> bool:
         """Delete the edge. Returns True if a row was removed."""

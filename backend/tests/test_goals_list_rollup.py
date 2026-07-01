@@ -13,7 +13,6 @@ from fastapi.testclient import TestClient
 
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 
-
 TEST_USER_ID = "00000000-0000-0000-0000-000000000000"
 GOAL_ID_A = "11111111-1111-1111-1111-111111111111"
 GOAL_ID_B = "22222222-2222-2222-2222-222222222222"
@@ -100,7 +99,13 @@ def test_list_goals_includes_rollup_per_goal():
         "progress_pct": 50,
     }
     # Rollup columns must not leak through as top-level fields.
-    for k in ("milestones_total", "milestones_hit", "tasks_total", "tasks_done", "progress_pct"):
+    for k in (
+        "milestones_total",
+        "milestones_hit",
+        "tasks_total",
+        "tasks_done",
+        "progress_pct",
+    ):
         assert k not in g0, f"rollup key {k} leaked into top-level goal data"
 
     g1 = body["data"][1]

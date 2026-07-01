@@ -23,9 +23,9 @@ def test_lifespan_calls_run_migrations():
             # Sanity ping so the app actually started
             client.get("/")
 
-    assert stub.call_count == 1, (
-        f"expected run_migrations to be called once, got {stub.call_count}"
-    )
+    assert (
+        stub.call_count == 1
+    ), f"expected run_migrations to be called once, got {stub.call_count}"
 
 
 def test_lifespan_aborts_when_migration_fails():

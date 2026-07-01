@@ -1,8 +1,9 @@
 """LangGraph orchestrator — full wired graph."""
 
+import logging
+import os
 from typing import AsyncGenerator, Optional
 from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from orchestrator.state import AgentState
 from orchestrator.nodes.context import context_builder_node
 from orchestrator.nodes.intent import intent_classifier_node
@@ -13,23 +14,7 @@ from orchestrator.subgraphs.deep_research import deep_research_node
 from esl.models import ESLDecisionStatus
 from config import settings as _settings
 
-# Sprint J — async checkpointer singleton (lazy-initialised on first async use)
-_checkpointer = None  # type: ignore[var-annotated]
-_checkpointer_ctx = None
-
-
-async def get_checkpointer():
-    """Lazy singleton AsyncPostgresSaver. Creates checkpoint tables on
-    first call via `setup()`, which is idempotent."""
-    global _checkpointer, _checkpointer_ctx
-    if _checkpointer is None:
-        cp = AsyncPostgresSaver.from_conn_string(_settings.DATABASE_URL)
-        # from_conn_string returns an async context manager; we enter
-        # it once and keep the saver for process lifetime.
-        _checkpointer_ctx = cp
-        _checkpointer = await cp.__aenter__()
-        await _checkpointer.setup()
-    return _checkpointer
+logger = logging.getLogger(__name__)
 
 
 def _route_after_esl(state: AgentState) -> str:
@@ -109,10 +94,79 @@ def build_graph():
 _compiled_graph = None
 
 
+def build_multi_agent_graph():
+    """Multi-agent graph: context_builder → supervisor → esl_gateway → formatter."""
+    from pydantic import SecretStr
+    from orchestrator.agents.supervisor import build_supervisor
+
+    routing_llm = None
+    worker_llm = None
+    try:
+        from langchain_groq import ChatGroq
+
+        routing_llm = ChatGroq(
+            model="llama-3.1-8b-instant",
+            api_key=SecretStr(_settings.GROQ_API_KEY),
+        )
+        model_name = getattr(_settings, "DEFAULT_MODEL", "llama-3.3-70b-versatile")
+        worker_llm = ChatGroq(
+            model=model_name,
+            api_key=SecretStr(_settings.GROQ_API_KEY),
+        )
+    except Exception as e:
+        logger.warning(f"Could not build LLMs for multi-agent graph: {e}")
+
+    supervisor_node = build_supervisor(
+        routing_llm=routing_llm,
+        worker_llm=worker_llm,
+    )
+
+    g = StateGraph(AgentState)
+    g.add_node("context_builder", context_builder_node)
+    g.add_node("supervisor", supervisor_node)
+    g.add_node("esl_gateway", esl_gateway_node)
+    g.add_node("response_formatter", response_formatter_node)
+    g.add_node("explain_veto", explain_veto_node)
+
+    g.set_entry_point("context_builder")
+    g.add_edge("context_builder", "supervisor")
+    g.add_edge("supervisor", "esl_gateway")
+    g.add_conditional_edges(
+        "esl_gateway",
+        _route_after_esl,
+        {"response_formatter": "response_formatter", "explain_veto": "explain_veto"},
+    )
+    g.add_edge("response_formatter", END)
+    g.add_edge("explain_veto", END)
+    return g.compile()
+
+
+async def get_checkpointer():
+    """Return MemorySaver in test/development, AsyncPostgresSaver in production."""
+    from langgraph.checkpoint.memory import MemorySaver
+
+    if getattr(_settings, "ENVIRONMENT", "development") in ("test", "development"):
+        return MemorySaver()
+    try:
+        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+
+        saver = await AsyncPostgresSaver.from_conn_string(_settings.DATABASE_URL)
+        await saver.setup()
+        return saver
+    except Exception as e:
+        logger.warning(
+            f"AsyncPostgresSaver unavailable, falling back to MemorySaver: {e}"
+        )
+        return MemorySaver()
+
+
 def get_graph():
     global _compiled_graph
     if _compiled_graph is None:
-        _compiled_graph = build_graph()
+        if os.getenv("MULTI_AGENT", "").lower() == "true":
+            _compiled_graph = build_multi_agent_graph()
+        else:
+            _compiled_graph = build_graph()
     return _compiled_graph
 
 
@@ -217,6 +271,9 @@ async def stream_langgraph(
         # Sprint I — explicit ReAct trace
         "plan_steps": [],
         "planner_run_id": None,
+        "messages": [],
+        "active_agent": "",
+        "agent_outputs": {},
     }
     # Sprint J — when streaming-reasoning is on, use the async graph
     # builder with a Postgres checkpointer so the turn can pause and
@@ -230,7 +287,10 @@ async def stream_langgraph(
         config = {}
 
     # Nodes whose LLM calls generate the final user-visible response
-    RESPONSE_NODES = frozenset({"tool_planner", "tool_execution", "deep_research"})
+    if os.getenv("MULTI_AGENT", "").lower() == "true":
+        RESPONSE_NODES = frozenset({"supervisor"})
+    else:
+        RESPONSE_NODES = frozenset({"tool_planner", "tool_execution", "deep_research"})
 
     response_text = ""
     esl_data = {}
@@ -303,7 +363,10 @@ async def stream_langgraph(
                         latest = plan_steps_out[-1]
                         step_no = latest.get("step")
                         for ai, (action, obs) in enumerate(
-                            zip(latest.get("actions", []), latest.get("observations", []))
+                            zip(
+                                latest.get("actions", []),
+                                latest.get("observations", []),
+                            )
                         ):
                             yield {
                                 "event": "action_start",
@@ -327,15 +390,21 @@ async def stream_langgraph(
                 warning = output.get("token_warning")
                 if warning and isinstance(warning, str):
                     yield {"event": "warning", "message": warning}
+                # Sprint I — planner_run_id is created in tool_planner_node's
+                # first invocation; capture it here so the finalize block
+                # below can update the row at end of turn.
+                pr = output.get("planner_run_id")
+                if pr:
+                    planner_run_id = pr
+                ps = output.get("plan_steps")
+                if ps:
+                    plan_steps = ps
 
                 # Sprint J — emit a structured event when the planner has
                 # committed to a step's actions. (Only fires for tool_planner
                 # node; tool_execution node also matches this elif but its
                 # plan_steps output reflects the SAME latest step + observations.)
-                if (
-                    _settings.STREAMING_REASONING_ENABLED
-                    and node == "tool_planner"
-                ):
+                if _settings.STREAMING_REASONING_ENABLED and node == "tool_planner":
                     new_plan = output.get("plan_steps") or []
                     if new_plan:
                         latest = new_plan[-1]
@@ -397,7 +466,9 @@ async def stream_langgraph(
                         if payload is None and isinstance(first, dict):
                             payload = first.get("value", {})
                         payload = payload or {}
-                        thread_id = (config.get("configurable", {}) or {}).get("thread_id")
+                        thread_id = (config.get("configurable", {}) or {}).get(
+                            "thread_id"
+                        )
                         yield {
                             "event": "plan_paused",
                             "thread_id": thread_id,

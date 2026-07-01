@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { motion } from 'framer-motion'
 import {
@@ -112,11 +112,7 @@ export default function TransparencyPage() {
   const [statusFilter, setStatusFilter] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'esl' | 'tools' | 'health'>('esl')
 
-  useEffect(() => {
-    loadData()
-  }, [days, statusFilter])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true)
     try {
       const [reportData, logsData, insightsData, statsData] = await Promise.all([
@@ -138,7 +134,11 @@ export default function TransparencyPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [days, statusFilter])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
 
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp)
@@ -405,7 +405,6 @@ export default function TransparencyPage() {
         </motion.div>
       )}
 
-      {/* Audit Log — always rendered so filter chips are accessible */}
       {activeTab === 'esl' && (
       <Card className="rounded-2xl border border-[var(--ec-card-border)] bg-[var(--ec-card-bg)] shadow-[var(--ec-card-shadow)]">
         <CardHeader>

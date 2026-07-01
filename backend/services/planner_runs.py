@@ -21,9 +21,7 @@ from utils.db import get_db_connection
 logger = logging.getLogger(__name__)
 
 
-_VALID_STATUSES = frozenset(
-    {"running", "completed", "cap_hit", "error", "vetoed"}
-)
+_VALID_STATUSES = frozenset({"running", "completed", "cap_hit", "error", "vetoed"})
 
 
 class PlannerRunsService:
@@ -57,9 +55,7 @@ class PlannerRunsService:
                 return ""
             return str(row["id"])
         except Exception as exc:  # noqa: BLE001 — telemetry must not raise
-            logger.warning(
-                "planner_runs: create failed for user %s: %s", user_id, exc
-            )
+            logger.warning("planner_runs: create failed for user %s: %s", user_id, exc)
             return ""
 
     def finalize(
@@ -109,6 +105,4 @@ class PlannerRunsService:
                     )
                 conn.commit()
         except Exception as exc:  # noqa: BLE001 — telemetry must not raise
-            logger.warning(
-                "planner_runs: finalize failed for run %s: %s", run_id, exc
-            )
+            logger.warning("planner_runs: finalize failed for run %s: %s", run_id, exc)

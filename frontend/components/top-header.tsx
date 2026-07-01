@@ -3,9 +3,8 @@
 import { useState } from "react"
 import { usePathname } from "next/navigation"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
 import { useAuth } from "@/hooks/useAuth"
-import { Share2, ChevronRight, Menu } from "lucide-react"
+import { ChevronRight, Menu } from "lucide-react"
 import Link from "next/link"
 import { MobileSidebar } from "./mobile-sidebar"
 

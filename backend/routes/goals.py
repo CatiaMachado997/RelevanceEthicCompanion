@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from datetime import datetime, UTC
 
 from utils.db import get_db
-from utils.serialization import serialize_row, serialize_rows
+from utils.serialization import serialize_row
 from services.context_manager import ContextManager
 from services.work_rollups import WorkRollupsService
 from esl.engine import EthicalSafeguardLayer
@@ -243,7 +243,9 @@ async def get_goal(
 
         rollup_raw = rollups.get_goal_rollup(goal_id)
         if rollup_raw:
-            rollup = {k: v for k, v in rollup_raw.items() if k not in ("goal_id", "user_id")}
+            rollup = {
+                k: v for k, v in rollup_raw.items() if k not in ("goal_id", "user_id")
+            }
         else:
             rollup = dict(_GOAL_ROLLUP_ZERO)
 
