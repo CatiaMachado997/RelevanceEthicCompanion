@@ -53,9 +53,7 @@ class TestPruneOldTelemetry:
         sched = make_scheduler()
         ctx, cur = _build_db_mock(tool_rowcount=12, audit_rowcount=4)
 
-        with patch(
-            "services.scheduler.get_db_connection", return_value=ctx
-        ):
+        with patch("services.scheduler.get_db_connection", return_value=ctx):
             await sched._prune_old_telemetry()
 
         # Two DELETEs: one per table

@@ -322,9 +322,7 @@ class WeaviateClient:
             )
             return count
         except Exception as e:
-            logger.warning(
-                f"⚠️ delete_by_filter failed on {collection_name}: {e}"
-            )
+            logger.warning(f"⚠️ delete_by_filter failed on {collection_name}: {e}")
             return 0
 
     def delete_by_id(self, collection: str, uuid: str):

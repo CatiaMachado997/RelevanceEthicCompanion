@@ -38,6 +38,7 @@ def test_source_items_table_exists():
 @pytest.mark.integration
 def test_connector_backfill_jobs_table_exists():
     from utils.db import get_db_connection
+
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""

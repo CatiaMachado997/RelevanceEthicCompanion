@@ -6,9 +6,6 @@ All tests use a mocked DB cursor — no live Postgres required.
 from datetime import date, datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-
 USER_ID = "11111111-1111-1111-1111-111111111111"
 PROJECT_ID = "22222222-2222-2222-2222-222222222222"
 GOAL_ID = "33333333-3333-3333-3333-333333333333"

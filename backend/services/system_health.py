@@ -92,9 +92,7 @@ class SystemHealthService:
                     {
                         "job_id": job.id,
                         "next_run_time": (
-                            job.next_run_time.isoformat()
-                            if job.next_run_time
-                            else None
+                            job.next_run_time.isoformat() if job.next_run_time else None
                         ),
                         "trigger": str(job.trigger),
                     }

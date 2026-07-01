@@ -72,8 +72,12 @@ async def test_parallel_executions_via_gather():
         await asyncio.sleep(0.1)
         return "ok"
 
-    t1 = MagicMock(); t1.name = "t1"; t1.ainvoke = slow
-    t2 = MagicMock(); t2.name = "t2"; t2.ainvoke = slow
+    t1 = MagicMock()
+    t1.name = "t1"
+    t1.ainvoke = slow
+    t2 = MagicMock()
+    t2.name = "t2"
+    t2.ainvoke = slow
 
     started = time.perf_counter()
     a, b = await asyncio.gather(

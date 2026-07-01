@@ -121,7 +121,11 @@ async def get_project(
 
         rollup_raw = rollups.get_project_rollup(project_id)
         if rollup_raw:
-            rollup = {k: v for k, v in rollup_raw.items() if k not in ("project_id", "user_id")}
+            rollup = {
+                k: v
+                for k, v in rollup_raw.items()
+                if k not in ("project_id", "user_id")
+            }
         else:
             rollup = dict(_PROJECT_ROLLUP_ZERO)
 

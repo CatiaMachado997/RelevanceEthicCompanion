@@ -1,5 +1,5 @@
 # Core Framework
-fastapi>=0.115.0
+fastapi>=0.138.2
 uvicorn[standard]>=0.32.0
 pydantic>=2.10.0
 pydantic-settings>=2.6.0
@@ -19,7 +19,7 @@ groq>=0.9.0
 
 # LLM & AI - V2 (new)
 google-genai>=1.0.0
-langchain>=0.1.0
+langchain>=1.3.11
 langchain-groq>=0.3.3
 langchain-google-genai>=0.0.5
 openai==1.7.2  # For embeddings if needed
@@ -28,13 +28,13 @@ openai==1.7.2  # For embeddings if needed
 tavily-python>=0.5.0
 
 # Google Cloud Services
-google-cloud-texttospeech==2.16.0
+google-cloud-texttospeech==2.37.0
 google-auth==2.27.0
 
 # Google APIs (V2 - Calendar integration)
 google-api-python-client>=2.100.0
 google-auth-httplib2>=0.1.0
-google-auth-oauthlib>=1.0.0
+google-auth-oauthlib>=1.4.0
 google-cloud-secret-manager>=2.16.0
 
 # Scheduling (V2)
@@ -48,7 +48,7 @@ python-docx>=1.1.0
 python-dotenv==1.2.2
 python-jose[cryptography]>=3.3.0
 cryptography>=46.0.5
-pyasn1>=0.6.2
+pyasn1>=0.6.3
 PyJWT>=2.12.0
 python-multipart>=0.0.22
 
@@ -73,12 +73,14 @@ types-requests>=2.31.0
 
 # Sprint 2a
 langgraph>=0.2.0
+langgraph-supervisor>=0.0.30
+langgraph-checkpoint-postgres>=2.0.0
 fastapi-mcp>=0.4.0
 # Pinned to 2.x line — langfuse 3.x+ pulls opentelemetry-api which causes pip resolution-too-deep.
 # The app only uses Langfuse(public_key, secret_key, host), a stable API across 2.x/3.x.
 langfuse>=2.60.0,<3.0
 anthropic>=0.25.0
-mcp
+mcp>=1.0.0,<2.0
 
 # Tool Marketplace — Composio managed integrations
 composio-langchain==0.11.4

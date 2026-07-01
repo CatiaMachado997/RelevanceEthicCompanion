@@ -37,7 +37,9 @@ def test_create_returns_uuid_and_inserts_running_row():
 
 def test_create_returns_empty_string_on_db_failure():
     """Telemetry must never break the calling flow."""
-    with patch("services.planner_runs.get_db_connection", side_effect=RuntimeError("boom")):
+    with patch(
+        "services.planner_runs.get_db_connection", side_effect=RuntimeError("boom")
+    ):
         svc = PlannerRunsService()
         run_id = svc.create(user_id=TEST_USER_ID, conversation_id=None, intent="chat")
     assert run_id == ""
@@ -67,10 +69,18 @@ def test_finalize_updates_status_and_totals():
 
 def test_finalize_swallows_db_failure():
     """Telemetry must never break the calling flow."""
-    with patch("services.planner_runs.get_db_connection", side_effect=RuntimeError("boom")):
+    with patch(
+        "services.planner_runs.get_db_connection", side_effect=RuntimeError("boom")
+    ):
         svc = PlannerRunsService()
-        svc.finalize(run_id="rid", status="completed", total_steps=0,
-                     total_actions=0, total_duration_ms=0, plan_steps=[])
+        svc.finalize(
+            run_id="rid",
+            status="completed",
+            total_steps=0,
+            total_actions=0,
+            total_duration_ms=0,
+            plan_steps=[],
+        )
 
 
 def test_finalize_rejects_invalid_status():
@@ -78,8 +88,14 @@ def test_finalize_rejects_invalid_status():
     conn, cur = _mock_db({"id": "rid"})
     with patch("services.planner_runs.get_db_connection", return_value=conn):
         svc = PlannerRunsService()
-        svc.finalize(run_id="rid", status="nonsense", total_steps=0,
-                     total_actions=0, total_duration_ms=0, plan_steps=[])
+        svc.finalize(
+            run_id="rid",
+            status="nonsense",
+            total_steps=0,
+            total_actions=0,
+            total_duration_ms=0,
+            plan_steps=[],
+        )
     # If finalize defended at the application layer (recommended), it
     # short-circuited and never called cur.execute. If it didn't defend
     # and the CHECK would have caught it, we accept that too.
