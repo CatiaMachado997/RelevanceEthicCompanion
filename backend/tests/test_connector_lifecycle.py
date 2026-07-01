@@ -8,7 +8,6 @@ second — so SQL state still drives retries on partial failure).
 import pytest
 from unittest.mock import MagicMock, patch
 
-
 USER_ID = "00000000-0000-0000-0000-000000000000"
 
 

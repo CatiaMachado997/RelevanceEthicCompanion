@@ -268,16 +268,14 @@ class BackgroundScheduler:
         try:
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
-                    cur.execute(
-                        """
+                    cur.execute("""
                         SELECT DISTINCT user_id
                         FROM data_sources
                         WHERE source_type = 'google_calendar'
                           AND enabled = TRUE
                           AND oauth_token_encrypted IS NOT NULL
                         ORDER BY user_id
-                    """
-                    )
+                    """)
 
                     return [row[0] for row in cur.fetchall()]
 
@@ -338,14 +336,12 @@ class BackgroundScheduler:
             with get_db_connection() as conn:
                 with conn.cursor() as cur:
                     # Find expired tokens
-                    cur.execute(
-                        """
+                    cur.execute("""
                         SELECT user_id, source_type, token_expires_at
                         FROM data_sources
                         WHERE enabled = TRUE
                           AND token_expires_at < NOW()
-                    """
-                    )
+                    """)
 
                     expired = cur.fetchall()
 

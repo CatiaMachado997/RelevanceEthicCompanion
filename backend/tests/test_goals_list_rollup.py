@@ -13,7 +13,6 @@ from fastapi.testclient import TestClient
 
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 
-
 TEST_USER_ID = "00000000-0000-0000-0000-000000000000"
 GOAL_ID_A = "11111111-1111-1111-1111-111111111111"
 GOAL_ID_B = "22222222-2222-2222-2222-222222222222"

@@ -15,16 +15,15 @@ def client():
 
 
 def test_auth_session_route_exists(client):
-    """POST /api/auth/session route must exist and be reachable."""
-    routes = [
-        r
-        for r in client.app.routes
-        if hasattr(r, "path")
-        and r.path == "/api/auth/session"
-        and hasattr(r, "methods")
-        and "POST" in r.methods
-    ]
-    assert len(routes) == 1, "POST /api/auth/session route must exist"
+    """POST /api/auth/session route must exist and be reachable.
+
+    Hits the route directly rather than walking client.app.routes: newer
+    FastAPI versions nest included-router routes inside internal
+    _IncludedRouter wrappers, so a flat "r.path == ..." scan no longer finds
+    them even though the route itself works fine.
+    """
+    response = client.post("/api/auth/session", json={"access_token": "invalid"})
+    assert response.status_code != 404, "POST /api/auth/session route must exist"
 
 
 def test_get_user_id_key_func_returns_user_id():

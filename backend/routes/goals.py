@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from datetime import datetime, UTC
 
 from utils.db import get_db
-from utils.serialization import serialize_row, serialize_rows
+from utils.serialization import serialize_row
 from services.context_manager import ContextManager
 from services.work_rollups import WorkRollupsService
 from esl.engine import EthicalSafeguardLayer

@@ -8,7 +8,6 @@ that the existing single-tool / zero-tool flows still behave the same.
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-
 USER_ID = "00000000-0000-0000-0000-000000000000"
 
 

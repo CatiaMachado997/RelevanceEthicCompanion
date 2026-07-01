@@ -8,7 +8,6 @@ from fastapi.testclient import TestClient
 
 from utils.supabase_auth import get_current_read_user_id
 
-
 TEST_USER_ID = "00000000-0000-0000-0000-000000000000"
 
 

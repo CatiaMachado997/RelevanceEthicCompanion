@@ -44,14 +44,12 @@ def run_migrations(migrations_dir: str | None = None) -> int:
     # Ensure the tracking table exists and get already-applied set.
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
+            cur.execute("""
                 CREATE TABLE IF NOT EXISTS schema_migrations (
                     filename   TEXT PRIMARY KEY,
                     applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
-            """
-            )
+            """)
             cur.execute("SELECT filename FROM schema_migrations")
             applied = {row["filename"] for row in cur.fetchall()}
 
@@ -97,14 +95,12 @@ def dry_run_migrations(migrations_dir: str | None = None) -> list[tuple[str, str
 
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
+            cur.execute("""
                 CREATE TABLE IF NOT EXISTS schema_migrations (
                     filename TEXT PRIMARY KEY,
                     applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
-            """
-            )
+            """)
             cur.execute("SELECT filename FROM schema_migrations")
             applied = {row["filename"] for row in cur.fetchall()}
 

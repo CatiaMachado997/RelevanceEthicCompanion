@@ -2,7 +2,6 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from services.connectors.base import SourceItem
 
-
 USER_ID = "00000000-0000-0000-0000-000000000000"
 
 

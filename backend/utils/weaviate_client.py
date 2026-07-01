@@ -41,7 +41,9 @@ class WeaviateClient:
             )
             logger.info(f"✅ Connected to Weaviate at {self.url} (with gRPC)")
         except Exception as e:
-            logger.warning(f"⚠️  gRPC connection failed, falling back to HTTP-only: {e}")
+            logger.warning(
+                f"⚠️  gRPC connection failed, falling back to HTTP-only: {e}"
+            )
             try:
                 # Fallback to HTTP-only if gRPC fails
                 self.client = weaviate.connect_to_local(
