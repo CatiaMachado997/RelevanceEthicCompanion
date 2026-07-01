@@ -194,14 +194,14 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
               <Sparkles className="h-4 w-4 text-[#171717]" />
               <span className="text-xs font-medium text-[#171717]">Try asking</span>
             </div>
-            <p className="text-sm text-[#525252]">"Help me prioritize my goals for this week"</p>
+            <p className="text-sm text-[#525252]">&ldquo;Help me prioritize my goals for this week&rdquo;</p>
           </div>
           <div className="p-3 rounded-lg bg-[#FAFAFA] border border-[#E5E5E5]">
             <div className="flex items-center gap-2 mb-2">
               <Clock className="h-4 w-4 text-[#171717]" />
               <span className="text-xs font-medium text-[#171717]">Quick prompt</span>
             </div>
-            <p className="text-sm text-[#525252]">"What should I focus on today?"</p>
+            <p className="text-sm text-[#525252]">&ldquo;What should I focus on today?&rdquo;</p>
           </div>
         </div>
       </SecondarySidebarSection>

@@ -1,8 +1,22 @@
 """Shared pytest fixtures for the backend test suite."""
 
+import os
+
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip tests marked `integration` unless RUN_INTEGRATION_TESTS=1 is set."""
+    if os.environ.get("RUN_INTEGRATION_TESTS") == "1":
+        return
+    skip_integration = pytest.mark.skip(
+        reason="Integration test — set RUN_INTEGRATION_TESTS=1 to run"
+    )
+    for item in items:
+        if "integration" in item.keywords:
+            item.add_marker(skip_integration)
 
 
 @pytest.fixture

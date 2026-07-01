@@ -6,7 +6,7 @@ This data is stored for future analysis and model tuning.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
 from uuid import uuid4
 from psycopg.types.json import Json
@@ -113,7 +113,7 @@ class FeedbackProcessor:
                             feedback_type,
                             Json(context_snapshot or {}),
                             additional_notes,
-                            datetime.utcnow(),
+                            datetime.now(timezone.utc),
                         ),
                     )
 

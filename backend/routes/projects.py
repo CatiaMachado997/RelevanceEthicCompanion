@@ -12,6 +12,7 @@ from esl.models import ProposedAction, ActionType, UrgencyLevel, ESLDecisionStat
 from utils.db import get_db_connection
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 from services.context_manager import ContextManager
+from services.work_rollups import WorkRollupsService
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,19 @@ def get_context_manager() -> ContextManager:
 
 def get_esl(cm: ContextManager = Depends(get_context_manager)) -> EthicalSafeguardLayer:
     return EthicalSafeguardLayer(cm)
+
+
+def get_work_rollups_service() -> WorkRollupsService:
+    return WorkRollupsService()
+
+
+_PROJECT_ROLLUP_ZERO: Dict[str, int] = {
+    "tasks_total": 0,
+    "tasks_done": 0,
+    "tasks_open": 0,
+    "at_risk_count": 0,
+    "completion_pct": 0,
+}
 
 
 class CreateProjectRequest(BaseModel):
@@ -90,6 +104,7 @@ async def list_projects(
 async def get_project(
     project_id: str,
     user_id: str = Depends(get_current_read_user_id),
+    rollups: WorkRollupsService = Depends(get_work_rollups_service),
 ) -> Dict[str, Any]:
     """Get a single project by ID."""
     try:
@@ -103,6 +118,13 @@ async def get_project(
                 row = cur.fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Project not found")
+
+        rollup_raw = rollups.get_project_rollup(project_id)
+        if rollup_raw:
+            rollup = {k: v for k, v in rollup_raw.items() if k not in ("project_id", "user_id")}
+        else:
+            rollup = dict(_PROJECT_ROLLUP_ZERO)
+
         return {
             "id": str(row["id"]),
             "user_id": str(row["user_id"]),
@@ -112,6 +134,7 @@ async def get_project(
             "goal_id": str(row["goal_id"]) if row["goal_id"] else None,
             "created_at": row["created_at"].isoformat() if row["created_at"] else None,
             "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
+            "rollup": rollup,
         }
     except HTTPException:
         raise

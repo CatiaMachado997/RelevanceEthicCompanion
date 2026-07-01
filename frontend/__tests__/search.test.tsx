@@ -1,51 +1,45 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SearchPage from '../app/dashboard/search/page'
-import { valuesApi, goalsApi, chatApi } from '../lib/api'
+import { searchApi } from '../lib/api'
 
+// The search page now uses Weaviate semantic search via `searchApi.query`
+// (no more values/goals/chat fan-out from the old UI).
 jest.mock('../lib/api', () => ({
-  valuesApi: { list: jest.fn() },
-  goalsApi: { list: jest.fn() },
-  chatApi: { history: jest.fn() },
+  searchApi: { query: jest.fn() },
 }))
 
 beforeEach(() => {
   jest.resetAllMocks()
   localStorage.clear()
-  ;(valuesApi.list as jest.Mock).mockResolvedValue({ values: [] })
-  ;(goalsApi.list as jest.Mock).mockResolvedValue({ goals: [] })
-  ;(chatApi.history as jest.Mock).mockResolvedValue({ messages: [] })
+  ;(searchApi.query as jest.Mock).mockResolvedValue([])
 })
 
-test('test_shows_empty_state_initially', () => {
+test('test_renders_search_input', () => {
   render(<SearchPage />)
-  expect(screen.getByText('Start searching')).toBeInTheDocument()
+  expect(
+    screen.getByPlaceholderText(/search your memories/i)
+  ).toBeInTheDocument()
 })
 
-test('test_search_returns_value_results', async () => {
-  ;(valuesApi.list as jest.Mock).mockResolvedValue({
-    values: [{
-      id: 'v1',
-      type: 'boundary',
-      value: 'no_work_after_19h',
-      priority: 5,
-      created_at: new Date().toISOString(),
-    }]
-  })
-
+test('test_search_calls_api_on_enter', async () => {
   render(<SearchPage />)
-  const input = screen.getByPlaceholderText('Search...')
+  const input = screen.getByPlaceholderText(/search your memories/i)
   await userEvent.type(input, 'boundary{Enter}')
 
-  expect(await screen.findByText('no_work_after_19h')).toBeInTheDocument()
+  await waitFor(() => {
+    expect(searchApi.query).toHaveBeenCalledWith('boundary', 20)
+  })
 })
 
 test('test_clear_button_resets_query', async () => {
   render(<SearchPage />)
-  const input = screen.getByPlaceholderText('Search...')
+  const input = screen.getByPlaceholderText(/search your memories/i)
   await userEvent.type(input, 'hello')
 
-  await userEvent.click(screen.getByRole('button', { name: '' })) // X button
+  await userEvent.click(
+    screen.getByRole('button', { name: /clear search/i })
+  )
 
   expect(input).toHaveValue('')
 })

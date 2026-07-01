@@ -23,6 +23,9 @@ import {
 } from '@/components/ui/select'
 import { PageHeader } from '@/components/ui/page-header'
 import { FilterChips } from '@/components/ui/filter-chips'
+import { Button } from '@/components/ui/button'
+import ToolCallsTab from '@/components/transparency/ToolCallsTab'
+import SystemHealthTab from '@/components/transparency/SystemHealthTab'
 import {
   PieChart,
   Pie,
@@ -107,6 +110,7 @@ export default function TransparencyPage() {
   const [loading, setLoading] = useState(true)
   const [days, setDays] = useState('7')
   const [statusFilter, setStatusFilter] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'esl' | 'tools' | 'health'>('esl')
 
   useEffect(() => {
     loadData()
@@ -183,20 +187,66 @@ export default function TransparencyPage() {
         title="Transparency"
         subtitle="See how ESL protects you"
         action={
-          <Select value={days} onValueChange={setDays}>
-            <SelectTrigger className="w-[130px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="7">Last 7 days</SelectItem>
-              <SelectItem value="14">Last 14 days</SelectItem>
-              <SelectItem value="30">Last 30 days</SelectItem>
-            </SelectContent>
-          </Select>
+          activeTab === 'esl' ? (
+            <Select value={days} onValueChange={setDays}>
+              <SelectTrigger className="w-[130px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7">Last 7 days</SelectItem>
+                <SelectItem value="14">Last 14 days</SelectItem>
+                <SelectItem value="30">Last 30 days</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : null
         }
       />
 
-      {loading ? (
+      {/* Tabs */}
+      <div className="flex items-center gap-2 border-b border-[rgba(0,0,0,0.06)]">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => setActiveTab('esl')}
+          className={`rounded-none border-b-2 px-4 py-2 text-sm ${
+            activeTab === 'esl'
+              ? 'border-[#0a0a0a] text-[#0a0a0a]'
+              : 'border-transparent text-[#6b6b6b] hover:text-[#0a0a0a]'
+          }`}
+        >
+          ESL decisions
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => setActiveTab('tools')}
+          className={`rounded-none border-b-2 px-4 py-2 text-sm ${
+            activeTab === 'tools'
+              ? 'border-[#0a0a0a] text-[#0a0a0a]'
+              : 'border-transparent text-[#6b6b6b] hover:text-[#0a0a0a]'
+          }`}
+        >
+          Tool calls
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => setActiveTab('health')}
+          className={`rounded-none border-b-2 px-4 py-2 text-sm ${
+            activeTab === 'health'
+              ? 'border-[#0a0a0a] text-[#0a0a0a]'
+              : 'border-transparent text-[#6b6b6b] hover:text-[#0a0a0a]'
+          }`}
+        >
+          System health
+        </Button>
+      </div>
+
+      {activeTab === 'tools' ? (
+        <ToolCallsTab />
+      ) : activeTab === 'health' ? (
+        <SystemHealthTab />
+      ) : loading ? (
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             {[1, 2, 3, 4].map((i) => (
@@ -216,7 +266,7 @@ export default function TransparencyPage() {
           {report && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
               <motion.div variants={itemVariants} className="h-full">
-                <Card className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)] h-full">
+                <Card className="rounded-2xl border border-[var(--ec-card-border)] bg-[var(--ec-card-bg)] shadow-[var(--ec-card-shadow)] h-full">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">
                       Total Decisions
@@ -232,7 +282,7 @@ export default function TransparencyPage() {
                 </Card>
               </motion.div>
               <motion.div variants={itemVariants} className="h-full">
-                <Card className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)] h-full">
+                <Card className="rounded-2xl border border-[var(--ec-card-border)] bg-[var(--ec-card-bg)] shadow-[var(--ec-card-shadow)] h-full">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">
                       Approval Rate
@@ -250,7 +300,7 @@ export default function TransparencyPage() {
                 </Card>
               </motion.div>
               <motion.div variants={itemVariants} className="h-full">
-                <Card className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)] h-full">
+                <Card className="rounded-2xl border border-[var(--ec-card-border)] bg-[var(--ec-card-bg)] shadow-[var(--ec-card-shadow)] h-full">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">Protected</CardTitle>
                     <div className="w-8 h-8 rounded-xl bg-[#f5f5f5] flex items-center justify-center">
@@ -264,7 +314,7 @@ export default function TransparencyPage() {
                 </Card>
               </motion.div>
               <motion.div variants={itemVariants} className="h-full">
-                <Card className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)] h-full">
+                <Card className="rounded-2xl border border-[var(--ec-card-border)] bg-[var(--ec-card-bg)] shadow-[var(--ec-card-shadow)] h-full">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">Modified</CardTitle>
                     <div className="w-8 h-8 rounded-xl bg-[#f5f5f5] flex items-center justify-center">
@@ -284,8 +334,8 @@ export default function TransparencyPage() {
           {report && stats && (
             <motion.div variants={itemVariants}>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="rounded-2xl p-5" style={{ background: '#ffffff', border: '1px solid #e5e5e5' }}>
-                  <p className="text-sm font-medium mb-3" style={{ color: '#1a1a1a' }}>Decision Breakdown</p>
+                <div className="rounded-2xl p-5" style={{ background: 'var(--ec-card-bg)', border: '1px solid #e5e5e5' }}>
+                  <p className="text-sm font-medium mb-3" style={{ color: 'var(--ec-text)' }}>Decision Breakdown</p>
                   <ResponsiveContainer width="100%" height={200}>
                     <PieChart>
                       <Pie data={donutData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} dataKey="value">
@@ -297,8 +347,8 @@ export default function TransparencyPage() {
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="rounded-2xl p-5" style={{ background: '#ffffff', border: '1px solid #e5e5e5' }}>
-                  <p className="text-sm font-medium mb-3" style={{ color: '#1a1a1a' }}>Decisions Over Time</p>
+                <div className="rounded-2xl p-5" style={{ background: 'var(--ec-card-bg)', border: '1px solid #e5e5e5' }}>
+                  <p className="text-sm font-medium mb-3" style={{ color: 'var(--ec-text)' }}>Decisions Over Time</p>
                   <ResponsiveContainer width="100%" height={200}>
                     <LineChart data={timeData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
@@ -310,8 +360,8 @@ export default function TransparencyPage() {
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="rounded-2xl p-5" style={{ background: '#ffffff', border: '1px solid #e5e5e5' }}>
-                  <p className="text-sm font-medium mb-3" style={{ color: '#1a1a1a' }}>Most Protected Values</p>
+                <div className="rounded-2xl p-5" style={{ background: 'var(--ec-card-bg)', border: '1px solid #e5e5e5' }}>
+                  <p className="text-sm font-medium mb-3" style={{ color: 'var(--ec-text)' }}>Most Protected Values</p>
                   <ResponsiveContainer width="100%" height={200}>
                     <BarChart data={stats.most_protected_values}>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
@@ -355,8 +405,8 @@ export default function TransparencyPage() {
         </motion.div>
       )}
 
-      {/* Audit Log — always rendered so filter chips are accessible */}
-      <Card className="rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+      {activeTab === 'esl' && (
+      <Card className="rounded-2xl border border-[var(--ec-card-border)] bg-[var(--ec-card-bg)] shadow-[var(--ec-card-shadow)]">
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
@@ -434,6 +484,7 @@ export default function TransparencyPage() {
           )}
         </CardContent>
       </Card>
+      )}
     </div>
   )
 }

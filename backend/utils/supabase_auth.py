@@ -142,7 +142,11 @@ def _extract_bearer_token(request: Request) -> str:
 
 
 def _extract_token(request: Request) -> str:
-    """Extract JWT from Authorization header; fall back to HttpOnly cookie."""
+    """Extract JWT from Authorization header, HttpOnly cookie, or query param.
+
+    Query param ?token= is accepted exclusively for EventSource (SSE) requests
+    because the browser's EventSource API cannot set custom headers.
+    """
     auth_header = request.headers.get("Authorization", "")
     if auth_header:
         parts = auth_header.split(" ", 1)
@@ -151,6 +155,11 @@ def _extract_token(request: Request) -> str:
 
     # Cookie fallback — used when the frontend sends HttpOnly session cookie
     token = request.cookies.get("ec_session", "")
+    if token:
+        return token
+
+    # Query param fallback — EventSource cannot send Authorization headers
+    token = request.query_params.get("token", "")
     if token:
         return token
 

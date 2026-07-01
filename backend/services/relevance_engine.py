@@ -8,7 +8,7 @@ and proposes a proactive, ESL-checked action via the Orchestrator.
 from __future__ import annotations
 
 from typing import List, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from services.context_manager import ContextManager
 
@@ -49,7 +49,7 @@ class RelevanceEngine:
         events = await self.context_manager.get_upcoming_events(
             user_id, hours_ahead=hours_ahead
         )
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         window = now + timedelta(minutes=window_minutes)
 
         # Prepare orchestrator if not provided

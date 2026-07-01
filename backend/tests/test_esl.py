@@ -11,9 +11,10 @@ Comprehensive tests for the core ESL components:
 """
 
 import pytest
+from contextlib import contextmanager
 from datetime import datetime, UTC
 from typing import Optional
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from esl.models import (
     ProposedAction,
@@ -857,3 +858,542 @@ class TestESLAuditLoggerDatabase:
         logs = await logger_inst.get_user_logs("db-user-5", days=7)
         assert len(logs) == 1
         assert logs[0].user_id == "db-user-5"
+
+
+# ==================== ESL Engine — content-safety and transparency ====================
+
+
+def _make_sensitivity_db_factory(row=None, raise_on_enter=False):
+    """Context-manager factory for engine.py sensitivity DB queries.
+
+    Mirrors `with get_db_connection() as conn: with conn.cursor() as cur: ...`
+    and records executed (query, params) pairs on the factory for inspection.
+    """
+    executed = []
+
+    @contextmanager
+    def factory():
+        if raise_on_enter:
+            raise RuntimeError("DB unavailable")
+        conn = MagicMock()
+        cursor = MagicMock()
+        cursor.execute.side_effect = lambda q, p=(): executed.append((q, p))
+        cursor.fetchone.return_value = row
+        cursor_cm = MagicMock()
+        cursor_cm.__enter__ = MagicMock(return_value=cursor)
+        cursor_cm.__exit__ = MagicMock(return_value=None)
+        conn.cursor.return_value = cursor_cm
+        yield conn
+
+    factory.executed = executed
+    return factory
+
+
+class TestESLContentSafety:
+    """Tests for EthicalSafeguardLayer.check_content_safety (V2 relevance integration)."""
+
+    @pytest.mark.asyncio
+    async def test_content_safety_approves_safe_content(self, mock_context_manager):
+        mock_context_manager.get_user_values = AsyncMock(return_value=[])
+        esl = EthicalSafeguardLayer(mock_context_manager)
+
+        result = await esl.check_content_safety(
+            content="Your team standup starts in 10 minutes",
+            user_id="user-1",
+        )
+
+        assert result.blocked is False
+        assert "passes" in result.reason.lower()
+        assert result.violated_values == []
+
+    @pytest.mark.asyncio
+    async def test_content_safety_blocks_filtered_topic(self, mock_context_manager):
+        """Content matching a user's topic filter should be blocked."""
+        mock_context_manager.get_user_values = AsyncMock(
+            return_value=[create_user_value(ValueType.TOPIC_FILTER, "no_politics")]
+        )
+        esl = EthicalSafeguardLayer(mock_context_manager)
+
+        result = await esl.check_content_safety(
+            content="Breaking politics news roundup",
+            user_id="user-2",
+        )
+
+        assert result.blocked is True
+        assert "politics" in result.reason.lower()
+        assert len(result.violated_values) == 1
+
+    @pytest.mark.asyncio
+    async def test_content_safety_blocks_manipulation(self, mock_context_manager):
+        """Content with multiple manipulation patterns should be blocked."""
+        mock_context_manager.get_user_values = AsyncMock(return_value=[])
+        esl = EthicalSafeguardLayer(mock_context_manager)
+
+        result = await esl.check_content_safety(
+            content="Limited time offer — act now! Don't miss out!",
+            user_id="user-3",
+        )
+
+        assert result.blocked is True
+        assert "manipulation" in result.reason.lower()
+
+
+class TestESLTransparencyReport:
+    """Tests for EthicalSafeguardLayer.get_transparency_report."""
+
+    @pytest.mark.asyncio
+    async def test_empty_report_when_no_decisions(self, mock_context_manager):
+        esl = EthicalSafeguardLayer(mock_context_manager)
+
+        report = await esl.get_transparency_report("user-empty", days=7)
+
+        assert report["total_decisions"] == 0
+        assert report["approval_rate"] == 0.0
+        assert report["vetoed_count"] == 0
+        assert report["modified_count"] == 0
+        assert "No decisions" in report["message"]
+
+    @pytest.mark.asyncio
+    async def test_report_aggregates_decisions(self, mock_context_manager):
+        """Report should aggregate logged decisions and surface recent vetoes."""
+        esl = EthicalSafeguardLayer(mock_context_manager)
+        action = create_action()
+
+        for _ in range(2):
+            await esl.audit_logger.log_decision(
+                "report-user",
+                action,
+                ESLDecision(
+                    status=ESLDecisionStatus.APPROVED, reason="ok", confidence=0.95
+                ),
+                {},
+            )
+        await esl.audit_logger.log_decision(
+            "report-user",
+            action,
+            ESLDecision(
+                status=ESLDecisionStatus.MODIFIED,
+                reason="delayed until morning",
+                confidence=0.9,
+            ),
+            {},
+        )
+        await esl.audit_logger.log_decision(
+            "report-user",
+            action,
+            ESLDecision(
+                status=ESLDecisionStatus.VETOED,
+                reason="focus mode",
+                confidence=0.95,
+            ),
+            {},
+        )
+
+        report = await esl.get_transparency_report("report-user", days=7)
+
+        assert report["total_decisions"] == 4
+        assert report["approved_count"] == 2
+        assert report["modified_count"] == 1
+        assert report["vetoed_count"] == 1
+        assert report["approval_rate"] == 0.5
+        assert len(report["recent_vetoes"]) == 1
+        assert report["recent_vetoes"][0]["reason"] == "focus mode"
+
+
+class TestESLUserSensitivity:
+    """Tests for ESL user-sensitivity persistence (note/_get_user_sensitivity)."""
+
+    @pytest.mark.asyncio
+    async def test_note_sensitivity_inserts_row(self, mock_context_manager):
+        factory = _make_sensitivity_db_factory()
+        esl = EthicalSafeguardLayer(mock_context_manager)
+
+        with patch("utils.db.get_db_connection", factory):
+            await esl.note_user_sensitivity("u-1", "work_summary", increment=0.2)
+
+        assert len(factory.executed) == 1
+        query, params = factory.executed[0]
+        assert "INSERT INTO user_esl_sensitivity" in query
+        assert params[0] == "u-1"
+        assert params[1] == "work_summary"
+        assert params[2] == 0.2
+        assert params[3] == 0.2
+
+    @pytest.mark.asyncio
+    async def test_note_sensitivity_swallows_db_exception(self, mock_context_manager):
+        failing = _make_sensitivity_db_factory(raise_on_enter=True)
+        esl = EthicalSafeguardLayer(mock_context_manager)
+
+        with patch("utils.db.get_db_connection", failing):
+            # Should not raise — method logs and returns None
+            await esl.note_user_sensitivity("u-2", "notification")
+
+    @pytest.mark.asyncio
+    async def test_get_sensitivity_returns_row_value(self, mock_context_manager):
+        factory = _make_sensitivity_db_factory(row={"sensitivity_boost": 0.55})
+        esl = EthicalSafeguardLayer(mock_context_manager)
+
+        with patch("utils.db.get_db_connection", factory):
+            boost = await esl._get_user_sensitivity("u-3", "work_summary")
+
+        assert boost == 0.55
+        assert len(factory.executed) == 1
+        assert "SELECT sensitivity_boost" in factory.executed[0][0]
+
+    @pytest.mark.asyncio
+    async def test_get_sensitivity_returns_zero_when_no_row(self, mock_context_manager):
+        factory = _make_sensitivity_db_factory(row=None)
+        esl = EthicalSafeguardLayer(mock_context_manager)
+
+        with patch("utils.db.get_db_connection", factory):
+            boost = await esl._get_user_sensitivity("u-4", "work_summary")
+
+        assert boost == 0.0
+
+    @pytest.mark.asyncio
+    async def test_get_sensitivity_returns_zero_on_exception(
+        self, mock_context_manager
+    ):
+        failing = _make_sensitivity_db_factory(raise_on_enter=True)
+        esl = EthicalSafeguardLayer(mock_context_manager)
+
+        with patch("utils.db.get_db_connection", failing):
+            boost = await esl._get_user_sensitivity("u-5", "work_summary")
+
+        assert boost == 0.0
+
+
+class TestESLEngineEvaluateActionBranches:
+    """Cover evaluate_action branches not hit by the primary integration tests."""
+
+    @pytest.mark.asyncio
+    async def test_vetoes_non_chat_engagement_optimization(self, mock_context_manager):
+        """Push notification with ≥4 engagement metrics should be vetoed."""
+        esl = EthicalSafeguardLayer(mock_context_manager)
+        action = create_action(
+            action_type=ActionType.PUSH_NOTIFICATION,
+            content="check the app",
+            metadata={
+                "click_rate": 0.2,
+                "time_in_app": 300,
+                "daily_active": True,
+                "session_length": 600,
+            },
+        )
+
+        decision = await esl.evaluate_action(action, "engage-user")
+
+        assert decision.status == ESLDecisionStatus.VETOED
+        assert "EngagementDetector" in decision.applied_rules
+
+    @pytest.mark.asyncio
+    async def test_topic_filter_veto_populates_violated_values(
+        self, mock_context_manager
+    ):
+        """Topic filter veto (hard-veto path) should list the violated value."""
+        mock_context_manager.get_user_context = AsyncMock(
+            return_value=UserContext(
+                user_id="topic-user",
+                current_time=datetime(2025, 1, 15, 12, 0),
+                focus_mode=False,
+                active_goals=[],
+                user_values=[create_user_value(ValueType.TOPIC_FILTER, "no_politics")],
+            )
+        )
+        esl = EthicalSafeguardLayer(mock_context_manager)
+        action = create_action(
+            action_type=ActionType.CHAT_RESPONSE,
+            content="Latest politics update from Washington",
+        )
+
+        decision = await esl.evaluate_action(action, "topic-user")
+
+        # Topic filter is a *hard* veto — wins even in advisory mode.
+        assert decision.status == ESLDecisionStatus.VETOED
+        assert "TopicFilter" in decision.applied_rules
+        assert len(decision.violated_values) == 1
+
+    @pytest.mark.asyncio
+    async def test_semantic_manipulation_llm_veto(self, mock_context_manager):
+        """LLM flagging semantic manipulation should veto non-advisory actions."""
+        # Regex-based manipulation_check must pass first (len > 100, no double pattern).
+        long_content = (
+            "Here is a considered update about the project, framed in an open "
+            "and neutral way to give you the relevant context you need."
+        )
+        assert len(long_content) > 100
+
+        llm = MagicMock()
+        llm_response = MagicMock()
+        llm_response.content = "YES"
+        llm.ainvoke = AsyncMock(return_value=llm_response)
+
+        esl = EthicalSafeguardLayer(mock_context_manager, llm=llm)
+        action = create_action(
+            action_type=ActionType.PUSH_NOTIFICATION, content=long_content
+        )
+
+        decision = await esl.evaluate_action(action, "llm-user")
+
+        assert llm.ainvoke.await_count == 1
+        assert decision.status == ESLDecisionStatus.VETOED
+        assert "SemanticManipulationDetector" in decision.applied_rules
+
+    @pytest.mark.asyncio
+    async def test_semantic_manipulation_llm_exception_is_ignored(
+        self, mock_context_manager
+    ):
+        """If the LLM raises, the semantic check is skipped silently."""
+        long_content = (
+            "Another longer piece of content that pushes past the 100-char "
+            "threshold required to invoke the semantic check path entirely."
+        )
+        # Force a distinct hash from the YES test so the cache doesn't short-circuit.
+        long_content = long_content + " — raises path"
+        assert len(long_content) > 100
+
+        llm = MagicMock()
+        llm.ainvoke = AsyncMock(side_effect=RuntimeError("LLM unavailable"))
+
+        esl = EthicalSafeguardLayer(mock_context_manager, llm=llm)
+        action = create_action(
+            action_type=ActionType.CHAT_RESPONSE, content=long_content
+        )
+
+        decision = await esl.evaluate_action(action, "llm-err-user")
+
+        # With no other violations, the request should still be approved.
+        assert decision.status == ESLDecisionStatus.APPROVED
+        assert "SemanticManipulationDetector" not in decision.applied_rules
+
+    @pytest.mark.asyncio
+    async def test_time_suggested_modification_returns_modified(
+        self, mock_context_manager
+    ):
+        """When time rule returns a suggested modification, decision is MODIFIED."""
+        from esl.rules import RuleCheckResult
+
+        esl = EthicalSafeguardLayer(mock_context_manager)
+        replacement = create_action(content="Deferred to morning")
+        esl.time_rules.check_boundaries = MagicMock(
+            return_value=RuleCheckResult(
+                passed=True,
+                reason="Queued until working hours",
+                suggested_modification=replacement,
+            )
+        )
+
+        decision = await esl.evaluate_action(create_action(), "time-user")
+
+        assert decision.status == ESLDecisionStatus.MODIFIED
+        assert decision.modified_action is replacement
+        assert decision.reason == "Queued until working hours"
+
+
+# ==================== ESL Tool Gate Tests ====================
+
+
+def _make_tool_gate_db(row=None, raise_on_enter=False):
+    """Patchable factory for `utils.db.get_db_connection` used by ESLToolGate.
+
+    Captures executed queries on `.executed` for inspection.
+    """
+    executed = []
+
+    @contextmanager
+    def factory():
+        if raise_on_enter:
+            raise RuntimeError("db down")
+        conn = MagicMock()
+        cursor = MagicMock()
+        cursor.execute.side_effect = lambda q, p=(): executed.append((q, p))
+        cursor.fetchone.return_value = row
+        cursor_cm = MagicMock()
+        cursor_cm.__enter__ = MagicMock(return_value=cursor)
+        cursor_cm.__exit__ = MagicMock(return_value=None)
+        conn.cursor.return_value = cursor_cm
+        yield conn
+
+    factory.executed = executed
+    return factory
+
+
+class TestESLToolGate:
+    """End-to-end coverage of ESLToolGate.check and its DB helpers.
+
+    These tests live alongside the broader ESL suite so `pytest tests/test_esl.py
+    --cov=esl` exercises `esl/tool_gate.py` directly (the standalone
+    `test_tool_gate.py` is run separately by the full suite).
+    """
+
+    @pytest.mark.asyncio
+    async def test_low_risk_no_record_is_auto_approved(self):
+        from esl.tool_gate import ESLToolGate, GateResult
+
+        gate = ESLToolGate()
+        with patch("esl.tool_gate.get_db_connection", _make_tool_gate_db(row=None)):
+            result = await gate.check(
+                user_id="u1",
+                tool_id="notion",
+                action_name="create_page",
+                risk_level="low",
+                preview="Create page",
+            )
+
+        assert result.status == GateResult.APPROVED
+        assert result.reason == ""
+
+    @pytest.mark.asyncio
+    async def test_low_risk_explicit_allow_is_approved(self):
+        from esl.tool_gate import ESLToolGate, GateResult
+
+        gate = ESLToolGate()
+        with patch(
+            "esl.tool_gate.get_db_connection",
+            _make_tool_gate_db(row={"trust_level": "allow"}),
+        ):
+            result = await gate.check(
+                user_id="u1",
+                tool_id="notion",
+                action_name="create_page",
+                risk_level="low",
+                preview="Create page",
+            )
+
+        assert result.status == GateResult.APPROVED
+
+    @pytest.mark.asyncio
+    async def test_medium_risk_allow_is_approved(self):
+        from esl.tool_gate import ESLToolGate, GateResult
+
+        gate = ESLToolGate()
+        with patch(
+            "esl.tool_gate.get_db_connection",
+            _make_tool_gate_db(row={"trust_level": "allow"}),
+        ):
+            result = await gate.check(
+                user_id="u1",
+                tool_id="github",
+                action_name="create_issue",
+                risk_level="medium",
+                preview="Create issue",
+            )
+
+        assert result.status == GateResult.APPROVED
+
+    @pytest.mark.asyncio
+    async def test_medium_risk_no_record_requires_confirmation(self):
+        from esl.tool_gate import ESLToolGate, GateResult
+
+        gate = ESLToolGate()
+        with patch("esl.tool_gate.get_db_connection", _make_tool_gate_db(row=None)):
+            result = await gate.check(
+                user_id="u1",
+                tool_id="github",
+                action_name="create_issue",
+                risk_level="medium",
+                preview="Create issue: Fix login",
+            )
+
+        assert result.status == GateResult.PENDING_CONFIRMATION
+        assert "Fix login" in result.preview
+        assert "First-time" in result.reason
+
+    @pytest.mark.asyncio
+    async def test_medium_risk_ask_trust_requires_confirmation(self):
+        from esl.tool_gate import ESLToolGate, GateResult
+
+        gate = ESLToolGate()
+        with patch(
+            "esl.tool_gate.get_db_connection",
+            _make_tool_gate_db(row={"trust_level": "ask"}),
+        ):
+            result = await gate.check(
+                user_id="u1",
+                tool_id="github",
+                action_name="create_issue",
+                risk_level="medium",
+                preview="Create issue",
+            )
+
+        assert result.status == GateResult.PENDING_CONFIRMATION
+
+    @pytest.mark.asyncio
+    async def test_deny_trust_vetoes_medium_risk(self):
+        from esl.tool_gate import ESLToolGate, GateResult
+
+        gate = ESLToolGate()
+        with patch(
+            "esl.tool_gate.get_db_connection",
+            _make_tool_gate_db(row={"trust_level": "deny"}),
+        ):
+            result = await gate.check(
+                user_id="u1",
+                tool_id="github",
+                action_name="delete_repo",
+                risk_level="medium",
+                preview="Delete repo",
+            )
+
+        assert result.status == GateResult.VETOED
+        assert "denied" in result.reason.lower()
+
+    @pytest.mark.asyncio
+    async def test_high_risk_always_requires_confirmation(self):
+        """High-risk actions confirm even with an existing 'allow' grant."""
+        from esl.tool_gate import ESLToolGate, GateResult
+
+        gate = ESLToolGate()
+        with patch(
+            "esl.tool_gate.get_db_connection",
+            _make_tool_gate_db(row={"trust_level": "allow"}),
+        ):
+            result = await gate.check(
+                user_id="u1",
+                tool_id="gmail",
+                action_name="send_reply",
+                risk_level="high",
+                preview="Send email to alice@example.com",
+            )
+
+        assert result.status == GateResult.PENDING_CONFIRMATION
+        assert "High-risk" in result.reason
+
+    @pytest.mark.asyncio
+    async def test_db_exception_falls_back_to_confirmation(self):
+        """If the permission lookup fails, default to asking the user."""
+        from esl.tool_gate import ESLToolGate, GateResult
+
+        gate = ESLToolGate()
+        failing = _make_tool_gate_db(raise_on_enter=True)
+        with patch("esl.tool_gate.get_db_connection", failing):
+            result = await gate.check(
+                user_id="u1",
+                tool_id="github",
+                action_name="create_issue",
+                risk_level="medium",
+                preview="Create issue",
+            )
+
+        assert result.status == GateResult.PENDING_CONFIRMATION
+        assert "Gate check failed" in result.reason
+
+    @pytest.mark.asyncio
+    async def test_set_trust_issues_upsert(self):
+        from esl.tool_gate import ESLToolGate
+
+        gate = ESLToolGate()
+        factory = _make_tool_gate_db()
+        with patch("esl.tool_gate.get_db_connection", factory):
+            await gate.set_trust(
+                user_id="u1",
+                tool_id="notion",
+                action_name="create_page",
+                trust_level="allow",
+            )
+
+        assert len(factory.executed) == 1
+        query, params = factory.executed[0]
+        assert "INSERT INTO tool_permissions" in query
+        assert "ON CONFLICT" in query
+        assert params == ("u1", "notion", "create_page", "allow")

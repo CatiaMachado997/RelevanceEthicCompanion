@@ -46,7 +46,8 @@
       "Bash(/Users/catiamachado/RelevanceEthicCompanion/backend/venv/bin/python3 -m pytest tests/test_context_snapshot.py::test_snapshot_route_returns_200 tests/test_document_processor.py::test_documents_list_endpoint tests/test_document_processor.py::test_documents_upload_unsupported_type tests/test_langgraph_orchestrator.py::test_stream_missing_message_returns_422 tests/test_migration_runner.py::test_run_migrations_skips_already_applied tests/test_migration_runner.py::test_run_migrations_is_idempotent tests/test_projects_tasks.py tests/test_status_route.py::test_put_status_invalid_value -v --tb=short)",
       "Bash(/Users/catiamachado/RelevanceEthicCompanion/backend/venv/bin/python3 -m pytest tests/ -q --tb=no)",
       "Bash(/Users/catiamachado/RelevanceEthicCompanion/backend/venv/bin/python3 -m pytest tests/test_auth_cookie.py tests/test_health.py tests/test_rate_limiting.py -q --tb=no)",
-      "Bash(gh pr *)"
+      "Bash(gh pr *)",
+      "Bash(psql --version)"
     ]
   }
 }

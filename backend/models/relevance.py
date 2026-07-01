@@ -4,7 +4,7 @@ Data models for V2 relevance scoring system
 """
 
 from typing import Dict, Any, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 from enum import Enum
 
@@ -36,7 +36,7 @@ class CandidateItem(BaseModel):
         description="Source of the item (e.g., 'tavily', 'weaviate', 'google_calendar')"
     )
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow, description="When item was created/retrieved"
+        default_factory=lambda: datetime.now(timezone.utc), description="When item was created/retrieved"
     )
     metadata: Dict[str, Any] = Field(
         default_factory=dict, description="Additional metadata"
@@ -77,7 +77,7 @@ class RelevanceContext(BaseModel):
     This is what we pass to the scoring engine to make decisions.
     """
 
-    user_id: str = Field(description="Firebase UID")
+    user_id: str = Field(description="Supabase UUID")
     query: Optional[str] = Field(None, description="User's query if any")
     active_goals: List[str] = Field(
         default_factory=list, description="List of active goal titles"
@@ -112,11 +112,11 @@ class RelevanceFeedback(BaseModel):
     """
 
     id: Optional[str] = None
-    user_id: str = Field(description="Firebase UID")
+    user_id: str = Field(description="Supabase UUID")
     item_id: str = Field(description="ID of the item that was shown")
     item_type: ItemType = Field(description="Type of item")
     feedback_type: FeedbackType = Field(description="Type of feedback")
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     context_snapshot: Dict[str, Any] = Field(
         default_factory=dict, description="Context when feedback was given"
     )

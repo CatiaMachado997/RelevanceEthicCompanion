@@ -18,6 +18,9 @@ export function DocumentViewer({ documentId, filename, open, onClose }: Document
   const [viewUrl, setViewUrl] = useState<string | null>(null)
 
   useEffect(() => {
+    // Reset to null when closed so a reopened viewer doesn't flash the
+    // previous document. Synchronous setState here is intentional.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!open || !documentId) { setViewUrl(null); return }
     // Build URL with token query param so iframe can auth
     supabase.auth.getSession().then(({ data: { session } }) => {

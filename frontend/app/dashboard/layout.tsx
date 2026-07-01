@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from 'react'
 import { SidebarNav } from '@/components/sidebar'
+import { CommandPalette } from '@/components/command-palette'
+import { SlidePanelHost } from '@/components/slide-panel'
 import { supabase } from '@/lib/supabase'
 import { configureApiAuth } from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
+import { useOnboardingState } from '@/hooks/useOnboardingState'
 import { useRouter, usePathname } from 'next/navigation'
-import { Menu, X } from 'lucide-react'
+import { Menu, X, Search } from 'lucide-react'
 
 // Configure auth at module level so it's ready before any child component
 // calls an API in its own useEffect (children's effects run before parent's).
@@ -53,13 +56,38 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [loading, isAuthenticated, router])
 
-  // Close mobile sidebar on route change
+  // First-run guard: a user who has never been onboarded AND has no data
+  // anywhere yet (no source connected, no value declared, no goal set) is
+  // pushed into the wizard. The triple-AND on the has_* flags is intentional:
+  // a returning user who skipped the wizard but later added even one value
+  // by hand should NOT be re-trapped.
+  const { data: onboarding } = useOnboardingState()
+  useEffect(() => {
+    if (loading || !isAuthenticated || !onboarding) return
+    const stillEmpty =
+      !onboarding.onboarded_at &&
+      !onboarding.has_data_source &&
+      !onboarding.has_value &&
+      !onboarding.has_goal
+    if (stillEmpty) router.replace('/onboarding')
+  }, [loading, isAuthenticated, onboarding, router])
+
+  // Close mobile sidebar on route change. Intentional synchronous
+  // setState — produces at most one extra render when the sidebar was
+  // previously open, which is exactly the desired UX.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setSidebarOpen(false) }, [pathname])
 
   if (loading) return null
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: 'var(--ec-page-bg)' }}>
+
+      {/* Global ⌘K palette */}
+      <CommandPalette />
+
+      {/* Global slide-over panel host (goals / tasks / …) */}
+      <SlidePanelHost />
 
       {/* Mobile overlay */}
       {sidebarOpen && (
@@ -68,11 +96,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="absolute left-0 top-0 h-full shadow-xl">
             <div className="relative">
               <button
-                className="absolute top-3 right-[-40px] w-8 h-8 flex items-center justify-center rounded-full bg-white shadow"
+                className="absolute top-3 right-[-40px] w-8 h-8 flex items-center justify-center rounded-full shadow"
                 onClick={() => setSidebarOpen(false)}
                 aria-label="Close menu"
+                style={{ background: 'var(--ec-card-bg)', color: 'var(--ec-text)' }}
               >
-                <X size={14} style={{ color: '#1a1a1a' }} />
+                <X size={14} />
               </button>
               <SidebarNav onClose={() => setSidebarOpen(false)} />
             </div>
@@ -110,6 +139,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--ec-text-subtle)' }}>{meta.subtitle}</p>
             )}
           </div>
+
+          {/* ⌘K trigger */}
+          <button
+            onClick={() => window.dispatchEvent(new Event('ec:open-palette'))}
+            aria-label="Open command palette"
+            className="flex items-center gap-2 h-9 px-3 rounded-lg text-xs transition-colors hover:bg-[#f0f0f0]"
+            style={{
+              background: 'var(--ec-surface-2)',
+              color: 'var(--ec-text-muted)',
+              border: '1px solid var(--ec-card-border)',
+            }}
+          >
+            <Search size={13} />
+            <span className="hidden sm:inline">Search…</span>
+            <kbd
+              className="hidden sm:inline px-1 py-0.5 text-[10px] font-medium rounded"
+              style={{ background: 'var(--ec-card-bg)', color: 'var(--ec-text-subtle)' }}
+            >
+              ⌘K
+            </kbd>
+          </button>
 
           {/* ESL shield badge */}
           <div

@@ -15,6 +15,7 @@ from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 from esl.tool_gate import ESLToolGate
 from config import settings
 from services.composio_tools import TOOL_ID_TO_COMPOSIO_TOOLKIT
+from services import composio_sync
 
 try:
     from composio import Composio
@@ -136,33 +137,53 @@ async def composio_connect(
 
 @router.get("/composio/callback")
 async def composio_callback(
-    toolkit: str,
-    state: str,
+    toolkit: Optional[str] = None,
+    state: Optional[str] = None,
     status: Optional[str] = None,
     connected_account_id: Optional[str] = None,
+    # Composio sometimes uses these alternate param names
+    connectedAccountId: Optional[str] = None,
+    error: Optional[str] = None,
 ) -> Response:
     """Receive redirect from Composio after user completes OAuth.
 
     On success: record connection in user_tool_connections, redirect to frontend.
     On failure: redirect to frontend with error param.
+
+    Composio may send status='success' | 'connected' | None (when error param present).
+    We treat any non-error response with a connected_account_id as success.
     """
-    if status != "success":
-        _err = f"{toolkit}_composio_failed"
+    account_id = connected_account_id or connectedAccountId or ""
+    tool_key = toolkit or "unknown"
+
+    # Treat as failure only when there's an explicit error or no account established
+    is_success = (
+        status in ("success", "connected", "active")
+        or (account_id and not error)
+    )
+
+    if not is_success or error:
+        logger.warning(
+            "Composio callback non-success: toolkit=%s status=%s error=%s",
+            tool_key, status, error,
+        )
+        _err = f"{tool_key}_composio_failed"
         return RedirectResponse(
             url=f"{settings.FRONTEND_URL}/dashboard/integrations?error={quote(_err, safe='')}",
             status_code=302,
         )
     try:
-        user_id = _extract_user_from_state(state, f"composio_{toolkit}")
-        credentials = json.dumps({"composio_account_id": connected_account_id or ""})
-        _store_connection(user_id=user_id, tool_id=toolkit, credentials=credentials)
+        user_id = _extract_user_from_state(state, f"composio_{tool_key}")
+        credentials = json.dumps({"composio_account_id": account_id})
+        _store_connection(user_id=user_id, tool_id=tool_key, credentials=credentials)
+        logger.info("Composio connected: toolkit=%s user=%s account=%s", tool_key, user_id, account_id)
         return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/dashboard/integrations?connected={quote(toolkit, safe='')}",
+            url=f"{settings.FRONTEND_URL}/dashboard/integrations?connected={quote(tool_key, safe='')}",
             status_code=302,
         )
     except Exception as exc:
-        logger.error(f"Composio callback failed for {toolkit}: {exc}", exc_info=True)
-        _err = f"{toolkit}_composio_failed"
+        logger.error(f"Composio callback failed for {tool_key}: {exc}", exc_info=True)
+        _err = f"{tool_key}_composio_failed"
         return RedirectResponse(
             url=f"{settings.FRONTEND_URL}/dashboard/integrations?error={quote(_err, safe='')}",
             status_code=302,
@@ -245,6 +266,42 @@ async def oauth_callback(
             url=f"{settings.FRONTEND_URL}/dashboard/integrations?error={quote(_err, safe='')}",
             status_code=302,
         )
+
+
+# ─── Sync ────────────────────────────────────────────────────────────────────
+
+
+@router.post("/{tool_id}/sync")
+async def sync_tool(
+    tool_id: str,
+    user_id: str = Depends(get_current_user_id),
+) -> dict:
+    """Fetch recent data from a connected integration and store it in source_items.
+
+    Returns the number of new items synced. Requires COMPOSIO_API_KEY to be set
+    and the tool to already be connected by the user.
+    """
+    if not settings.COMPOSIO_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="Composio integration not configured. Set COMPOSIO_API_KEY in .env.",
+        )
+
+    # Verify the tool is actually connected for this user
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM user_tool_connections WHERE user_id = %s AND tool_id = %s AND enabled = TRUE",
+                (user_id, tool_id),
+            )
+            row = cur.fetchone()
+    if not row:
+        raise HTTPException(
+            status_code=404, detail=f"Tool not connected: {tool_id}"
+        )
+
+    count = await composio_sync.sync_tool_data(user_id=user_id, tool_id=tool_id)
+    return {"synced": count, "tool_id": tool_id}
 
 
 # ─── Disconnect ───────────────────────────────────────────────────────────────

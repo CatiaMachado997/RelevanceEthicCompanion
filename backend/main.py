@@ -23,6 +23,7 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from config import settings
 from utils.rate_limit import limiter
+from scripts.run_migrations import run_migrations
 
 # Initialize background scheduler (global instance)
 _scheduler = None
@@ -43,6 +44,16 @@ async def lifespan(app: FastAPI):
     from utils.db import open_pool, close_pool
 
     open_pool()
+
+    try:
+        n_applied = run_migrations()
+        if n_applied:
+            logger.info(f"applied {n_applied} migration(s)")
+        else:
+            logger.info("schema up to date")
+    except Exception:
+        logger.exception("Migration failed on startup; refusing to serve traffic")
+        raise
 
     # Auto-migrate: ensure extra columns exist in user_settings
     try:
@@ -185,7 +196,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize and start background scheduler (Phase 5)
     try:
-        from services.scheduler import BackgroundScheduler
+        from services.scheduler import BackgroundScheduler, set_scheduler_instance
         from services.data_ingestion import DataIngestionService
         from services.context_manager import ContextManager
         from services.embedding_service import EmbeddingService
@@ -200,6 +211,7 @@ async def lifespan(app: FastAPI):
 
         _scheduler = BackgroundScheduler(data_ingestion)
         _scheduler.start()
+        set_scheduler_instance(_scheduler)
 
         print("🔄 Background Scheduler: STARTED")
         print("   - Calendar sync: Every 15 minutes")
@@ -296,6 +308,12 @@ from routes import (
     projects,
     tasks,
     context,
+    folders,
+    dashboard,
+    connectors,
+    weekly_review,
+    today,
+    onboarding,
 )
 from routes import settings as settings_router
 from routes.insight import router as insight_router
@@ -321,7 +339,13 @@ app.include_router(documents.router)
 app.include_router(projects.router)
 app.include_router(tasks.router)
 app.include_router(context.router)
+app.include_router(folders.router)
+app.include_router(dashboard.router)
 app.include_router(status_router)
+app.include_router(connectors.router, prefix="/api/connectors", tags=["connectors"])
+app.include_router(weekly_review.router, prefix="/api/weekly-review", tags=["weekly-review"])
+app.include_router(today.router, prefix="/api/today", tags=["today"])
+app.include_router(onboarding.router)
 
 from routes import tool_marketplace
 

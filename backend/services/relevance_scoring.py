@@ -15,7 +15,7 @@ Base models (Groq/Llama) don't do any of this.
 
 from typing import List, Optional, Dict, Any
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 
 from models.relevance import CandidateItem, ScoredItem, RelevanceContext
@@ -129,7 +129,7 @@ class RelevanceScoringEngine:
         THIS IS YOUR ALGORITHM - Not LLM intelligence
 
         Args:
-            user_id: Firebase UID
+            user_id: Supabase UUID
             candidates: Items to score
             context: Relevance context (goals, events, query, etc.)
 
@@ -397,7 +397,7 @@ class RelevanceScoringEngine:
 
                 if isinstance(event_start, datetime):
                     hours_until = (
-                        event_start - datetime.utcnow()
+                        event_start - datetime.now(timezone.utc)
                     ).total_seconds() / 3600
 
                     if hours_until < 0:

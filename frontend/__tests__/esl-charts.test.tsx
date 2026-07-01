@@ -1,3 +1,4 @@
+import type { PropsWithChildren } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import TransparencyPage from '../app/dashboard/transparency/page'
 import { api } from '../lib/api'
@@ -33,19 +34,27 @@ jest.mock('../components/mobile-sidebar', () => ({
 }))
 
 jest.mock('recharts', () => {
-  const React = require('react')
+  // jest.mock factories are hoisted above imports and may not reference
+  // out-of-scope variables (unless prefixed `mock*`). Lazy-require React
+  // here so it resolves at factory-run time.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const mockReact: typeof import('react') = require('react')
   return {
-    PieChart: ({ children }: any) => React.createElement('div', { 'data-testid': 'pie-chart' }, children),
+    PieChart: ({ children }: PropsWithChildren) =>
+      mockReact.createElement('div', { 'data-testid': 'pie-chart' }, children),
     Pie: () => null,
     Cell: () => null,
-    LineChart: ({ children }: any) => React.createElement('div', { 'data-testid': 'line-chart' }, children),
+    LineChart: ({ children }: PropsWithChildren) =>
+      mockReact.createElement('div', { 'data-testid': 'line-chart' }, children),
     Line: () => null,
     XAxis: () => null,
     YAxis: () => null,
     CartesianGrid: () => null,
     Tooltip: () => null,
-    ResponsiveContainer: ({ children }: any) => React.createElement('div', null, children),
-    BarChart: ({ children }: any) => React.createElement('div', { 'data-testid': 'bar-chart' }, children),
+    ResponsiveContainer: ({ children }: PropsWithChildren) =>
+      mockReact.createElement('div', null, children),
+    BarChart: ({ children }: PropsWithChildren) =>
+      mockReact.createElement('div', { 'data-testid': 'bar-chart' }, children),
     Bar: () => null,
   }
 })

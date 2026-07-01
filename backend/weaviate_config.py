@@ -15,7 +15,7 @@ WEAVIATE_SCHEMAS: List[Dict[str, Any]] = [
             {
                 "name": "user_id",
                 "dataType": ["text"],
-                "description": "Firebase UID of the user",
+                "description": "Supabase UUID of the user",
                 "indexFilterable": True,
                 "indexSearchable": False,
             },
@@ -64,7 +64,7 @@ WEAVIATE_SCHEMAS: List[Dict[str, Any]] = [
             {
                 "name": "user_id",
                 "dataType": ["text"],
-                "description": "Firebase UID of the user",
+                "description": "Supabase UUID of the user",
                 "indexFilterable": True,
                 "indexSearchable": False,
             },
@@ -127,7 +127,7 @@ WEAVIATE_SCHEMAS: List[Dict[str, Any]] = [
             {
                 "name": "user_id",
                 "dataType": ["text"],
-                "description": "Firebase UID of the user",
+                "description": "Supabase UUID of the user",
                 "indexFilterable": True,
                 "indexSearchable": False,
             },
@@ -226,6 +226,12 @@ WEAVIATE_SCHEMAS: List[Dict[str, Any]] = [
             {
                 "name": "created_at",
                 "dataType": ["date"],
+                "indexFilterable": True,
+                "indexSearchable": False,
+            },
+            {
+                "name": "source_type",
+                "dataType": ["text"],
                 "indexFilterable": True,
                 "indexSearchable": False,
             },

@@ -14,13 +14,30 @@ jest.mock('../lib/supabase', () => ({
 }))
 
 jest.mock('../components/sidebar', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  SidebarNav: function MockSidebar() { return require('react').createElement('nav', { 'data-testid': 'sidebar' }) },
+  SidebarNav: function MockSidebar() {
+    // jest.mock factories can't reference outer imports. Lazy-require React.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mockReact: typeof import('react') = require('react')
+    return mockReact.createElement('nav', { 'data-testid': 'sidebar' })
+  },
 }))
 
 jest.mock('../components/top-bar', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  TopBar: function MockTopBar() { return require('react').createElement('div', { 'data-testid': 'top-bar' }) },
+  TopBar: function MockTopBar() {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mockReact: typeof import('react') = require('react')
+    return mockReact.createElement('div', { 'data-testid': 'top-bar' })
+  },
+}))
+
+// CommandPalette + SlidePanelHost both pull in @tanstack/react-query
+// (folder/conversation queries) which would need a QueryClientProvider
+// at render time. This test only cares about layout chrome, so stub them.
+jest.mock('../components/command-palette', () => ({
+  CommandPalette: () => null,
+}))
+jest.mock('../components/slide-panel', () => ({
+  SlidePanelHost: () => null,
 }))
 
 jest.mock('next/navigation', () => ({

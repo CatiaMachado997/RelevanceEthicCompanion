@@ -9,10 +9,13 @@ Storage:
 
 import json
 import logging
+import os
+import tempfile
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, List, Optional
 
 from services.context_manager import ContextManager
+from services.document_extractors import extract_text as _extract_from_path
 from utils.db import get_db_connection
 
 if TYPE_CHECKING:
@@ -51,8 +54,11 @@ class DocumentProcessor:
     """Orchestrates the full document ingestion pipeline."""
 
     SUPPORTED_TYPES = {
-        "text/plain": "_extract_plain",
-        "application/pdf": "_extract_pdf",
+        "text/plain": "plain",
+        "text/markdown": "plain",
+        "application/pdf": "pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+        "application/msword": "docx",
     }
 
     def __init__(
@@ -61,34 +67,50 @@ class DocumentProcessor:
         self.context_manager = context_manager
         self.embedding_service = embedding_service
 
-    def extract_text(self, file_bytes: bytes, content_type: str) -> str:
-        """Extract plain text from a file. Raises ValueError for unsupported types."""
+    def extract_text(
+        self,
+        file_bytes: bytes,
+        content_type: str,
+        filename: Optional[str] = None,
+    ) -> str:
+        """Extract plain text from a file's raw bytes.
+
+        Routes via services.document_extractors.extract_text, which dispatches
+        on extension/mime type. Writes bytes to a temp file so extractors can
+        use their native file-path APIs (pypdf, python-docx).
+        """
         base_type = content_type.split(";")[0].strip().lower()
-        if base_type not in self.SUPPORTED_TYPES:
-            raise ValueError(
-                f"Unsupported content type: {base_type}. "
-                f"Supported: {list(self.SUPPORTED_TYPES.keys())}"
-            )
-        method_name = self.SUPPORTED_TYPES[base_type]
-        return getattr(self, method_name)(file_bytes)
-
-    def _extract_plain(self, file_bytes: bytes) -> str:
-        return file_bytes.decode("utf-8", errors="replace")
-
-    def _extract_pdf(self, file_bytes: bytes) -> str:
+        suffix = self._suffix_for(filename, base_type)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(file_bytes)
+            tmp_path = tmp.name
         try:
-            import io
-            from pypdf import PdfReader
+            text = _extract_from_path(tmp_path, mime_type=base_type)
+            if not text and base_type not in self.SUPPORTED_TYPES:
+                raise ValueError(
+                    f"Unsupported content type: {base_type}. "
+                    f"Supported: {sorted(self.SUPPORTED_TYPES.keys())}"
+                )
+            return text
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
-            reader = PdfReader(io.BytesIO(file_bytes))
-            pages = []
-            for page in reader.pages:
-                text = page.extract_text()
-                if text:
-                    pages.append(text)
-            return "\n\n".join(pages)
-        except Exception as e:
-            raise ValueError(f"PDF extraction failed: {e}") from e
+    @staticmethod
+    def _suffix_for(filename: Optional[str], base_type: str) -> str:
+        if filename:
+            ext = os.path.splitext(filename)[1].lower()
+            if ext:
+                return ext
+        if base_type == "application/pdf":
+            return ".pdf"
+        if "wordprocessingml" in base_type or base_type == "application/msword":
+            return ".docx"
+        if base_type.startswith("text/"):
+            return ".txt"
+        return ""
 
     async def process_document(
         self,
@@ -105,7 +127,13 @@ class DocumentProcessor:
         """
         try:
             # 1. Extract text
-            text = self.extract_text(file_bytes, content_type)
+            logger.info(
+                "Extracting text from %s (type=%s, size=%d bytes)",
+                filename,
+                content_type,
+                len(file_bytes),
+            )
+            text = self.extract_text(file_bytes, content_type, filename=filename)
             if not text.strip():
                 raise ValueError("Document contains no extractable text")
 

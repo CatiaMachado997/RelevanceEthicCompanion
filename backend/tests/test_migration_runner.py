@@ -42,7 +42,7 @@ def test_run_migrations_applies_pending_files(mock_conn, migrations_dir):
 
 def test_run_migrations_skips_already_applied(mock_conn, migrations_dir):
     conn, cur = mock_conn
-    cur.fetchall.return_value = [("001_create_users.sql",)]
+    cur.fetchall.return_value = [{"filename": "001_create_users.sql"}]
     with patch("scripts.run_migrations.get_db_connection", return_value=conn):
         from scripts.run_migrations import run_migrations
 
@@ -60,8 +60,8 @@ def test_run_migrations_skips_already_applied(mock_conn, migrations_dir):
 def test_run_migrations_is_idempotent(mock_conn, migrations_dir):
     conn, cur = mock_conn
     cur.fetchall.return_value = [
-        ("001_create_users.sql",),
-        ("002_add_email.sql",),
+        {"filename": "001_create_users.sql"},
+        {"filename": "002_add_email.sql"},
     ]
     with patch("scripts.run_migrations.get_db_connection", return_value=conn):
         from scripts.run_migrations import run_migrations

@@ -1,11 +1,13 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, ChangeEvent, ReactElement } from 'react'
-import ReactMarkdown from 'react-markdown'
+import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { CodeBlock } from '@/components/chat/CodeBlock'
 import { ArtifactCard } from '@/components/chat/ArtifactCard'
-import api, { CitationSource, toolMarketplaceApi } from '@/lib/api'
+import { SlashCommands } from '@/components/chat/slash-commands'
+import api, { CitationSource, DocumentSource, toolMarketplaceApi } from '@/lib/api'
+import { SourceCards } from '@/components/chat/SourceCards'
 import { ToolConfirmation } from '@/components/ToolConfirmation'
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
@@ -13,7 +15,7 @@ import {
   Send, ChevronDown, ChevronUp, Copy, Square,
   ThumbsUp, ThumbsDown, RotateCcw, Plus, Cpu,
   Paperclip, Globe, Calendar, Target, StickyNote,
-  BarChart2, ShieldCheck, Sparkles,
+  BarChart2, ShieldCheck, Sparkles, Shield,
   BookmarkPlus, ListTodo, CheckCircle,
 } from 'lucide-react'
 import type { ExtractedTask as ExtractedTaskType } from '@/lib/api'
@@ -38,6 +40,7 @@ interface Message {
     reason: string
   }
   citations?: CitationSource[]
+  documentSources?: DocumentSource[]
   pendingConfirmation?: PendingConfirmation
 }
 
@@ -61,6 +64,17 @@ const GROQ_MODELS = [
   { id: 'qwen/qwen3-32b',                             label: 'Qwen3 32B',          badge: 'Preview',   group: 'Preview' },
 ]
 const DEFAULT_MODEL = GROQ_MODELS[0].id
+
+const STORAGE_KEY_MODEL = "ec_selected_model"
+
+function loadInitialModel(): string {
+  if (typeof window === "undefined") return DEFAULT_MODEL
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY_MODEL)
+    if (saved && GROQ_MODELS.some(m => m.id === saved)) return saved
+  } catch {}
+  return DEFAULT_MODEL
+}
 
 const SOURCE_OPTIONS = [
   { id: 'calendar', label: 'Calendar', icon: Calendar },
@@ -236,8 +250,8 @@ function Cursor() {
 }
 
 /* ─── Markdown component map ─── */
-const markdownComponents = {
-  code({ node, className, children, ...props }: any) {
+const markdownComponents: Components = {
+  code({ className, children, ...props }) {
     const language = /language-(\w+)/.exec(className || '')?.[1]
     const content = String(children).replace(/\n$/, '')
     // Treat as block if it contains newlines or has a language hint
@@ -247,14 +261,14 @@ const markdownComponents = {
     }
     return <CodeBlock language={language}>{content}</CodeBlock>
   },
-  table({ children }: any) {
+  table({ children }) {
     return (
       <div style={{ overflowX: 'auto', margin: '0.75em 0' }}>
         <table style={{ minWidth: '100%' }}>{children}</table>
       </div>
     )
   },
-  input({ checked, ...props }: any) {
+  input({ checked, ...props }) {
     return (
       <input
         type="checkbox"
@@ -265,7 +279,7 @@ const markdownComponents = {
       />
     )
   },
-  h1({ children }: any) {
+  h1({ children }) {
     const text = String(children)
     if (/^(plan|schedule|agenda|summary|report):/i.test(text)) {
       return <ArtifactCard title={text}>{null}</ArtifactCard>
@@ -275,10 +289,18 @@ const markdownComponents = {
 }
 
 /* ═══════════════════════════════════════════════════ */
-export default function ChatPage({ conversationId }: { conversationId?: string } = {}) {
+export default function ChatPage({ conversationId: conversationIdProp }: { conversationId?: string } = {}) {
   const { user } = useAuth()
   const router = useRouter()
   const initials = user?.email?.split('@')[0].substring(0, 2).toUpperCase() ?? 'U'
+
+  // Local conversation id, seeded from the route prop. We update this in-place
+  // after creating a conversation on first send (we use window.history.replaceState
+  // there, which doesn't re-render the route so the prop never refreshes). Without
+  // this, every subsequent send sees `conversationId === undefined` and spawns
+  // yet another conversation — the "clicking anywhere starts a new chat" bug.
+  const [conversationId, setConversationId] = useState<string | undefined>(conversationIdProp)
+  useEffect(() => { setConversationId(conversationIdProp) }, [conversationIdProp])
 
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput]       = useState('')
@@ -287,7 +309,11 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [userScrolled, setUserScrolled] = useState(false)
   const [activeTool, setActiveTool] = useState<string | null>(null)
-  const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL)
+  const [selectedModel, setSelectedModelRaw] = useState<string>(() => loadInitialModel())
+  const setSelectedModel = useCallback((id: string) => {
+    setSelectedModelRaw(id)
+    try { localStorage.setItem(STORAGE_KEY_MODEL, id) } catch {}
+  }, [])
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
   const [rateLimitWarning, setRateLimitWarning] = useState<{ level: string; message: string } | null>(null)
   const rateLimitDismissedRef = useRef(false)
@@ -308,6 +334,8 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
   const textareaRef  = useRef<HTMLTextAreaElement>(null)
   const streamRef    = useRef<{ cancel: () => void } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  /** Populated by SlashCommands; returns true if the keydown was handled. */
+  const slashKeyDownRef = useRef<((e: KeyboardEvent) => boolean) | null>(null)
 
   // Close menus on outside click
   useEffect(() => {
@@ -349,11 +377,77 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
           role:      m.role as 'user' | 'assistant',
           content:   m.content,
           timestamp: m.timestamp ?? '',
+          citations: m.metadata?.citations,
+          documentSources: m.metadata?.document_sources,
         })))
       })
       .catch(console.error)
       .finally(() => setLoadingHistory(false))
   }, [conversationId])
+
+  /* conversation title — for header, rename, and ec:new-chat event */
+  const [conversationTitle, setConversationTitle] = useState<string>('')
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [titleDraft, setTitleDraft] = useState('')
+
+  useEffect(() => {
+    if (!conversationId) { setConversationTitle(''); return }
+    // Fetch the conversation's title so we can show/edit it on the chat page.
+    api.chat.conversations.get(conversationId)
+      .then(c => setConversationTitle(c.title))
+      .catch(() => {})
+  }, [conversationId])
+
+  // Listen for sidebar's "new chat" while we're already on /dashboard/chat
+  useEffect(() => {
+    const onNew = () => {
+      setMessages([])
+      setInput('')
+      setAttachedFile(null)
+      setConversationTitle('')
+      // Clear local id and URL so the next send creates a fresh conversation.
+      setConversationId(undefined)
+      if (conversationId) {
+        // If route prop is set, use router so the segment unwinds cleanly.
+        router.replace('/dashboard/chat')
+      } else if (typeof window !== 'undefined' && window.location.pathname !== '/dashboard/chat') {
+        // We're on the base /dashboard/chat route in React, but the URL still
+        // shows /dashboard/chat/<id> because we used replaceState earlier.
+        window.history.replaceState(null, '', '/dashboard/chat')
+      }
+    }
+    window.addEventListener('ec:new-chat', onNew)
+    return () => window.removeEventListener('ec:new-chat', onNew)
+  }, [conversationId, router])
+
+  // The `/ask` slash command dispatches `ec:slash-submit` so the user doesn't
+  // have to press Enter twice. We feed the typed text straight into handleSend,
+  // which detects the `/ask ` prefix and sets force_retrieval on the stream.
+  useEffect(() => {
+    const onSubmit = (e: Event) => {
+      const detail = (e as CustomEvent<{ message?: string }>).detail
+      const message = detail?.message
+      if (!message) return
+      handleSend(message)
+    }
+    window.addEventListener('ec:slash-submit', onSubmit)
+    return () => window.removeEventListener('ec:slash-submit', onSubmit)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const saveTitle = async () => {
+    const t = titleDraft.trim()
+    if (!conversationId || !t || t === conversationTitle) { setEditingTitle(false); return }
+    try {
+      await api.chat.conversations.rename(conversationId, t)
+      setConversationTitle(t)
+      // Sidebar listens via its own pathname-change effect; also nudge it:
+      window.dispatchEvent(new Event('ec:conversation-created'))
+    } catch (e) {
+      console.error('rename failed', e)
+    }
+    setEditingTitle(false)
+  }
 
   /* auto-scroll */
   useEffect(() => {
@@ -390,7 +484,15 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
 
   /* send */
   const handleSend = async (text?: string) => {
-    const userText = (text ?? input).trim()
+    let userText = (text ?? input).trim()
+    // `/ask <query>` slash command — strip the prefix and force document
+    // retrieval on this turn, regardless of the planner's judgement.
+    let forceRetrieval = false
+    const askMatch = userText.match(/^\/ask\s+([\s\S]+)$/i)
+    if (askMatch) {
+      userText = askMatch[1].trim()
+      forceRetrieval = true
+    }
     const userMessage = attachedFile
       ? `${userText ? userText + '\n\n' : ''}[Attached file: ${attachedFile.name}]\n\`\`\`\n${attachedFile.content.slice(0, 8000)}\n\`\`\``
       : userText
@@ -417,12 +519,20 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
     try {
       setRateLimitExceeded(null)
 
-      // Create a conversation if one doesn't exist yet, then redirect
+      // Create a conversation if one doesn't exist yet, then update the URL.
+      // We use window.history.replaceState rather than router.replace so the
+      // current ChatPage instance keeps streaming — router.replace would unmount
+      // the component on its way to /chat/[id]/page.tsx, dropping the in-flight
+      // stream and leaving the user staring at a blank "new chat".
       let activeConvId = conversationId
       if (!activeConvId) {
         const conv = await api.chat.conversations.create()
         activeConvId = conv.id
-        router.replace(`/dashboard/chat/${activeConvId}`)
+        // Update local state so subsequent sends reuse this conversation. The
+        // route prop won't refresh because we use replaceState (not router.push)
+        // to avoid unmounting this component mid-stream.
+        setConversationId(activeConvId)
+        window.history.replaceState(null, '', `/dashboard/chat/${activeConvId}`)
         window.dispatchEvent(new Event('ec:conversation-created'))
       }
 
@@ -434,6 +544,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
         model: selectedModel,
         conversation_id: activeConvId,
         active_sources: selectedSources,
+        force_retrieval: forceRetrieval,
         onRateLimitWarning: (level, message) => { if (!rateLimitDismissedRef.current) setRateLimitWarning({ level, message }) },
         onRateLimitExceeded: (retryAfter, message) => {
           setRateLimitExceeded({ retryAfter, message })
@@ -468,10 +579,12 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
               : m
           ))
         },
-        onDone: ({ citations }) => {
-          if (citations && citations.length > 0) {
+        onDone: ({ citations, document_sources }) => {
+          if ((citations && citations.length > 0) || (document_sources && document_sources.length > 0)) {
             setMessages(prev => prev.map(m =>
-              m.id === assistantId ? { ...m, citations } : m
+              m.id === assistantId
+                ? { ...m, citations: citations ?? m.citations, documentSources: document_sources ?? m.documentSources }
+                : m
             ))
           }
         },
@@ -587,8 +700,58 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
   return (
     <div
       className="flex flex-col"
-      style={{ height: 'calc(100vh - 56px - 48px - 24px)' }}
+      style={{ height: 'calc(100vh - 56px - 40px)' }}
     >
+      {/* ── Chat header: title + new chat ── */}
+      <div className="shrink-0 px-4 pt-2">
+        <div className="mx-auto max-w-[700px] flex items-center gap-2">
+          {editingTitle && conversationId ? (
+            <input
+              autoFocus
+              value={titleDraft}
+              onChange={e => setTitleDraft(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') saveTitle()
+                if (e.key === 'Escape') setEditingTitle(false)
+              }}
+              onBlur={saveTitle}
+              className="flex-1 bg-transparent outline-none text-sm font-medium border-b"
+              style={{ color: 'var(--ec-text)', borderColor: 'var(--ec-border)' }}
+            />
+          ) : (
+            <button
+              onClick={() => {
+                if (!conversationId) return
+                setTitleDraft(conversationTitle || '')
+                setEditingTitle(true)
+              }}
+              disabled={!conversationId}
+              className="flex-1 text-left text-sm font-medium truncate transition-opacity hover:opacity-70 disabled:cursor-default"
+              style={{ color: conversationId ? 'var(--ec-text)' : 'var(--ec-text-subtle)' }}
+              title={conversationId ? 'Click to rename' : undefined}
+            >
+              {conversationId ? (conversationTitle || 'Untitled') : 'New conversation'}
+            </button>
+          )}
+
+          <button
+            onClick={() => {
+              setMessages([])
+              setInput('')
+              setAttachedFile(null)
+              setConversationTitle('')
+              if (conversationId) router.replace('/dashboard/chat')
+            }}
+            className="shrink-0 flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-xs transition-colors hover:bg-[rgba(0,0,0,0.05)]"
+            style={{ color: 'var(--ec-text-muted)' }}
+            title="Start a new conversation"
+          >
+            <Plus size={12} />
+            New chat
+          </button>
+        </div>
+      </div>
+
       {/* ── Messages ── */}
       <div
         ref={containerRef}
@@ -607,18 +770,14 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
 
           {/* Empty state */}
           {isEmpty && (
-            <div className="flex flex-col items-center justify-center gap-8 pt-16 pb-8 text-center">
-              {/* Logo */}
+            <div className="flex flex-col items-center justify-center gap-7 pt-14 pb-8 text-center">
+              {/* Logo — matches login + landing branding */}
               <div className="relative">
                 <div
-                  className="w-16 h-16 rounded-3xl flex items-center justify-center text-base font-bold mx-auto select-none"
-                  style={{
-                    background: 'linear-gradient(145deg, #1a1a1a 0%, #3d3d3d 100%)',
-                    color: '#ffffff',
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.16), 0 2px 8px rgba(0,0,0,0.12)',
-                  }}
+                  className="w-12 h-12 rounded-2xl flex items-center justify-center"
+                  style={{ background: '#111111' }}
                 >
-                  EC
+                  <Shield size={20} color="white" />
                 </div>
                 <div
                   className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 flex items-center justify-center"
@@ -629,21 +788,34 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
               </div>
 
               <div>
-                <h2 className="text-xl font-semibold tracking-tight" style={{ color: 'var(--ec-text)' }}>
+                <p
+                  className="text-[11px] font-medium uppercase tracking-[0.2em] mb-2"
+                  style={{ color: 'var(--ec-text-subtle)' }}
+                >
+                  Ethic Companion
+                </p>
+                <h2
+                  className="text-3xl leading-tight"
+                  style={{
+                    fontFamily: 'var(--font-fraunces)',
+                    color: 'var(--ec-text)',
+                    fontWeight: 400,
+                  }}
+                >
                   How can I help you today?
                 </h2>
-                <p className="text-sm mt-1.5" style={{ color: 'var(--ec-text-subtle)' }}>
-                  Your AI companion — guided by your values, protected by ESL
+                <p className="text-sm mt-2" style={{ color: 'var(--ec-text-muted)' }}>
+                  Guided by your values · Protected by ESL
                 </p>
               </div>
 
               {/* Prompt cards */}
-              <div className="grid grid-cols-2 gap-3 w-full max-w-[500px]">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-[520px]">
                 {EXAMPLE_PROMPTS.map(({ text, icon: Icon, desc }) => (
                   <button
                     key={text}
                     onClick={() => handleSend(text)}
-                    className="prompt-card flex flex-col items-start gap-2 p-4 rounded-2xl text-left active:scale-[0.98]"
+                    className="prompt-card flex flex-col items-start gap-2.5 p-4 rounded-2xl text-left transition-all hover:-translate-y-0.5 active:scale-[0.98]"
                     style={{
                       background: 'var(--ec-card-bg)',
                       border: '1px solid var(--ec-card-border)',
@@ -652,7 +824,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                   >
                     <div
                       className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
-                      style={{ background: 'rgba(74,124,89,0.1)' }}
+                      style={{ background: 'rgba(74,124,89,0.10)' }}
                     >
                       <Icon size={15} style={{ color: '#4A7C59' }} />
                     </div>
@@ -688,14 +860,14 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                       {/* User avatar */}
                       <div
                         className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-semibold shrink-0"
-                        style={{ background: '#1a1a1a', color: '#ffffff' }}
+                        style={{ background: '#111111', color: '#ffffff' }}
                         aria-label="You"
                       >
                         {initials}
                       </div>
                     </div>
                     {msg.timestamp && (
-                      <span className="text-[10px] pr-9" style={{ color: '#c0c0c0' }}>
+                      <span className="text-[10px] pr-9" style={{ color: 'var(--ec-text-subtle)' }}>
                         {formatTime(msg.timestamp)}
                       </span>
                     )}
@@ -711,7 +883,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                 <div className="flex items-center gap-2 mb-2">
                   <CompanionAvatar />
                   {msg.timestamp && !msg.streaming && (
-                    <span className="text-[10px]" style={{ color: '#c0c0c0' }}>
+                    <span className="text-[10px]" style={{ color: 'var(--ec-text-subtle)' }}>
                       {formatTime(msg.timestamp)}
                     </span>
                   )}
@@ -723,10 +895,10 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                     <div className="flex items-center gap-2 h-6">
                       <div className="flex gap-1">
                         {[0,1,2].map(i => (
-                          <span key={i} className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ animationDelay: `${i * 0.18}s`, background: '#c0c0c0' }} />
+                          <span key={i} className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ animationDelay: `${i * 0.18}s`, background: 'var(--ec-text-subtle)' }} />
                         ))}
                       </div>
-                      <span className="text-xs" style={{ color: '#b0b0b0' }}>Thinking…</span>
+                      <span className="text-xs" style={{ color: 'var(--ec-text-subtle)' }}>Thinking…</span>
                     </div>
                   ) : msg.content ? (
                     <>
@@ -755,6 +927,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                     </>
                   ) : null}
                   <CitationPills citations={msg.citations} />
+                  <SourceCards sources={msg.documentSources} />
                   {msg.pendingConfirmation && (
                     <ToolConfirmation
                       toolName={msg.pendingConfirmation.tool_name}
@@ -940,13 +1113,27 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
             boxShadow: '0 2px 12px rgba(0,0,0,0.07)',
           }}
         >
-          {/* Textarea */}
-          <div className="px-4 pt-3.5 pb-1">
+          {/* Textarea + slash command popover */}
+          <div className="relative px-4 pt-3.5 pb-1">
+            <SlashCommands
+              input={input}
+              setInput={(v) => { setInput(v); requestAnimationFrame(resizeTextarea) }}
+              onClearChat={() => {
+                setMessages([])
+                setInput('')
+                setAttachedFile(null)
+                setConversationTitle('')
+                if (conversationId) router.replace('/dashboard/chat')
+              }}
+              onKeyDownRef={slashKeyDownRef}
+            />
             <textarea
               ref={textareaRef}
               value={input}
               onChange={e => { setInput(e.target.value); resizeTextarea() }}
               onKeyDown={e => {
+                // Let the slash-command popover consume nav keys first.
+                if (slashKeyDownRef.current?.(e.nativeEvent)) return
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()
                   handleSend()
@@ -956,7 +1143,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                   handleSend()
                 }
               }}
-              placeholder="Message your companion…"
+              placeholder="Message your companion…  (type / for commands)"
               rows={1}
               className="w-full resize-none text-sm outline-none bg-transparent leading-relaxed placeholder:text-[#b0b0b0]"
               style={{ color: 'var(--ec-text)', maxHeight: '140px', overflowY: 'auto' }}
@@ -994,7 +1181,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                 disabled={isLoading}
                 className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors hover:bg-black/5 disabled:opacity-30"
                 aria-label="More options"
-                style={{ color: '#9e9e9e' }}
+                style={{ color: 'var(--ec-text-subtle)' }}
               >
                 <Plus size={16} />
               </button>
@@ -1003,8 +1190,8 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                 <div
                   className="absolute bottom-full mb-2 left-0 z-50 rounded-xl py-1.5 min-w-[220px]"
                   style={{
-                    background: '#fff',
-                    border: '1px solid rgba(0,0,0,0.10)',
+                    background: 'var(--ec-card-bg)',
+                    border: '1px solid var(--ec-card-border)',
                     boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
                   }}
                   onClick={e => e.stopPropagation()}
@@ -1013,9 +1200,9 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                   <button
                     onClick={() => { fileInputRef.current?.click(); setPlusMenuOpen(false) }}
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors hover:bg-black/4"
-                    style={{ color: '#0a0a0a' }}
+                    style={{ color: 'var(--ec-text)' }}
                   >
-                    <Paperclip size={15} style={{ color: '#6b6b6b' }} />
+                    <Paperclip size={15} style={{ color: 'var(--ec-text-muted)' }} />
                     Attach file
                   </button>
 
@@ -1027,9 +1214,9 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                       setPlusMenuOpen(false)
                     }}
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors hover:bg-black/4"
-                    style={{ color: '#0a0a0a' }}
+                    style={{ color: 'var(--ec-text)' }}
                   >
-                    <Globe size={15} style={{ color: '#6b6b6b' }} />
+                    <Globe size={15} style={{ color: 'var(--ec-text-muted)' }} />
                     Search the web
                   </button>
 
@@ -1042,9 +1229,9 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                       setPlusMenuOpen(false)
                     }}
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors hover:bg-black/4"
-                    style={{ color: '#0a0a0a' }}
+                    style={{ color: 'var(--ec-text)' }}
                   >
-                    <Calendar size={15} style={{ color: '#6b6b6b' }} />
+                    <Calendar size={15} style={{ color: 'var(--ec-text-muted)' }} />
                     Check calendar
                   </button>
 
@@ -1055,9 +1242,9 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                       setPlusMenuOpen(false)
                     }}
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors hover:bg-black/4"
-                    style={{ color: '#0a0a0a' }}
+                    style={{ color: 'var(--ec-text)' }}
                   >
-                    <Target size={15} style={{ color: '#6b6b6b' }} />
+                    <Target size={15} style={{ color: 'var(--ec-text-muted)' }} />
                     Review goals
                   </button>
 
@@ -1069,9 +1256,9 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                       setPlusMenuOpen(false)
                     }}
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors hover:bg-black/4"
-                    style={{ color: '#0a0a0a' }}
+                    style={{ color: 'var(--ec-text)' }}
                   >
-                    <StickyNote size={15} style={{ color: '#6b6b6b' }} />
+                    <StickyNote size={15} style={{ color: 'var(--ec-text-muted)' }} />
                     Save a note
                   </button>
                 </div>
@@ -1112,7 +1299,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
               {/* Model selector */}
               <div className="relative">
                 <button
-                  onClick={() => setModelMenuOpen(v => !v)}
+                  onClick={e => { e.stopPropagation(); setModelMenuOpen(v => !v) }}
                   disabled={isLoading}
                   className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors hover:bg-black/6 disabled:opacity-50"
                   style={{
@@ -1127,6 +1314,7 @@ export default function ChatPage({ conversationId }: { conversationId?: string }
                 </button>
                 {modelMenuOpen && (
                   <div
+                    onClick={e => e.stopPropagation()}
                     className="absolute bottom-full mb-2 right-0 z-50 rounded-xl overflow-hidden py-1 min-w-[200px]"
                     style={{
                       background: '#fff',

@@ -1,53 +1,59 @@
 import { render, screen } from '@testing-library/react';
 import DashboardPage from '../app/dashboard/page';
-import { transparencyApi, goalsApi, valuesApi } from '../lib/api';
 
-// Mock all APIs used by the dashboard
-jest.mock('../lib/api', () => ({
-  transparencyApi: {
-    report: jest.fn(),
-    logs: jest.fn(),
-  },
-  goalsApi: {
-    list: jest.fn(),
-  },
-  valuesApi: {
-    list: jest.fn(),
+// next/link transitively reads router context; without an app router
+// mounted in the test tree, render() throws "invariant expected app
+// router to be mounted". Stub to a plain <a> that just forwards props.
+//
+// jest.mock factories run before imports — they can't reference any
+// out-of-scope variables, including TS-injected helpers. Avoid rest
+// spread (which Babel/TS lowers to a `__rest` import) and pull React
+// in lazily inside the factory.
+jest.mock('next/link', () => ({
+  __esModule: true,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  default: function MockLink(props: any) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const r = require('react')
+    return r.createElement('a', props, props.children)
   },
 }));
 
+// The dashboard page is now just a composition of three sub-components,
+// each of which has its own focused tests. Stub them out and verify the
+// page composes them in order, inside the ErrorBoundary, without
+// crashing.
+jest.mock('../components/dashboard-hero', () => ({
+  DashboardHero: () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const r = require('react')
+    return r.createElement('div', { 'data-testid': 'dashboard-hero' }, 'Hero')
+  },
+  RecentConversations: () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const r = require('react')
+    return r.createElement('div', { 'data-testid': 'recent-conversations' }, 'Recent')
+  },
+}))
+jest.mock('../components/tools-launcher', () => ({
+  ToolsLauncher: () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const r = require('react')
+    return r.createElement('div', { 'data-testid': 'tools-launcher' }, 'Tools')
+  },
+}))
+
 describe('DashboardPage', () => {
-  beforeEach(() => {
-    // Reset all mocks (clears call history and return values) before re-setting
-    jest.resetAllMocks();
-
-    (transparencyApi.report as jest.Mock).mockResolvedValue({
-      total_decisions: 100,
-      approval_rate: 0.95,
-      vetoed_count: 5,
-      modified_count: 10,
-    });
-    (transparencyApi.logs as jest.Mock).mockResolvedValue({ logs: [] });
-    (goalsApi.list as jest.Mock).mockResolvedValue({ goals: [] });
-    (valuesApi.list as jest.Mock).mockResolvedValue({ values: [] });
+  it('renders Hero, Tools, and Recent sections', () => {
+    render(<DashboardPage />);
+    expect(screen.getByTestId('dashboard-hero')).toBeInTheDocument();
+    expect(screen.getByTestId('tools-launcher')).toBeInTheDocument();
+    expect(screen.getByTestId('recent-conversations')).toBeInTheDocument();
   });
 
-  it('renders stat labels after loading', async () => {
-    render(<DashboardPage />);
-    // 'Values Set' and 'ESL Decisions Today' are unique stat labels
-    expect(await screen.findByText('Values Set')).toBeInTheDocument();
-    expect(await screen.findByText('ESL Decisions Today')).toBeInTheDocument();
-    // 'Active Goals' appears twice (stat label + section heading); verify at least one exists
-    expect(screen.getAllByText('Active Goals').length).toBeGreaterThan(0);
-  });
-
-  it('handles API errors gracefully', async () => {
-    (transparencyApi.report as jest.Mock).mockRejectedValue(new Error('API Error'));
-    (goalsApi.list as jest.Mock).mockRejectedValue(new Error('API Error'));
-    (valuesApi.list as jest.Mock).mockRejectedValue(new Error('API Error'));
-    (transparencyApi.logs as jest.Mock).mockRejectedValue(new Error('API Error'));
-    render(<DashboardPage />);
-    // Component renders without crashing even when all APIs fail
-    expect(await screen.findByText('Values Set')).toBeInTheDocument();
+  it('renders without throwing even with empty mocks', () => {
+    // Smoke test: page is just composition; the ErrorBoundary wraps the
+    // children, so even if a child silently no-ops, the page should mount.
+    expect(() => render(<DashboardPage />)).not.toThrow();
   });
 });

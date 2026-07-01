@@ -4,6 +4,10 @@ import userEvent from '@testing-library/user-event'
 jest.mock('../lib/supabase', () => ({
   supabase: {
     auth: {
+      // useAuth now calls getSession() on mount to restore the session
+      // after a page refresh; return "no session" so tests start
+      // unauthenticated unless onAuthStateChange says otherwise.
+      getSession: jest.fn().mockResolvedValue({ data: { session: null } }),
       onAuthStateChange: jest.fn(() => ({
         data: { subscription: { unsubscribe: jest.fn() } },
       })),
@@ -33,7 +37,13 @@ function TestComponent() {
   )
 }
 
-beforeEach(() => jest.resetAllMocks())
+beforeEach(() => {
+  jest.resetAllMocks()
+  // Re-apply default: no session on mount. Individual tests can override.
+  ;(supabase.auth.getSession as jest.Mock).mockResolvedValue({
+    data: { session: null },
+  })
+})
 
 test('test_shows_loading_then_unauthenticated', async () => {
   ;(supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((cb) => {
@@ -46,6 +56,11 @@ test('test_shows_loading_then_unauthenticated', async () => {
 
 test('test_shows_user_when_authenticated', async () => {
   const mockUser = { id: 'user-1', email: 'jane@example.com' }
+  // getSession resolves AFTER the synchronous onAuthStateChange callback,
+  // so it "wins" the initial render — must return the same session.
+  ;(supabase.auth.getSession as jest.Mock).mockResolvedValue({
+    data: { session: { user: mockUser } },
+  })
   ;(supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((cb) => {
     cb('SIGNED_IN', { user: mockUser })
     return { data: { subscription: { unsubscribe: jest.fn() } } }
@@ -70,6 +85,9 @@ test('test_signIn_calls_supabase_otp', async () => {
 
 test('test_signOut_calls_supabase_signOut', async () => {
   const mockUser = { id: 'user-1', email: 'jane@example.com' }
+  ;(supabase.auth.getSession as jest.Mock).mockResolvedValue({
+    data: { session: { user: mockUser } },
+  })
   ;(supabase.auth.onAuthStateChange as jest.Mock).mockImplementation((cb) => {
     cb('SIGNED_IN', { user: mockUser })
     return { data: { subscription: { unsubscribe: jest.fn() } } }
