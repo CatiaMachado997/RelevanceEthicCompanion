@@ -394,6 +394,7 @@ async def tool_planner_node(state: AgentState) -> dict:
         "actions": parsed["actions"],
         "observations": [],  # filled in by tool_execution_node
         "started_at": datetime.now(UTC).isoformat(),
+        "memory_used": memory_used,  # Sprint K — empty list on non-first or flag-off
     }
     plan_steps.append(step)
 
