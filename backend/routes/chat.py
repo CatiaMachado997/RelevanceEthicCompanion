@@ -264,6 +264,25 @@ async def chat_resume(
                         )
                     if isinstance(content, str) and content:
                         yield f"data: {_json.dumps({'event': 'token', 'token': content})}\n\n"
+                # A re-pause (e.g. a later action in the same or a later
+                # step also needs confirmation) surfaces as an
+                # on_chain_stream chunk on the top-level "LangGraph" run —
+                # NOT in on_chain_end's output (see graph.py for the same
+                # discovery on the initial-pause path).
+                elif kind == "on_chain_stream" and event.get("name") == "LangGraph":
+                    chunk = event.get("data", {}).get("chunk")
+                    chunk = chunk if isinstance(chunk, dict) else {}
+                    interrupts = chunk.get("__interrupt__") or []
+                    if interrupts:
+                        first = interrupts[0]
+                        payload = getattr(first, "value", None)
+                        if payload is None and isinstance(first, dict):
+                            payload = first.get("value", {})
+                        payload = payload or {}
+                        yield (
+                            f"data: {_json.dumps({'event': 'plan_paused', 'thread_id': body.thread_id, **payload})}\n\n"
+                        )
+                        return
                 elif kind == "on_chain_end" and event.get("name") == "LangGraph":
                     raw_final = event.get("data", {}).get("output")
                     final_output = raw_final if isinstance(raw_final, dict) else {}

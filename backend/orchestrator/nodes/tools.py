@@ -551,15 +551,22 @@ async def tool_execution_node(state: AgentState) -> dict:
             parallel_actions.append((ai, action, t, category, False))
         events.append({"event": "tool_use", "tool": tool_name})
 
-    # --- Parallel fan-out for read-only tools ---
+    # --- Fan-out for read-only tools: parallel when PLANNER_PARALLEL_ENABLED,
+    # otherwise the legacy one-at-a-time behavior. ---
     if parallel_actions:
-        obs_list = await asyncio.gather(
-            *[
-                _execute_with_retry(t, a.get("params", {}))
+        if _j_settings.PLANNER_PARALLEL_ENABLED:
+            obs_list = await asyncio.gather(
+                *[
+                    _execute_with_retry(t, a.get("params", {}))
+                    for _, a, t, _c, _n in parallel_actions
+                ],
+                return_exceptions=False,
+            )
+        else:
+            obs_list = [
+                await _execute_with_retry(t, a.get("params", {}))
                 for _, a, t, _c, _n in parallel_actions
-            ],
-            return_exceptions=False,
-        )
+            ]
         for (ai, action, t, _category, _needs), obs in zip(parallel_actions, obs_list):
             tool_name = action["tool"]
             params = action.get("params", {})

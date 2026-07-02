@@ -82,7 +82,7 @@ async def test_two_independent_actions_run_in_parallel():
     cal_tool.ainvoke = slow_cal
     cal_tool.metadata = {}
 
-    with patch(
+    with patch("orchestrator.nodes.tools._j_settings") as flag, patch(
         "orchestrator.nodes.tools.get_context_manager",
         MagicMock(return_value=MagicMock()),
     ), patch(
@@ -95,6 +95,7 @@ async def test_two_independent_actions_run_in_parallel():
         "langchain_groq.ChatGroq",
         _mk_synth_llm(),
     ):
+        flag.PLANNER_PARALLEL_ENABLED = True
         started = time.perf_counter()
         result = await tool_execution_node(_base_state())
         elapsed = time.perf_counter() - started
@@ -107,6 +108,55 @@ async def test_two_independent_actions_run_in_parallel():
     # Observations attached to the step
     assert len(result["plan_steps"][-1]["observations"]) == 2
     # All observations are status=ok
+    statuses = [o["status"] for o in result["plan_steps"][-1]["observations"]]
+    assert statuses == ["ok", "ok"]
+
+
+@pytest.mark.asyncio
+async def test_two_independent_actions_run_sequentially_when_flag_off():
+    """PLANNER_PARALLEL_ENABLED=False falls back to the legacy one-at-a-time
+    behavior — latency reflects serial execution, not parallelism."""
+    import time
+
+    async def slow_docs(_p):
+        await asyncio.sleep(0.1)
+        return [{"chunk_uuid": "u1", "snippet": "m-kopa"}]
+
+    async def slow_cal(_p):
+        await asyncio.sleep(0.1)
+        return [{"title": "Standup", "start": "2026-04-20T09:00"}]
+
+    docs_tool = MagicMock()
+    docs_tool.name = "search_documents"
+    docs_tool.ainvoke = slow_docs
+    docs_tool.metadata = {}
+    cal_tool = MagicMock()
+    cal_tool.name = "query_calendar"
+    cal_tool.ainvoke = slow_cal
+    cal_tool.metadata = {}
+
+    with patch("orchestrator.nodes.tools._j_settings") as flag, patch(
+        "orchestrator.nodes.tools.get_context_manager",
+        MagicMock(return_value=MagicMock()),
+    ), patch(
+        "services.langchain_tools.create_langchain_tools",
+        AsyncMock(return_value=[docs_tool, cal_tool]),
+    ), patch(
+        "orchestrator.nodes.tools._record_telemetry",
+        MagicMock(),
+    ), patch(
+        "langchain_groq.ChatGroq",
+        _mk_synth_llm(),
+    ):
+        flag.PLANNER_PARALLEL_ENABLED = False
+        started = time.perf_counter()
+        result = await tool_execution_node(_base_state())
+        elapsed = time.perf_counter() - started
+
+    tool_names = {r["tool"] for r in result["tool_results"]}
+    assert tool_names == {"search_documents", "query_calendar"}
+    # Two 100 ms sleeps run serially should net ~200 ms.
+    assert elapsed >= 0.19, f"expected serial (>=190ms), got {elapsed*1000:.0f}ms"
     statuses = [o["status"] for o in result["plan_steps"][-1]["observations"]]
     assert statuses == ["ok", "ok"]
 

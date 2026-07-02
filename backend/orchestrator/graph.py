@@ -94,8 +94,26 @@ def build_graph():
 _compiled_graph = None
 
 
+def _seed_messages_node(state: AgentState) -> dict:
+    """Bridge the single `message` string + `conversation_history` into the
+    LangChain-style `messages` list that langgraph_supervisor's
+    create_supervisor() reads from. Without this, the supervisor never sees
+    what the user actually asked."""
+    from langchain_core.messages import HumanMessage, AIMessage
+
+    messages: list = []
+    for h in state.get("conversation_history", []):
+        messages.append(
+            HumanMessage(content=h["content"])
+            if h["role"] == "user"
+            else AIMessage(content=h["content"])
+        )
+    messages.append(HumanMessage(content=state["message"]))
+    return {"messages": messages}
+
+
 def build_multi_agent_graph():
-    """Multi-agent graph: context_builder → supervisor → esl_gateway → formatter."""
+    """Multi-agent graph: context_builder → seed_messages → supervisor → esl_gateway → formatter."""
     from pydantic import SecretStr
     from orchestrator.agents.supervisor import build_supervisor
 
@@ -123,13 +141,15 @@ def build_multi_agent_graph():
 
     g = StateGraph(AgentState)
     g.add_node("context_builder", context_builder_node)
+    g.add_node("seed_messages", _seed_messages_node)
     g.add_node("supervisor", supervisor_node)
     g.add_node("esl_gateway", esl_gateway_node)
     g.add_node("response_formatter", response_formatter_node)
     g.add_node("explain_veto", explain_veto_node)
 
     g.set_entry_point("context_builder")
-    g.add_edge("context_builder", "supervisor")
+    g.add_edge("context_builder", "seed_messages")
+    g.add_edge("seed_messages", "supervisor")
     g.add_edge("supervisor", "esl_gateway")
     g.add_conditional_edges(
         "esl_gateway",
@@ -286,9 +306,13 @@ async def stream_langgraph(
         graph = get_graph()
         config = {}
 
-    # Nodes whose LLM calls generate the final user-visible response
+    # Nodes whose LLM calls generate the final user-visible response.
+    # In multi-agent mode, both the supervisor and every worker agent are
+    # built via create_react_agent, whose internal chat-model node is
+    # always named "agent" regardless of which agent it belongs to —
+    # "supervisor" only ever carries tool-call/handoff events, never text.
     if os.getenv("MULTI_AGENT", "").lower() == "true":
-        RESPONSE_NODES = frozenset({"supervisor"})
+        RESPONSE_NODES = frozenset({"agent"})
     else:
         RESPONSE_NODES = frozenset({"tool_planner", "tool_execution", "deep_research"})
 
@@ -298,6 +322,7 @@ async def stream_langgraph(
     document_sources: list = []
     tool_events_yielded = False
     done_yielded = False
+    paused = False
     # Sprint I — capture plan trace from streamed node outputs
     plan_steps: list = []
     planner_run_id: Optional[str] = None
@@ -448,6 +473,36 @@ async def stream_langgraph(
                     response_text = veto_text
                     yield {"event": "token", "token": veto_text}
 
+            # ── Interrupt path (Sprint J): when the graph pauses via
+            # interrupt(), astream_events surfaces it as an on_chain_stream
+            # chunk on the top-level "LangGraph" run — NOT in on_chain_end's
+            # output (that key is only present on ainvoke()'s return value).
+            # Emit plan_paused and DON'T emit a regular done event.
+            elif (
+                _settings.STREAMING_REASONING_ENABLED
+                and kind == "on_chain_stream"
+                and event.get("name") == "LangGraph"
+            ):
+                chunk = event.get("data", {}).get("chunk")
+                chunk = chunk if isinstance(chunk, dict) else {}
+                interrupts = chunk.get("__interrupt__") or []
+                if interrupts and not done_yielded:
+                    first = interrupts[0]
+                    # langgraph.types.Interrupt has a `value` attribute
+                    # holding the payload passed to interrupt().
+                    payload = getattr(first, "value", None)
+                    if payload is None and isinstance(first, dict):
+                        payload = first.get("value", {})
+                    payload = payload or {}
+                    thread_id = (config.get("configurable", {}) or {}).get("thread_id")
+                    yield {
+                        "event": "plan_paused",
+                        "thread_id": thread_id,
+                        **payload,
+                    }
+                    done_yielded = True
+                    paused = True
+
             # ── Graph completion — yield done event ──
             elif kind == "on_chain_end" and event.get("name") == "LangGraph":
                 raw_final = event.get("data", {}).get("output")
@@ -475,6 +530,7 @@ async def stream_langgraph(
                             **payload,
                         }
                         done_yielded = True
+                        paused = True
                         continue
 
                 # If streaming captured nothing (edge case), fall back to response_text in state
@@ -506,6 +562,12 @@ async def stream_langgraph(
             "citations": citations,
             "document_sources": document_sources,
         }
+
+    # A paused turn hasn't finished — the run stays 'running' in
+    # planner_runs until it's actually resumed and completed, and there's
+    # no assistant response yet to store as a conversation turn.
+    if paused:
+        return
 
     # Sprint I — finalize the planner_runs row with totals + final status.
     # Best-effort: failure here just logs (the run row stays as 'running'
