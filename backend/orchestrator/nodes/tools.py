@@ -387,6 +387,39 @@ async def tool_planner_node(state: AgentState) -> dict:
                 },
             )
 
+    # Loop guard: Llama frequently re-emits a tool call it already ran
+    # successfully (it ignores the "respond with no further tool calls"
+    # hint even though the prior results are right there in the trace),
+    # which burns steps until the cap and stops the turn from ever reaching
+    # 'completed'. If EVERY action this step merely repeats a prior
+    # successful call, treat the turn as done and carry forward the answer
+    # the last tool_execution already synthesized.
+    if parsed["actions"]:
+        prior_ok: set = set()
+        for s in plan_steps:
+            for a, o in zip(s.get("actions", []), s.get("observations") or []):
+                if (o or {}).get("status") == "ok":
+                    prior_ok.add(
+                        (
+                            a.get("tool"),
+                            json.dumps(
+                                a.get("params", {}), sort_keys=True, default=str
+                            ),
+                        )
+                    )
+        if prior_ok and all(
+            (
+                a.get("tool"),
+                json.dumps(a.get("params", {}), sort_keys=True, default=str),
+            )
+            in prior_ok
+            for a in parsed["actions"]
+        ):
+            parsed["actions"] = []
+            parsed["raw_tool_calls"] = []
+            if not parsed["thought"]:
+                parsed["thought"] = state.get("proposed_content") or ""
+
     next_step_index = len(plan_steps) + 1
     step = {
         "step": next_step_index,

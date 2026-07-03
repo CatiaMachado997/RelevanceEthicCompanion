@@ -1048,6 +1048,31 @@ export default function ChatPage({ conversationId: conversationIdProp }: { conve
                               m.id === msg.id ? { ...m, content: (m.content || '') + t } : m
                             ))
                           },
+                          onPlanPaused: (payload: unknown) => {
+                            // The resumed turn hit another action needing
+                            // confirmation — surface the next prompt so the
+                            // user can keep going instead of the stream just
+                            // silently ending.
+                            const p = payload as Record<string, unknown>
+                            setPausedAction({
+                              thread_id: (p.thread_id as string) || thread_id,
+                              step: p.step as number,
+                              action_index: p.action_index as number,
+                              tool: p.tool as string,
+                              category: p.category as string,
+                              params: (p.params as Record<string, unknown>) || {},
+                              reason: (p.reason as string) || '',
+                              trust_would_help: true,
+                            })
+                          },
+                          onError: (errMsg: string) => {
+                            console.error('[chat] resume error:', errMsg)
+                            setMessages(prev => prev.map(m =>
+                              m.id === msg.id
+                                ? { ...m, streaming: false, content: `${(m.content || '').trim()}\n\n*— could not resume: ${errMsg}*`.trim() }
+                                : m
+                            ))
+                          },
                           onDone: () => {},
                         })
                       }}

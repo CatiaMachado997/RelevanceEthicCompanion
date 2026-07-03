@@ -298,7 +298,23 @@ async def stream_langgraph(
     # Sprint J — when streaming-reasoning is on, use the async graph
     # builder with a Postgres checkpointer so the turn can pause and
     # resume durably. Otherwise fall back to the legacy sync graph.
+    #
+    # The streaming path (build_graph_async) is single-agent ONLY — there is
+    # no async/checkpointer variant of the multi-agent supervisor graph. So
+    # MULTI_AGENT and STREAMING_REASONING are mutually exclusive: if both are
+    # set, streaming wins and multi-agent is a no-op. We collapse that here
+    # into a single `multi_agent` flag so the graph we run and the
+    # RESPONSE_NODES we watch below can never disagree (they did before:
+    # a single-agent graph paired with RESPONSE_NODES={"agent"} streamed
+    # zero tokens).
+    multi_agent = os.getenv("MULTI_AGENT", "").lower() == "true"
     if _settings.STREAMING_REASONING_ENABLED:
+        if multi_agent:
+            logger.warning(
+                "MULTI_AGENT is ignored while STREAMING_REASONING_ENABLED is "
+                "on — the streaming path only supports the single-agent graph."
+            )
+            multi_agent = False
         graph = await get_graph_async()
         thread_id = conversation_id or "transient-" + str(id(initial_state))
         config: dict = {"configurable": {"thread_id": thread_id}}
@@ -311,7 +327,7 @@ async def stream_langgraph(
     # built via create_react_agent, whose internal chat-model node is
     # always named "agent" regardless of which agent it belongs to —
     # "supervisor" only ever carries tool-call/handoff events, never text.
-    if os.getenv("MULTI_AGENT", "").lower() == "true":
+    if multi_agent:
         RESPONSE_NODES = frozenset({"agent"})
     else:
         RESPONSE_NODES = frozenset({"tool_planner", "tool_execution", "deep_research"})
@@ -594,6 +610,8 @@ async def stream_langgraph(
                 total_actions=total_actions,
                 total_duration_ms=total_duration_ms,
                 plan_steps=plan_steps,
+                user_id=user_id,
+                message_text=message,
             )
         except Exception as exc:
             logger.warning("planner_runs finalize failed: %s", exc)

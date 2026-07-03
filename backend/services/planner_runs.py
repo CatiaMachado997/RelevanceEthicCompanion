@@ -67,12 +67,21 @@ class PlannerRunsService:
         total_actions: int,
         total_duration_ms: int,
         plan_steps: List[dict],
+        user_id: Optional[str] = None,
+        message_text: Optional[str] = None,
     ) -> None:
         """UPDATE the planner_runs row with final state.
 
         `status` must be one of the CHECK-allowed values; an invalid
         value is logged and the write is skipped (so we never produce
         a constraint violation in production).
+
+        `user_id` and `message_text` are used to schedule the Sprint K
+        episodic-memory write when the run is eligible. They must be
+        supplied by the caller (the orchestrator has both in hand) —
+        earlier code tried to recover them via
+        planner_runs.conversation_turn_id, but that column is never
+        populated, so the write was silently dead.
         """
         if status not in _VALID_STATUSES:
             logger.warning(
@@ -112,42 +121,20 @@ class PlannerRunsService:
         # Sprint K — schedule a fire-and-forget memory write if this run
         # is worth remembering. Eligibility:
         #   - status == 'completed'
+        #   - caller supplied user_id + message_text
         #   - at least one observation across all steps has status == 'ok'
-        # We don't have user_id / message_text in this function's args, so
-        # we fetch them via the run's conversation_turn_id FK.
         if not _settings.EPISODIC_MEMORY_ENABLED:
             return
         if status != "completed":
             return
+        if not user_id or not message_text:
+            return  # nothing useful to embed; degrade silently
         has_ok = any(
             (obs or {}).get("status") == "ok"
             for step in (plan_steps or [])
             for obs in (step.get("observations") or [])
         )
         if not has_ok:
-            return
-        try:
-            with get_db_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """SELECT pr.user_id, ct.content AS message_text
-                             FROM planner_runs pr
-                        LEFT JOIN conversation_turns ct
-                               ON ct.id = pr.conversation_turn_id
-                            WHERE pr.id = %s""",
-                        (run_id,),
-                    )
-                    row = cur.fetchone() or {}
-            user_id = row.get("user_id")
-            message_text = row.get("message_text") or ""
-            if not user_id or not message_text:
-                return  # nothing useful to embed; degrade silently
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "planner_run_memory: finalize lookup failed for %s: %s",
-                run_id,
-                exc,
-            )
             return
         try:
             import asyncio

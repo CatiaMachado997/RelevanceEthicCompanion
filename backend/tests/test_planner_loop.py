@@ -183,13 +183,25 @@ async def test_max_planner_steps_caps_loop(mock_cm, mock_groq_cls, mock_create_t
     tool_a = _mock_tool("get_user_goals", "ok")
     mock_create_tools.return_value = [tool_a]
 
-    # Planner ALWAYS emits a tool call.
-    planner_with_tools = MagicMock()
-    planner_with_tools.ainvoke = AsyncMock(
-        return_value=_planner_response(
-            tool_calls=[{"name": "get_user_goals", "args": {}, "id": "loop"}]
+    # Planner ALWAYS emits a tool call — with DISTINCT params each step so
+    # the duplicate-call guard doesn't short-circuit it, letting us verify
+    # max_planner_steps as the ultimate backstop against a runaway planner.
+    step_counter = {"n": 0}
+
+    def _planner_side_effect(*_a, **_k):
+        step_counter["n"] += 1
+        return _planner_response(
+            tool_calls=[
+                {
+                    "name": "get_user_goals",
+                    "args": {"round": step_counter["n"]},
+                    "id": f"loop{step_counter['n']}",
+                }
+            ]
         )
-    )
+
+    planner_with_tools = MagicMock()
+    planner_with_tools.ainvoke = AsyncMock(side_effect=_planner_side_effect)
     synth_response = MagicMock()
     synth_response.content = "synth"
 
@@ -217,6 +229,59 @@ async def test_max_planner_steps_caps_loop(mock_cm, mock_groq_cls, mock_create_t
     assert iterations == 3
     assert len(state["tool_results"]) == 3
     assert state["planner_step"] == 3
+
+
+@pytest.mark.asyncio
+@patch("services.langchain_tools.create_langchain_tools")
+@patch("langchain_groq.ChatGroq")
+@patch("orchestrator.nodes.tools.get_context_manager")
+async def test_duplicate_tool_call_terminates_early(
+    mock_cm, mock_groq_cls, mock_create_tools
+):
+    """If the planner re-emits a tool call it already ran successfully
+    (Llama frequently ignores the 'stop when done' hint), the loop guard
+    terminates the turn instead of burning steps to the cap. The already-
+    synthesized answer is carried forward as proposed_content."""
+    from orchestrator.nodes.tools import tool_planner_node, tool_execution_node
+    from orchestrator.graph import _route_after_execution
+
+    mock_cm.return_value = MagicMock()
+    tool_a = _mock_tool("get_user_goals", "ok")
+    mock_create_tools.return_value = [tool_a]
+
+    # Planner ALWAYS emits the SAME call (same tool + same params).
+    planner_with_tools = MagicMock()
+    planner_with_tools.ainvoke = AsyncMock(
+        return_value=_planner_response(
+            tool_calls=[{"name": "get_user_goals", "args": {}, "id": "dup"}]
+        )
+    )
+    synth_response = MagicMock()
+    synth_response.content = "Here are your goals."
+
+    llm = MagicMock()
+    llm.bind_tools = MagicMock(return_value=planner_with_tools)
+    llm.ainvoke = AsyncMock(return_value=synth_response)
+    mock_groq_cls.return_value = llm
+
+    state = _base_state(max_planner_steps=3)
+
+    iterations = 0
+    while True:
+        state.update(await tool_planner_node(state))
+        if not state["tool_calls"]:
+            break
+        state.update(await tool_execution_node(state))
+        iterations += 1
+        if _route_after_execution(state) == "esl_gateway":
+            break
+
+    # Ran the tool exactly once, then the guard ended the loop on the
+    # second planner pass — well short of the 3-step cap.
+    assert iterations == 1
+    assert len(state["tool_results"]) == 1
+    # The synthesized answer from the single execution is preserved.
+    assert state["proposed_content"] == "Here are your goals."
 
 
 # ===== Sprint F Task 7: bias toward search_documents on knowledge queries =====
