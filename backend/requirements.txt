@@ -1,7 +1,7 @@
 # Core Framework
 fastapi>=0.138.2
 uvicorn[standard]>=0.32.0
-pydantic>=2.10.0
+pydantic>=2.13.4
 pydantic-settings>=2.6.0
 # Required by pydantic EmailStr (used in auth/user models).
 email-validator>=2.2.0
