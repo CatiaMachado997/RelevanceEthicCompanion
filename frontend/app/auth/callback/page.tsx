@@ -21,12 +21,12 @@ export default function AuthCallbackPage() {
           return
         }
 
-        // createBrowserClient (@supabase/ssr) automatically exchanges the
-        // ?code= param and stores the PKCE verifier in cookies — we just
-        // need to wait for the session to be ready via onAuthStateChange.
-        // Calling exchangeCodeForSession() manually would consume the
-        // verifier a second time and throw "PKCE code verifier not found".
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        const code = params.get('code')
+        const result = code
+          ? await supabase.auth.exchangeCodeForSession(code)
+          : await supabase.auth.getSession()
+        const session = result.data.session
+        const sessionError = result.error
 
         if (sessionError) {
           setError(sessionError.message)
@@ -34,19 +34,7 @@ export default function AuthCallbackPage() {
         }
 
         if (!session) {
-          // Session not ready yet — wait for auth state change
-          const { data: { subscription } } = supabase.auth.onAuthStateChange(
-            async (event, newSession) => {
-              if (event === 'SIGNED_IN' && newSession) {
-                subscription.unsubscribe()
-                await syncSessionCookie(newSession.access_token)
-                router.push('/dashboard')
-              } else if (event === 'SIGNED_OUT') {
-                subscription.unsubscribe()
-                setError('Sign in failed. Please try again.')
-              }
-            }
-          )
+          setError('No authentication session was returned. Please try signing in again.')
           return
         }
 

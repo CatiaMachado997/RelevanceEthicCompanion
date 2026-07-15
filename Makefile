@@ -3,11 +3,13 @@ SHELL         := /bin/bash
 BACKEND_DIR   := backend
 FRONTEND_DIR  := frontend
 
-.PHONY: help setup dev-up dev-down dev-reset migrate-dry migrate migrate-prod test lint
+.PHONY: help setup check-local-env dev dev-up dev-down dev-reset migrate-dry migrate migrate-prod test lint
 
 help:
 	@echo ""
 	@echo "  make setup          First-time setup (copy envs, venv, npm install)"
+	@echo "  make check-local-env  Verify local services cannot target production"
+	@echo "  make dev            Run the complete app locally"
 	@echo "  make dev-up         Start Postgres + Weaviate"
 	@echo "  make dev-down       Stop and remove containers"
 	@echo "  make dev-reset      Wipe volumes, restart, seed DB"
@@ -26,6 +28,17 @@ setup:
 	@cd $(BACKEND_DIR) && source venv/bin/activate && pip install -q -r requirements.txt && echo "  pip install done"
 	@cd $(FRONTEND_DIR) && npm install --silent && echo "  npm install done"
 	@echo "==> Setup complete. Fill in real API keys in backend/.env"
+
+check-local-env:
+	@bash scripts/check-local-env.sh
+
+dev: check-local-env dev-up
+	@echo "==> Backend: http://localhost:8000/docs"
+	@echo "==> Frontend: http://localhost:3000"
+	@trap 'kill 0' INT TERM EXIT; \
+		(cd $(BACKEND_DIR) && source venv/bin/activate && python main.py) & \
+		(cd $(FRONTEND_DIR) && npm run dev) & \
+		wait
 
 dev-up:
 	@cd $(BACKEND_DIR) && docker compose up -d

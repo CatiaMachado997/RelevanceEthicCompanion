@@ -5,5 +5,10 @@ import { createBrowserClient } from '@supabase/ssr'
 // even when the magic link opens in a new tab or after a navigation.
 export const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  {
+    // The callback page exchanges PKCE codes explicitly. Keeping a single
+    // owner avoids a race between client initialization and its auth listener.
+    auth: { detectSessionInUrl: false },
+  },
 )
