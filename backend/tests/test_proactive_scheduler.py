@@ -45,6 +45,40 @@ def make_scheduler():
     return sched
 
 
+@pytest.mark.asyncio
+async def test_observed_job_records_failure_and_reraises():
+    sched = make_scheduler()
+    insert_cur = MagicMock()
+    insert_cur.fetchone.return_value = {"id": 73}
+    update_cur = MagicMock()
+
+    def db_context(cur):
+        ctx = MagicMock()
+        conn = ctx.__enter__.return_value
+        conn.cursor.return_value.__enter__.return_value = cur
+        return ctx
+
+    async def failing_job():
+        raise RuntimeError("calendar provider unavailable")
+
+    with patch(
+        "services.scheduler.get_db_connection",
+        side_effect=[db_context(insert_cur), db_context(update_cur)],
+    ):
+        with pytest.raises(RuntimeError, match="calendar provider unavailable"):
+            await sched._run_observed_job("sync_google_calendar", failing_job)
+
+    insert_sql, insert_params = insert_cur.execute.call_args.args
+    assert "INSERT INTO scheduled_job_runs" in insert_sql
+    assert insert_params == ("sync_google_calendar",)
+
+    update_sql, update_params = update_cur.execute.call_args.args
+    assert "UPDATE scheduled_job_runs" in update_sql
+    assert update_params[0] == "failed"
+    assert update_params[2] == "calendar provider unavailable"
+    assert update_params[3] == 73
+
+
 # ─────────────────────────────────────────────
 # _generate_deadline_warnings
 # ─────────────────────────────────────────────

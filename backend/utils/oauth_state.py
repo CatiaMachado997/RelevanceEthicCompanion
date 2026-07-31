@@ -13,7 +13,8 @@ import hashlib
 import hmac
 import json
 import secrets
-from typing import Dict
+from typing import Dict, Optional
+from urllib.parse import urlsplit
 
 from fastapi import HTTPException, status
 
@@ -57,7 +58,26 @@ def _cleanup_nonces(now: datetime) -> None:
         _PENDING_NONCES.pop(nonce, None)
 
 
-def create_signed_state(user_id: str, source_type: str) -> str:
+def validate_return_to(return_to: Optional[str]) -> Optional[str]:
+    """Accept only local absolute paths for post-OAuth redirects."""
+    if return_to is None:
+        return None
+    if (
+        not return_to.startswith("/")
+        or return_to.startswith("//")
+        or "\\" in return_to
+        or any(ord(char) < 32 for char in return_to)
+    ):
+        raise _state_error("return_to must be an internal path")
+    parsed = urlsplit(return_to)
+    if parsed.scheme or parsed.netloc:
+        raise _state_error("return_to must be an internal path")
+    return return_to
+
+
+def create_signed_state(
+    user_id: str, source_type: str, return_to: Optional[str] = None
+) -> str:
     now = datetime.now(timezone.utc)
     nonce = secrets.token_urlsafe(16)
     exp = int((now + timedelta(seconds=_MAX_AGE_SECONDS)).timestamp())
@@ -70,6 +90,9 @@ def create_signed_state(user_id: str, source_type: str) -> str:
         "nonce": nonce,
         "exp": exp,
     }
+    safe_return_to = validate_return_to(return_to)
+    if safe_return_to:
+        payload["return_to"] = safe_return_to
     payload_b64 = _b64url_encode(
         json.dumps(payload, separators=(",", ":")).encode("utf-8")
     )
@@ -77,7 +100,9 @@ def create_signed_state(user_id: str, source_type: str) -> str:
     return f"{payload_b64}.{signature}"
 
 
-def validate_signed_state(state: str, expected_source_type: str) -> str:
+def validate_signed_state_claims(
+    state: str, expected_source_type: str
+) -> Dict[str, str]:
     try:
         payload_b64, signature = state.split(".", 1)
     except ValueError as exc:
@@ -112,4 +137,13 @@ def validate_signed_state(state: str, expected_source_type: str) -> str:
     if not user_id:
         raise _state_error("State is missing user identifier")
 
-    return str(user_id)
+    claims = {"user_id": str(user_id)}
+    return_to = validate_return_to(payload.get("return_to"))
+    if return_to:
+        claims["return_to"] = return_to
+    return claims
+
+
+def validate_signed_state(state: str, expected_source_type: str) -> str:
+    """Backward-compatible helper for OAuth callers that only need user_id."""
+    return validate_signed_state_claims(state, expected_source_type)["user_id"]

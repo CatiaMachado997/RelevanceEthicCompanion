@@ -46,13 +46,8 @@ interface StepConnectProps {
 /**
  * Step 1 — connect a data source.
  *
- * The OAuth start URL we use here is the existing
- * `/api/data-sources/oauth/{type}/authorize` endpoint, which doesn't accept a
- * `return_to` parameter. So instead of intercepting the redirect, we set
- * `localStorage.ec_onboarding_in_progress = '1'` before kicking OAuth off; the
- * /onboarding page picks that up to show the right step when the user gets
- * bounced back via /dashboard/integrations. We also append `?from=onboarding=1`
- * to the integrations page (handled there) for a "continue setup" banner.
+ * OAuth state carries a validated internal return path, so the provider
+ * callback lands directly back on this step.
  */
 export function StepConnect({ onContinue, onSkip }: StepConnectProps) {
   const [connectedTypes, setConnectedTypes] = useState<Set<SourceType>>(new Set())
@@ -94,14 +89,10 @@ export function StepConnect({ onContinue, onSkip }: StepConnectProps) {
   const handleConnect = async (type: SourceType) => {
     setConnectingType(type)
     try {
-      // Set a marker so /onboarding can route the user back to step 1 after
-      // OAuth lands them on /dashboard/integrations.
-      try {
-        localStorage.setItem('ec_onboarding_in_progress', '1')
-      } catch {
-        // localStorage may be disabled — non-fatal, banner just won't show.
-      }
-      const { authorization_url } = await dataSourcesApi.getAuthUrl(type)
+      const { authorization_url } = await dataSourcesApi.getAuthUrl(
+        type,
+        '/onboarding?step=1',
+      )
       window.location.href = authorization_url
     } catch (e) {
       console.error('[onboarding] connect failed', e)

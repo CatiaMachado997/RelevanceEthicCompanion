@@ -342,4 +342,5 @@ async def get_system_health(
         "tool_health": health.get_tool_health(user_id),
         "esl_summary": health.get_esl_summary(user_id),
         "scheduler": health.get_scheduler_status(),
+        "scheduled_job_health": health.get_scheduled_job_health(),
     }
