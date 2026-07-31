@@ -18,7 +18,11 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends
 
 from utils.db import get_db_connection
-from utils.supabase_auth import UserPrincipal, get_current_read_user_id, get_current_user
+from utils.supabase_auth import (
+    UserPrincipal,
+    get_current_read_user_id,
+    get_current_user,
+)
 
 logger = logging.getLogger(__name__)
 

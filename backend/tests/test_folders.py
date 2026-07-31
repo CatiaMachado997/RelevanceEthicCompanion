@@ -247,11 +247,11 @@ def test_move_conversation_into_folder(client):
 def test_move_conversation_out_of_folder(client):
     # When folder_id is null, the folder-exists check is skipped entirely.
     mock_conn, _ = make_db_mock(
-            fetchone_result={"id": CONVERSATION_ID, "folder_id": None},
+        fetchone_result={"id": CONVERSATION_ID, "folder_id": None},
     )
     with patch("routes.folders.get_db_connection", return_value=mock_conn):
         r = client.patch(
-                f"/api/folders/conversations/{CONVERSATION_ID}",
+            f"/api/folders/conversations/{CONVERSATION_ID}",
             json={"folder_id": None},
         )
     assert r.status_code == 200

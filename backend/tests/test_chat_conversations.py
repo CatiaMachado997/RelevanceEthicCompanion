@@ -107,8 +107,6 @@ def test_create_conversation_uses_supplied_title():
     }
     conn = _db_mock(fetchone=row)
     with patch("routes.chat.get_db_connection", return_value=conn):
-        r = client.post(
-            "/api/chat/conversations", json={"title": "Plan the launch"}
-        )
+        r = client.post("/api/chat/conversations", json={"title": "Plan the launch"})
     assert r.status_code == 200
     assert r.json()["title"] == "Plan the launch"

@@ -6,7 +6,11 @@ from unittest.mock import MagicMock, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from utils.supabase_auth import UserPrincipal, get_current_read_user_id, get_current_user
+from utils.supabase_auth import (
+    UserPrincipal,
+    get_current_read_user_id,
+    get_current_user,
+)
 
 TEST_USER_ID = "00000000-0000-0000-0000-000000000000"
 
