@@ -130,3 +130,31 @@ def test_get_scheduler_status_empty_when_not_running(mock_get_inst):
 
     svc = SystemHealthService()
     assert svc.get_scheduler_status() == []
+
+
+@patch("services.system_health.get_db_connection")
+def test_get_scheduled_job_health_queries_aggregate_view(mock_get_db):
+    from datetime import datetime, timezone
+
+    from services.system_health import SystemHealthService
+
+    started = datetime(2026, 7, 31, 7, 0, tzinfo=timezone.utc)
+    cur = MagicMock()
+    cur.fetchall.return_value = [
+        {
+            "job_id": "weekly_review_brief",
+            "last_run_at": started,
+            "last_finished_at": started,
+            "last_status": "failed",
+            "last_error_message": "provider unavailable",
+            "last_duration_ms": 42,
+            "consecutive_failure_count": 2,
+        }
+    ]
+    mock_get_db.return_value = _mock_db(cur)
+
+    result = SystemHealthService().get_scheduled_job_health()
+
+    assert "v_scheduled_job_health" in cur.execute.call_args.args[0]
+    assert result[0]["last_run_at"] == started.isoformat()
+    assert result[0]["consecutive_failure_count"] == 2

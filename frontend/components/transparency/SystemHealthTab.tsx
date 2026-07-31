@@ -6,6 +6,7 @@ import { transparencyApi, type SystemHealth } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Badge } from '@/components/ui/badge'
 
 const ESL_STATUSES: Array<'APPROVED' | 'MODIFIED' | 'VETOED'> = [
   'APPROVED',
@@ -82,6 +83,8 @@ export default function SystemHealthTab() {
       </Card>
     )
   }
+
+  const runHealth = new Map(data.scheduled_job_health.map((run) => [run.job_id, run]))
 
   return (
     <div className="space-y-4">
@@ -183,7 +186,7 @@ export default function SystemHealthTab() {
         <CardHeader>
           <CardTitle className="text-[#0a0a0a]">Scheduler jobs</CardTitle>
           <CardDescription className="text-[#6b6b6b]">
-            Background APScheduler state
+            Background schedules and their most recent persisted runs
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -198,20 +201,34 @@ export default function SystemHealthTab() {
                   <tr className="border-b border-[rgba(0,0,0,0.06)]">
                     <th className="text-left py-3 px-4 text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">Job</th>
                     <th className="text-left py-3 px-4 text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">Next run</th>
-                    <th className="text-left py-3 px-4 text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">Trigger</th>
+                    <th className="text-left py-3 px-4 text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">Last run</th>
+                    <th className="text-left py-3 px-4 text-xs font-medium uppercase tracking-wide text-[#9e9e9e]">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.scheduler.map((job) => (
-                    <tr
-                      key={job.job_id}
-                      className="border-b border-[rgba(0,0,0,0.04)] last:border-0"
-                    >
-                      <td className="py-3 px-4 text-sm font-medium text-[#0a0a0a]">{job.job_id}</td>
-                      <td className="py-3 px-4 text-sm text-[#6b6b6b]">{formatLocalTime(job.next_run_time)}</td>
-                      <td className="py-3 px-4 text-sm text-[#6b6b6b]">{job.trigger}</td>
-                    </tr>
-                  ))}
+                  {data.scheduler.map((job) => {
+                    const run = runHealth.get(job.job_id)
+                    const unhealthy = (run?.consecutive_failure_count || 0) >= 2
+                    return (
+                      <tr
+                        key={job.job_id}
+                        className="border-b border-[rgba(0,0,0,0.04)] last:border-0"
+                      >
+                        <td className="py-3 px-4 text-sm font-medium text-[#0a0a0a]">{job.job_id}</td>
+                        <td className="py-3 px-4 text-sm text-[#6b6b6b]">{formatLocalTime(job.next_run_time)}</td>
+                        <td className="py-3 px-4 text-sm text-[#6b6b6b]">{formatLocalTime(run?.last_run_at || null)}</td>
+                        <td className="py-3 px-4 text-sm">
+                          {unhealthy ? (
+                            <Badge variant="destructive">
+                              {run?.consecutive_failure_count} consecutive failures
+                            </Badge>
+                          ) : (
+                            <span className="text-[#6b6b6b]">{run?.last_status || 'Not run yet'}</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

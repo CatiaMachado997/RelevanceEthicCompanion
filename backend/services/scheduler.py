@@ -5,6 +5,9 @@ Manages periodic tasks like data source syncing.
 """
 
 import logging
+import time
+from collections.abc import Awaitable, Callable
+from typing import Any
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
@@ -58,6 +61,69 @@ class BackgroundScheduler:
 
         logger.info("✅ BackgroundScheduler initialized")
 
+    def _add_observed_job(
+        self, func: Callable[[], Awaitable[Any]], *, id: str, **kwargs: Any
+    ) -> None:
+        """Register a job with persistent run-state instrumentation."""
+
+        async def observed() -> Any:
+            return await self._run_observed_job(id, func)
+
+        self.scheduler.add_job(func=observed, id=id, **kwargs)
+
+    async def _run_observed_job(
+        self, job_id: str, func: Callable[[], Awaitable[Any]]
+    ) -> Any:
+        """Persist one scheduled run and preserve the job's exception behavior."""
+        started = time.monotonic()
+        run_id = None
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO scheduled_job_runs (job_id, status)
+                        VALUES (%s, 'running')
+                        RETURNING id
+                        """,
+                        (job_id,),
+                    )
+                    row = cur.fetchone()
+                    run_id = row["id"] if isinstance(row, dict) else row[0]
+        except Exception as exc:
+            logger.error("Failed to start run record for %s: %s", job_id, exc)
+
+        try:
+            result = await func()
+        except Exception as exc:
+            self._finish_job_run(run_id, "failed", started, str(exc)[:2000])
+            raise
+
+        self._finish_job_run(run_id, "succeeded", started)
+        return result
+
+    @staticmethod
+    def _finish_job_run(
+        run_id: Any, status: str, started: float, error_message: str | None = None
+    ) -> None:
+        if run_id is None:
+            return
+        duration_ms = max(0, round((time.monotonic() - started) * 1000))
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE scheduled_job_runs
+                        SET status = %s, finished_at = NOW(),
+                            duration_ms = %s, error_message = %s
+                        WHERE id = %s
+                        """,
+                        (status, duration_ms, error_message, run_id),
+                    )
+        except Exception as exc:
+            logger.error("Failed to finish scheduled run %s: %s", run_id, exc)
+
     def start(self):
         """Start all background tasks"""
         if self._running:
@@ -65,7 +131,7 @@ class BackgroundScheduler:
             return
 
         # Task 1: Sync Google Calendar every 15 minutes
-        self.scheduler.add_job(
+        self._add_observed_job(
             func=self._sync_all_calendars,
             trigger=IntervalTrigger(minutes=15),
             id="sync_google_calendar",
@@ -75,7 +141,7 @@ class BackgroundScheduler:
         )
 
         # Gmail sync — every 30 minutes
-        self.scheduler.add_job(
+        self._add_observed_job(
             func=self._sync_all_gmail,
             trigger="interval",
             minutes=30,
@@ -83,7 +149,7 @@ class BackgroundScheduler:
             replace_existing=True,
         )
         # Slack sync — every 5 minutes
-        self.scheduler.add_job(
+        self._add_observed_job(
             func=self._sync_all_slack,
             trigger="interval",
             minutes=5,
@@ -92,7 +158,7 @@ class BackgroundScheduler:
         )
 
         # Task 2: Clean up expired tokens daily at 3 AM
-        self.scheduler.add_job(
+        self._add_observed_job(
             func=self._cleanup_expired_tokens,
             trigger=CronTrigger(hour=3, minute=0),
             id="cleanup_tokens",
@@ -101,7 +167,7 @@ class BackgroundScheduler:
         )
 
         # Task 3: Health check every hour
-        self.scheduler.add_job(
+        self._add_observed_job(
             func=self._health_check,
             trigger=IntervalTrigger(hours=1),
             id="health_check",
@@ -110,7 +176,7 @@ class BackgroundScheduler:
         )
 
         # Weekly digest — every Monday at 8 AM
-        self.scheduler.add_job(
+        self._add_observed_job(
             func=self._generate_weekly_digest,
             trigger=CronTrigger(day_of_week="mon", hour=8, minute=0),
             id="weekly_digest",
@@ -120,7 +186,7 @@ class BackgroundScheduler:
         )
 
         # Pre-meeting brief — every 15 minutes alongside calendar sync
-        self.scheduler.add_job(
+        self._add_observed_job(
             func=self._generate_pre_meeting_briefs,
             trigger=IntervalTrigger(minutes=15),
             id="pre_meeting_briefs",
@@ -130,7 +196,7 @@ class BackgroundScheduler:
         )
 
         # Daily focus plan — every day at 8 AM
-        self.scheduler.add_job(
+        self._add_observed_job(
             func=self._generate_daily_focus_plan,
             trigger=CronTrigger(hour=8, minute=0),
             id="daily_focus_plan",
@@ -140,7 +206,7 @@ class BackgroundScheduler:
         )
 
         # Deadline warnings — every day at 8 AM
-        self.scheduler.add_job(
+        self._add_observed_job(
             func=self._generate_deadline_warnings,
             trigger=CronTrigger(hour=8, minute=5),
             id="deadline_warnings",
@@ -150,7 +216,7 @@ class BackgroundScheduler:
         )
 
         # Project status snapshot — every Friday at 5 PM
-        self.scheduler.add_job(
+        self._add_observed_job(
             func=self._generate_project_status_snapshot,
             trigger=CronTrigger(day_of_week="fri", hour=17, minute=0),
             id="project_status_snapshot",
@@ -160,7 +226,7 @@ class BackgroundScheduler:
         )
 
         # Related-items clustering — every Sunday at 6 PM
-        self.scheduler.add_job(
+        self._add_observed_job(
             func=self._generate_related_items_clusters,
             trigger=CronTrigger(day_of_week="sun", hour=18, minute=0),
             id="related_items_clusters",
@@ -170,7 +236,7 @@ class BackgroundScheduler:
         )
 
         # Sprint E Task 5: weekly review brief — every Monday at 7 AM UTC
-        self.scheduler.add_job(
+        self._add_observed_job(
             func=self._generate_weekly_review_brief,
             trigger=CronTrigger(day_of_week="mon", hour=7, minute=0),
             id="weekly_review_brief",
@@ -181,7 +247,7 @@ class BackgroundScheduler:
         logger.info("Weekly review brief job scheduled (Mon 07:00 UTC)")
 
         # Sprint E Task 1: daily prune of tool_call_events + esl_audit_log
-        self.scheduler.add_job(
+        self._add_observed_job(
             func=self._prune_old_telemetry,
             trigger=CronTrigger(hour=4, minute=0),
             id="prune_old_telemetry",
@@ -262,6 +328,7 @@ class BackgroundScheduler:
             logger.error(
                 f"❌ Critical error in scheduled calendar sync: {e}", exc_info=True
             )
+            raise
 
     async def _get_users_with_calendar(self) -> list:
         """Get list of user IDs with Google Calendar connected"""
@@ -310,6 +377,7 @@ class BackgroundScheduler:
             )
         except Exception as e:
             logger.error(f"❌ Critical error in {source_type} sync: {e}", exc_info=True)
+            raise
 
     async def _get_users_with_source(self, source_type: str) -> list:
         from utils.db import get_db_connection
@@ -365,6 +433,7 @@ class BackgroundScheduler:
 
         except Exception as e:
             logger.error(f"❌ Error during token cleanup: {e}", exc_info=True)
+            raise
 
     async def _generate_weekly_digest(self):
         """
@@ -474,6 +543,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
 
         except Exception as e:
             logger.error(f"[Scheduler] Weekly digest job failed: {e}")
+            raise
 
     async def _generate_pre_meeting_briefs(self):
         """
@@ -643,6 +713,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
 
         except Exception as e:
             logger.error(f"[Scheduler] Pre-meeting brief job failed: {e}")
+            raise
 
     async def _generate_daily_focus_plan(self):
         """
@@ -795,6 +866,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
 
         except Exception as e:
             logger.error(f"[Scheduler] Daily focus job failed: {e}")
+            raise
 
     async def _generate_deadline_warnings(self):
         """
@@ -917,6 +989,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
 
         except Exception as e:
             logger.error(f"[Scheduler] Deadline warnings job failed: {e}")
+            raise
 
     async def _generate_project_status_snapshot(self):
         """
@@ -1076,6 +1149,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
 
         except Exception as e:
             logger.error(f"[Scheduler] Project status snapshot job failed: {e}")
+            raise
 
     async def _generate_related_items_clusters(self):
         """
@@ -1292,6 +1366,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
 
         except Exception as e:
             logger.error(f"[Scheduler] Related-items clustering job failed: {e}")
+            raise
 
     async def _summarize_weekly_review(self, review: dict) -> str:
         """LLM helper for the Monday weekly-review brief.
@@ -1425,6 +1500,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
 
         except Exception as e:
             logger.error(f"[Scheduler] Weekly review brief job failed: {e}")
+            raise
 
     async def _prune_old_telemetry(self):
         """
@@ -1492,6 +1568,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
             )
         except Exception as e:
             logger.error(f"[Scheduler] prune_old_telemetry failed: {e}")
+            raise
 
     async def _health_check(self):
         """
@@ -1516,6 +1593,7 @@ Be encouraging and specific. Suggest one concrete action for the week ahead."""
 
         except Exception as e:
             logger.error(f"❌ Health check failed: {e}")
+            raise
 
     def get_job_status(self) -> dict:
         """
