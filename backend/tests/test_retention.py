@@ -99,14 +99,13 @@ class TestPruneOldTelemetry:
             assert params == (30,)
 
     @pytest.mark.asyncio
-    async def test_prune_swallows_db_errors(self):
-        """Errors in the DB layer must be logged, not raised — the scheduler
-        thread should keep running."""
+    async def test_prune_reraises_db_errors_for_job_observability(self):
+        """DB failures reach the scheduler wrapper so the run is marked failed."""
         sched = make_scheduler()
 
         with patch(
             "services.scheduler.get_db_connection",
             side_effect=RuntimeError("db down"),
         ):
-            # Must not raise
-            await sched._prune_old_telemetry()
+            with pytest.raises(RuntimeError, match="db down"):
+                await sched._prune_old_telemetry()
