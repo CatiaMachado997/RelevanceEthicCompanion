@@ -43,6 +43,7 @@ def test_get_system_health_returns_aggregated_shape():
             "trigger": "interval[0:15:00]",
         }
     ]
+    health.get_scheduled_job_health.return_value = []
     app = make_app(health)
 
     with TestClient(app) as client:
@@ -50,7 +51,12 @@ def test_get_system_health_returns_aggregated_shape():
 
     assert resp.status_code == 200, resp.text
     data = resp.json()
-    assert set(data.keys()) == {"tool_health", "esl_summary", "scheduler"}
+    assert set(data.keys()) == {
+        "tool_health",
+        "esl_summary",
+        "scheduler",
+        "scheduled_job_health",
+    }
 
     assert data["tool_health"][0]["tool_name"] == "search_documents"
     assert data["tool_health"][0]["calls_24h"] == 12
@@ -65,3 +71,4 @@ def test_get_system_health_returns_aggregated_shape():
     health.get_tool_health.assert_called_once_with(TEST_USER_ID)
     health.get_esl_summary.assert_called_once_with(TEST_USER_ID)
     health.get_scheduler_status.assert_called_once_with()
+    health.get_scheduled_job_health.assert_called_once_with()

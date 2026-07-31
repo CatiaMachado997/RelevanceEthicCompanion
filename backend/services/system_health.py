@@ -33,6 +33,13 @@ FROM v_esl_decision_summary
 WHERE user_id = %s;
 """
 
+_SCHEDULED_JOB_HEALTH_SQL = """
+SELECT job_id, last_run_at, last_finished_at, last_status,
+       last_error_message, last_duration_ms, consecutive_failure_count
+FROM v_scheduled_job_health
+ORDER BY job_id ASC;
+"""
+
 
 class SystemHealthService:
     """Read-only aggregations for the Transparency system-health surface."""
@@ -101,3 +108,23 @@ class SystemHealthService:
         except Exception as e:
             logger.warning("get_scheduler_status failed: %s", e)
             return []
+
+    def get_scheduled_job_health(self) -> List[Dict[str, Any]]:
+        """Persisted last-run state and consecutive failures per job."""
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(_SCHEDULED_JOB_HEALTH_SQL)
+                rows = cur.fetchall()
+
+        out: List[Dict[str, Any]] = []
+        for row in rows:
+            item = dict(row)
+            for key in ("last_run_at", "last_finished_at"):
+                value = item.get(key)
+                if value is not None and hasattr(value, "isoformat"):
+                    item[key] = value.isoformat()
+            item["consecutive_failure_count"] = int(
+                item.get("consecutive_failure_count") or 0
+            )
+            out.append(item)
+        return out

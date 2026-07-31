@@ -702,10 +702,21 @@ export interface SchedulerJob {
   trigger: string
 }
 
+export interface ScheduledJobHealth {
+  job_id: string
+  last_run_at: string | null
+  last_finished_at: string | null
+  last_status: 'running' | 'succeeded' | 'failed'
+  last_error_message: string | null
+  last_duration_ms: number | null
+  consecutive_failure_count: number
+}
+
 export interface SystemHealth {
   tool_health: ToolHealth[]
   esl_summary: Record<string, EslSummaryRow>
   scheduler: SchedulerJob[]
+  scheduled_job_health: ScheduledJobHealth[]
 }
 
 export interface ToolCallEvent {
