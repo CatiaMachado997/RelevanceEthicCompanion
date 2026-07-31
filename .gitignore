@@ -23,11 +23,11 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Local env files
-.env
-.env.local
-backend/.env
-frontend/.env.local
+# Local env files (at any directory depth)
+.env*
+**/.env*
+!.env*.example
+!**/.env*.example
 
 # .env.*.example files should be committed so others know what vars are needed
 # Env backups (produced by scripts/sync-env.sh when re-linking worktrees).

@@ -886,11 +886,12 @@ export const dataSourcesApi = {
   /**
    * Get OAuth authorization URL
    */
-  getAuthUrl: async (sourceType: string) => {
+  getAuthUrl: async (sourceType: string, returnTo?: string) => {
+    const returnParam = returnTo ? `?return_to=${encodeURIComponent(returnTo)}` : ''
     return apiRequest<{
       authorization_url: string
       state: string
-    }>(`/api/data-sources/oauth/${sourceType}/authorize`)
+    }>(`/api/data-sources/oauth/${sourceType}/authorize${returnParam}`)
   },
 
   /**

@@ -8,7 +8,11 @@ from routes.chat import router as chat_router
 from routes.data_sources import router as data_sources_router, get_data_ingestion
 from routes.values import router as values_router
 from routes.goals import router as goals_router
-from utils.oauth_state import create_signed_state, validate_signed_state
+from utils.oauth_state import (
+    create_signed_state,
+    validate_signed_state,
+    validate_signed_state_claims,
+)
 
 
 class FakeIngestion:
@@ -137,3 +141,52 @@ def test_oauth_state_replay_rejected():
     validate_signed_state(state=state, expected_source_type="google_calendar")
     with pytest.raises(Exception):
         validate_signed_state(state=state, expected_source_type="google_calendar")
+
+
+def test_oauth_state_preserves_internal_return_to():
+    state = create_signed_state(
+        user_id="user-abc",
+        source_type="google_calendar",
+        return_to="/onboarding?step=1",
+    )
+    claims = validate_signed_state_claims(state, "google_calendar")
+    assert claims == {
+        "user_id": "user-abc",
+        "return_to": "/onboarding?step=1",
+    }
+
+
+@pytest.mark.parametrize(
+    "return_to",
+    [
+        "https://evil.example/steal",
+        "//evil.example/steal",
+        "javascript:alert(1)",
+        "/\\evil.example/steal",
+    ],
+)
+def test_oauth_state_rejects_external_return_to(return_to):
+    with pytest.raises(Exception):
+        create_signed_state(
+            user_id="user-abc",
+            source_type="google_calendar",
+            return_to=return_to,
+        )
+
+
+def test_oauth_callback_redirects_to_signed_return_path(client, monkeypatch):
+    monkeypatch.setattr(settings, "FRONTEND_URL", "http://localhost:3000")
+    state = create_signed_state(
+        user_id="user-abc",
+        source_type="google_calendar",
+        return_to="/onboarding?step=1",
+    )
+    response = client.get(
+        "/api/data-sources/oauth/google_calendar/callback",
+        params={"code": "provider-code", "state": state},
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+    assert response.headers["location"] == (
+        "http://localhost:3000/onboarding?step=1&connected=google_calendar"
+    )
