@@ -3,11 +3,13 @@ SHELL         := /bin/bash
 BACKEND_DIR   := backend
 FRONTEND_DIR  := frontend
 
-.PHONY: help setup dev-up dev-down dev-reset migrate-dry migrate migrate-prod test lint
+.PHONY: help setup check-local-env dev dev-up dev-down dev-reset migrate-dry migrate migrate-prod test lint
 
 help:
 	@echo ""
 	@echo "  make setup          First-time setup (copy envs, venv, npm install)"
+	@echo "  make check-local-env  Verify local services cannot target production"
+	@echo "  make dev            Run the complete app locally"
 	@echo "  make dev-up         Start Postgres + Weaviate"
 	@echo "  make dev-down       Stop and remove containers"
 	@echo "  make dev-reset      Wipe volumes, restart, seed DB"
@@ -27,6 +29,17 @@ setup:
 	@cd $(FRONTEND_DIR) && npm install --silent && echo "  npm install done"
 	@echo "==> Setup complete. Fill in real API keys in backend/.env"
 
+check-local-env:
+	@bash scripts/check-local-env.sh
+
+dev: check-local-env dev-up
+	@echo "==> Backend: http://localhost:8000/docs"
+	@echo "==> Frontend: http://localhost:3000"
+	@trap 'kill 0' INT TERM EXIT; \
+		(cd $(BACKEND_DIR) && source venv/bin/activate && python main.py) & \
+		(cd $(FRONTEND_DIR) && npm run dev) & \
+		wait
+
 dev-up:
 	@cd $(BACKEND_DIR) && docker compose up -d
 	@echo "==> Postgres + Weaviate running"
@@ -40,6 +53,7 @@ dev-reset:
 	@cd $(BACKEND_DIR) && docker compose up -d
 	@echo "==> Waiting for Postgres to be ready..."
 	@cd $(BACKEND_DIR) && until docker compose exec -T db pg_isready -U postgres -q; do sleep 1; done
+	@cd $(BACKEND_DIR) && source venv/bin/activate && python scripts/init_local_db.py
 	@cd $(BACKEND_DIR) && source venv/bin/activate && python -m scripts.run_migrations
 	@cd $(BACKEND_DIR) && source venv/bin/activate && python -m scripts.seed_dev
 	@echo "==> Dev DB reset and seeded"

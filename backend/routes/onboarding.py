@@ -18,7 +18,11 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends
 
 from utils.db import get_db_connection
-from utils.supabase_auth import get_current_user_id, get_current_read_user_id
+from utils.supabase_auth import (
+    UserPrincipal,
+    get_current_read_user_id,
+    get_current_user,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -69,9 +73,9 @@ async def get_state(
 
 @router.post("/complete")
 async def complete(
-    user_id: str = Depends(get_current_user_id),
+    user: UserPrincipal = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    """Set onboarded_at to NOW() if it isn't already set. Idempotent.
+    """Provision the local user and mark onboarding complete atomically.
 
     Returns the resolved timestamp so the frontend can update its cache
     without a follow-up GET.
@@ -80,12 +84,14 @@ async def complete(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                UPDATE users
-                   SET onboarded_at = COALESCE(onboarded_at, NOW())
-                 WHERE id = %s
+                INSERT INTO users (id, email, onboarded_at)
+                VALUES (%s, %s, NOW())
+                ON CONFLICT (id) DO UPDATE
+                   SET email = EXCLUDED.email,
+                       onboarded_at = COALESCE(users.onboarded_at, NOW())
              RETURNING onboarded_at
                 """,
-                (user_id,),
+                (user.user_id, user.email or f"{user.user_id}@local.invalid"),
             )
             row = cur.fetchone() or {}
         conn.commit()

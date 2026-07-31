@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from typing import Annotated, List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from datetime import datetime, UTC
+from uuid import UUID
 
 from services.context_manager import ContextManager
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
@@ -41,6 +42,15 @@ class ChatRequest(BaseModel):
 
     message: str = Field(..., min_length=1, description="User's message")
     context: dict = Field(default_factory=lambda: {}, description="Additional context")
+
+
+class ConversationCreate(BaseModel):
+    title: str = Field(default="New conversation", min_length=1, max_length=100)
+    folder_id: Optional[UUID] = None
+
+
+class ConversationUpdate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=100)
 
 
 class ChatResponse(BaseModel):
@@ -171,7 +181,7 @@ DEFAULT_MODEL = "llama-3.3-70b-versatile"
 async def stream_chat(
     message: str,
     model: str = DEFAULT_MODEL,
-    conversation_id: Optional[str] = None,
+    conversation_id: Optional[UUID] = None,
     active_sources: str = "",  # comma-separated: "calendar,web,goals,memory" — empty = all
     force_retrieval: bool = False,  # `/ask` slash command — force a search_documents call
     user_id: str = Depends(get_current_read_user_id),
@@ -186,12 +196,24 @@ async def stream_chat(
         else []
     )
 
+    if conversation_id is not None:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT 1 FROM conversations WHERE id = %s AND user_id = %s",
+                    (conversation_id, user_id),
+                )
+                if cur.fetchone() is None:
+                    raise HTTPException(
+                        status_code=404, detail="Conversation not found"
+                    )
+
     async def _lg_stream():
         async for event in stream_langgraph(
             user_id,
             message,
             model,
-            conversation_id,
+            str(conversation_id) if conversation_id else None,
             active_sources=sources,
             force_retrieval=force_retrieval,
         ):
@@ -338,7 +360,7 @@ async def list_conversations(
 
 @router.get("/conversations/{conversation_id}")
 async def get_conversation(
-    conversation_id: str,
+    conversation_id: UUID,
     user_id: str = Depends(get_current_read_user_id),
 ) -> dict:
     """Fetch a single conversation's metadata (no messages)."""
@@ -366,18 +388,29 @@ async def get_conversation(
 
 @router.post("/conversations")
 async def create_conversation(
+    body: ConversationCreate = ConversationCreate(),
     user_id: str = Depends(get_current_user_id),
 ) -> dict:
     """Create a new conversation thread."""
+    title = body.title.strip()
+    if not title:
+        raise HTTPException(status_code=422, detail="Title must not be blank")
     with get_db_connection() as conn:
         with conn.cursor() as cur:
+            if body.folder_id is not None:
+                cur.execute(
+                    "SELECT 1 FROM folders WHERE id = %s AND user_id = %s",
+                    (body.folder_id, user_id),
+                )
+                if cur.fetchone() is None:
+                    raise HTTPException(status_code=404, detail="Folder not found")
             cur.execute(
                 """
-                INSERT INTO conversations (user_id, title)
-                VALUES (%s, 'New conversation')
-                RETURNING id, title, created_at, updated_at
+                INSERT INTO conversations (user_id, title, folder_id)
+                VALUES (%s, %s, %s)
+                RETURNING id, title, folder_id, created_at, updated_at
             """,
-                (user_id,),
+                (user_id, title, body.folder_id),
             )
             row = cur.fetchone()
     if row is None:
@@ -387,6 +420,7 @@ async def create_conversation(
     return {
         "id": str(row["id"]),
         "title": row["title"],
+        "folder_id": str(row["folder_id"]) if row.get("folder_id") else None,
         "created_at": row["created_at"].isoformat(),
         "updated_at": row["updated_at"].isoformat(),
     }
@@ -394,12 +428,12 @@ async def create_conversation(
 
 @router.patch("/conversations/{conversation_id}")
 async def update_conversation(
-    conversation_id: str,
-    body: dict,
+    conversation_id: UUID,
+    body: ConversationUpdate,
     user_id: str = Depends(get_current_user_id),
 ) -> dict:
     """Rename an existing conversation."""
-    title = body.get("title", "").strip()[:100]
+    title = body.title.strip()
     if not title:
         raise HTTPException(status_code=400, detail="Title required")
     with get_db_connection() as conn:
@@ -420,7 +454,7 @@ async def update_conversation(
 
 @router.delete("/conversations/{conversation_id}")
 async def delete_conversation(
-    conversation_id: str,
+    conversation_id: UUID,
     user_id: str = Depends(get_current_user_id),
 ) -> dict:
     """Delete a conversation and all its turns (cascade)."""
@@ -430,6 +464,8 @@ async def delete_conversation(
                 "DELETE FROM conversations WHERE id = %s AND user_id = %s",
                 (conversation_id, user_id),
             )
+            if cur.rowcount == 0:
+                raise HTTPException(status_code=404, detail="Conversation not found")
     return {"success": True}
 
 
@@ -503,7 +539,7 @@ async def send_message(
 async def get_conversation_history(
     limit: int = 50,
     offset: int = 0,
-    conversation_id: Optional[str] = None,
+    conversation_id: Optional[UUID] = None,
     user_id: str = Depends(get_current_read_user_id),
     context_manager: ContextManager = Depends(get_context_manager),
 ):
@@ -515,7 +551,7 @@ async def get_conversation_history(
         turns = await context_manager.get_conversation_history(
             user_id=str(user_id),
             limit=limit,
-            conversation_id=conversation_id,
+            conversation_id=str(conversation_id) if conversation_id else None,
         )
     except Exception:
         turns = []

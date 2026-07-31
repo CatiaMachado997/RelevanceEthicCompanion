@@ -18,6 +18,9 @@ from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 
 TEST_USER_ID = "00000000-0000-0000-0000-000000000000"
 OTHER_USER_ID = "11111111-1111-1111-1111-111111111111"
+FOLDER_ID = "22222222-2222-2222-2222-222222222222"
+OTHER_FOLDER_ID = "33333333-3333-3333-3333-333333333333"
+CONVERSATION_ID = "44444444-4444-4444-4444-444444444444"
 
 
 def make_app():
@@ -49,7 +52,7 @@ def make_db_mock(fetchone_result=None, fetchall_result=None, rowcount=1):
 
 
 SAMPLE_FOLDER_ROW = {
-    "id": "folder-001",
+    "id": FOLDER_ID,
     "name": "Work",
     "color": "#4a7c59",
     "position": 0,
@@ -135,6 +138,11 @@ def test_create_folder_rejects_empty_name(client):
     assert r.status_code == 422  # Pydantic validation
 
 
+def test_create_folder_rejects_blank_name(client):
+    r = client.post("/api/folders", json={"name": "   "})
+    assert r.status_code == 422
+
+
 def test_create_folder_rejects_overlong_name(client):
     r = client.post("/api/folders", json={"name": "x" * 81})
     assert r.status_code == 422
@@ -149,7 +157,7 @@ def test_update_folder_rename(client):
     mock_conn, _ = make_db_mock(fetchone_result=updated)
 
     with patch("routes.folders.get_db_connection", return_value=mock_conn):
-        r = client.patch("/api/folders/folder-001", json={"name": "Personal"})
+        r = client.patch(f"/api/folders/{FOLDER_ID}", json={"name": "Personal"})
     assert r.status_code == 200
     assert r.json()["name"] == "Personal"
 
@@ -157,12 +165,12 @@ def test_update_folder_rename(client):
 def test_update_folder_not_found(client):
     mock_conn, _ = make_db_mock(fetchone_result=None)
     with patch("routes.folders.get_db_connection", return_value=mock_conn):
-        r = client.patch("/api/folders/nonexistent", json={"name": "X"})
+        r = client.patch(f"/api/folders/{FOLDER_ID}", json={"name": "X"})
     assert r.status_code == 404
 
 
 def test_update_folder_requires_a_field(client):
-    r = client.patch("/api/folders/folder-001", json={})
+    r = client.patch(f"/api/folders/{FOLDER_ID}", json={})
     assert r.status_code == 400
     assert "No fields to update" in r.json()["detail"]
 
@@ -186,7 +194,7 @@ def test_update_folder_duplicate_name_returns_409(client):
     mock_cursor.execute.side_effect = execute_side_effect
 
     with patch("routes.folders.get_db_connection", return_value=mock_conn):
-        r = client.patch("/api/folders/folder-001", json={"name": "Work"})
+        r = client.patch(f"/api/folders/{FOLDER_ID}", json={"name": "Work"})
 
     assert r.status_code == 409
     assert "already exists" in r.json()["detail"].lower()
@@ -198,7 +206,7 @@ def test_update_folder_duplicate_name_returns_409(client):
 def test_delete_folder_success(client):
     mock_conn, _ = make_db_mock(rowcount=1)
     with patch("routes.folders.get_db_connection", return_value=mock_conn):
-        r = client.delete("/api/folders/folder-001")
+        r = client.delete(f"/api/folders/{FOLDER_ID}")
     assert r.status_code == 200
     assert r.json() == {"success": True}
 
@@ -206,7 +214,7 @@ def test_delete_folder_success(client):
 def test_delete_folder_not_found(client):
     mock_conn, _ = make_db_mock(rowcount=0)
     with patch("routes.folders.get_db_connection", return_value=mock_conn):
-        r = client.delete("/api/folders/missing")
+        r = client.delete(f"/api/folders/{FOLDER_ID}")
     assert r.status_code == 404
 
 
@@ -219,7 +227,7 @@ def test_move_conversation_into_folder(client):
     mock_cursor = MagicMock()
     mock_cursor.fetchone.side_effect = [
         (1,),
-        {"id": "conv-001", "folder_id": "folder-001"},
+        {"id": CONVERSATION_ID, "folder_id": FOLDER_ID},
     ]
     mock_conn = MagicMock()
     mock_conn.__enter__ = MagicMock(return_value=mock_conn)
@@ -229,25 +237,25 @@ def test_move_conversation_into_folder(client):
 
     with patch("routes.folders.get_db_connection", return_value=mock_conn):
         r = client.patch(
-            "/api/folders/conversations/conv-001",
-            json={"folder_id": "folder-001"},
+            f"/api/folders/conversations/{CONVERSATION_ID}",
+            json={"folder_id": FOLDER_ID},
         )
     assert r.status_code == 200
-    assert r.json() == {"id": "conv-001", "folder_id": "folder-001"}
+    assert r.json() == {"id": CONVERSATION_ID, "folder_id": FOLDER_ID}
 
 
 def test_move_conversation_out_of_folder(client):
     # When folder_id is null, the folder-exists check is skipped entirely.
     mock_conn, _ = make_db_mock(
-        fetchone_result={"id": "conv-001", "folder_id": None},
+        fetchone_result={"id": CONVERSATION_ID, "folder_id": None},
     )
     with patch("routes.folders.get_db_connection", return_value=mock_conn):
         r = client.patch(
-            "/api/folders/conversations/conv-001",
+            f"/api/folders/conversations/{CONVERSATION_ID}",
             json={"folder_id": None},
         )
     assert r.status_code == 200
-    assert r.json() == {"id": "conv-001", "folder_id": None}
+    assert r.json() == {"id": CONVERSATION_ID, "folder_id": None}
 
 
 def test_move_conversation_to_unowned_folder(client):
@@ -255,8 +263,8 @@ def test_move_conversation_to_unowned_folder(client):
     mock_conn, _ = make_db_mock(fetchone_result=None)
     with patch("routes.folders.get_db_connection", return_value=mock_conn):
         r = client.patch(
-            "/api/folders/conversations/conv-001",
-            json={"folder_id": "someone-elses-folder"},
+            f"/api/folders/conversations/{CONVERSATION_ID}",
+            json={"folder_id": OTHER_FOLDER_ID},
         )
     assert r.status_code == 404
     assert "Target folder" in r.json()["detail"]
@@ -274,8 +282,8 @@ def test_move_nonexistent_conversation(client):
 
     with patch("routes.folders.get_db_connection", return_value=mock_conn):
         r = client.patch(
-            "/api/folders/conversations/missing",
-            json={"folder_id": "folder-001"},
+            f"/api/folders/conversations/{CONVERSATION_ID}",
+            json={"folder_id": FOLDER_ID},
         )
     assert r.status_code == 404
     assert "Conversation not found" in r.json()["detail"]

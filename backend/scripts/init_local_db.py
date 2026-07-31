@@ -25,21 +25,23 @@ def main():
     print("=" * 70)
     print()
 
-    schema_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "database",
-        "schema_local.sql",
+    database_dir = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "database"
     )
+    schema_paths = [
+        os.path.join(database_dir, "schema_local.sql"),
+        os.path.join(database_dir, "migration_v4.sql"),
+        os.path.join(database_dir, "migration_sprint4.sql"),
+    ]
 
-    if not os.path.exists(schema_path):
-        print(f"❌ Schema file not found at: {schema_path}")
+    missing = [path for path in schema_paths if not os.path.exists(path)]
+    if missing:
+        print(f"❌ Schema file not found at: {missing[0]}")
         return 1
 
-    # Read schema SQL
-    with open(schema_path, "r") as f:
-        schema_sql = f.read()
-
-    print(f"📄 Schema file: {schema_path}")
+    print("📄 Schema files:")
+    for schema_path in schema_paths:
+        print(f"   • {schema_path}")
     print(f"🔗 Database URL: {settings.DATABASE_URL}")
     print()
 
@@ -52,7 +54,9 @@ def main():
         print("🔄 Executing schema...")
 
         with conn.cursor() as cur:
-            cur.execute(schema_sql)
+            for schema_path in schema_paths:
+                with open(schema_path, "r") as f:
+                    cur.execute(f.read())
 
         conn.commit()
         print()

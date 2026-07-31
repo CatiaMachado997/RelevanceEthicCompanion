@@ -198,7 +198,11 @@ class Settings(BaseSettings):
     # Retention — daily prune job for tool_call_events / esl_audit_log
     RETENTION_DAYS: int = 90
 
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
+    # Keep developer settings separate from deployed environment variables.
+    # `.env.local` is ignored by Git and overrides the optional `.env` file.
+    model_config = SettingsConfigDict(
+        env_file=(".env", ".env.local"), case_sensitive=True
+    )
 
 
 # Load GCP secrets before instantiating Settings so pydantic picks them up from env.
