@@ -12,8 +12,9 @@ action that doesn't affect other people or push anything to the user.
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
+from uuid import UUID
 
 from psycopg.errors import UniqueViolation
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
@@ -31,15 +32,33 @@ class FolderCreate(BaseModel):
     color: Optional[str] = Field(None, max_length=16)
     position: Optional[int] = Field(None, ge=0)
 
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Folder name must not be blank")
+        return value
+
 
 class FolderUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=80)
     color: Optional[str] = Field(None, max_length=16)
     position: Optional[int] = Field(None, ge=0)
 
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            raise ValueError("Folder name must not be blank")
+        return value
+
 
 class MoveConversationRequest(BaseModel):
-    folder_id: Optional[str] = Field(
+    folder_id: Optional[UUID] = Field(
         None, description="Target folder UUID, or null to un-folder"
     )
 
@@ -122,7 +141,7 @@ async def create_folder(
 
 @router.patch("/{folder_id}")
 async def update_folder(
-    folder_id: str,
+    folder_id: UUID,
     body: FolderUpdate,
     user_id: str = Depends(get_current_user_id),
 ) -> dict:
@@ -170,7 +189,7 @@ async def update_folder(
 
 @router.delete("/{folder_id}")
 async def delete_folder(
-    folder_id: str,
+    folder_id: UUID,
     user_id: str = Depends(get_current_user_id),
 ) -> dict:
     """Delete a folder. Conversations inside fall back to unfoldered (folder_id = NULL)."""
@@ -190,7 +209,7 @@ async def delete_folder(
 
 @router.patch("/conversations/{conversation_id}")
 async def move_conversation(
-    conversation_id: str,
+    conversation_id: UUID,
     body: MoveConversationRequest,
     user_id: str = Depends(get_current_user_id),
 ) -> dict:

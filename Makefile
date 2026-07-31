@@ -53,6 +53,7 @@ dev-reset:
 	@cd $(BACKEND_DIR) && docker compose up -d
 	@echo "==> Waiting for Postgres to be ready..."
 	@cd $(BACKEND_DIR) && until docker compose exec -T db pg_isready -U postgres -q; do sleep 1; done
+	@cd $(BACKEND_DIR) && source venv/bin/activate && python scripts/init_local_db.py
 	@cd $(BACKEND_DIR) && source venv/bin/activate && python -m scripts.run_migrations
 	@cd $(BACKEND_DIR) && source venv/bin/activate && python -m scripts.seed_dev
 	@echo "==> Dev DB reset and seeded"

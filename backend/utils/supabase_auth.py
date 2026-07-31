@@ -12,9 +12,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 import json
 import logging
+import ssl
 from typing import Any, Dict, Optional
 from urllib import request as urlrequest
 
+import certifi
 from fastapi import HTTPException, Request, status
 from jose import jwt
 from jose.exceptions import ExpiredSignatureError
@@ -66,7 +68,8 @@ def _fetch_jwks() -> Dict[str, Any]:
 
     issuer = _build_issuer()
     jwks_url = f"{issuer}/.well-known/jwks.json"
-    with urlrequest.urlopen(jwks_url, timeout=5) as response:
+    tls_context = ssl.create_default_context(cafile=certifi.where())
+    with urlrequest.urlopen(jwks_url, timeout=5, context=tls_context) as response:
         payload = response.read().decode("utf-8")
         parsed = json.loads(payload)
 

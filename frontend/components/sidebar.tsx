@@ -259,16 +259,24 @@ export function SidebarNav({ onClose }: SidebarNavProps = {}) {
   }
 
   const handleDelete = async (id: string) => {
-    await api.chat.conversations.delete(id).catch(() => {})
-    qc.invalidateQueries({ queryKey: ["conversations"] })
-    if (pathname === `/dashboard/chat/${id}`) router.push('/dashboard/chat')
+    try {
+      await api.chat.conversations.delete(id)
+      await qc.invalidateQueries({ queryKey: ["conversations"] })
+      if (pathname === `/dashboard/chat/${id}`) router.push('/dashboard/chat')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not delete conversation')
+    }
   }
 
   const handleRename = async (id: string) => {
     if (!editTitle.trim()) return
-    await api.chat.conversations.rename(id, editTitle).catch(() => {})
-    qc.invalidateQueries({ queryKey: ["conversations"] })
-    setEditingId(null)
+    try {
+      await api.chat.conversations.rename(id, editTitle.trim())
+      await qc.invalidateQueries({ queryKey: ["conversations"] })
+      setEditingId(null)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not rename conversation')
+    }
   }
 
   // ─── Conversation context menu ─────────────────────────────────────

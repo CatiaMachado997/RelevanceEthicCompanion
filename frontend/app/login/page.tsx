@@ -48,6 +48,11 @@ export default function LoginPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
+    const callbackError = params.get('error')
+    if (callbackError) {
+      setError(friendlyAuthError(callbackError))
+      window.history.replaceState({}, '', '/login')
+    }
     if (params.get('signed_out') === '1') {
       setSignedOut(true)
       window.history.replaceState({}, '', '/login')

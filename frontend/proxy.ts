@@ -2,12 +2,15 @@ import { createServerClient } from '@supabase/ssr'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function proxy(request: NextRequest) {
-  // Only protect /dashboard routes
-  if (!request.nextUrl.pathname.startsWith('/dashboard')) {
+  const isProtectedRoute =
+    request.nextUrl.pathname.startsWith('/dashboard') ||
+    request.nextUrl.pathname.startsWith('/onboarding')
+
+  if (!isProtectedRoute) {
     return NextResponse.next()
   }
 
-  const response = NextResponse.next()
+  let response = NextResponse.next({ request })
 
   // Use @supabase/ssr to verify the session from cookies (set on this domain)
   // This works across any hosting setup — no dependency on the backend cookie
@@ -18,6 +21,8 @@ export async function proxy(request: NextRequest) {
       cookies: {
         getAll: () => request.cookies.getAll(),
         setAll: (cookiesToSet) => {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+          response = NextResponse.next({ request })
           cookiesToSet.forEach(({ name, value, options }) => {
             response.cookies.set(name, value, options)
           })
@@ -26,9 +31,11 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  const { data: { session } } = await supabase.auth.getSession()
+  // Validate with Supabase instead of trusting the cookie payload alone.
+  // getUser also refreshes an expired session through setAll when possible.
+  const { data: { user }, error } = await supabase.auth.getUser()
 
-  if (!session) {
+  if (error || !user) {
     // Save the attempted URL so we can redirect after login
     const loginUrl = new URL('/login', request.url)
     return NextResponse.redirect(loginUrl)
@@ -38,5 +45,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*'],
+  matcher: ['/dashboard/:path*', '/onboarding/:path*'],
 }
