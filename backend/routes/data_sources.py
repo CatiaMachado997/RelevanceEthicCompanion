@@ -9,18 +9,27 @@ from fastapi.responses import RedirectResponse
 from typing import Dict, Any, List, Optional
 from datetime import datetime, UTC
 import logging
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from services.data_ingestion import DataIngestionService, TokenExpiredError
 from services.context_manager import ContextManager
 from services.embedding_service import EmbeddingService
 from utils.weaviate_client import get_weaviate_client
-from utils.oauth_state import create_signed_state, validate_signed_state
+from utils.oauth_state import create_signed_state, validate_signed_state_claims
 from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 from config import settings
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/data-sources", tags=["data-sources"])
+
+
+def _frontend_redirect(path: str, **params: str) -> str:
+    parsed = urlsplit(path)
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    query.update(params)
+    relative = urlunsplit(("", "", parsed.path, urlencode(query), parsed.fragment))
+    return f"{settings.FRONTEND_URL.rstrip('/')}{relative}"
 
 
 # Dependency injection for data ingestion service
@@ -37,6 +46,7 @@ def get_data_ingestion() -> DataIngestionService:
 @router.get("/oauth/{source_type}/authorize")
 async def start_oauth(
     source_type: str,
+    return_to: Optional[str] = Query(None, description="Internal path after OAuth"),
     user_id: str = Depends(get_current_user_id),
     ingestion: DataIngestionService = Depends(get_data_ingestion),
 ) -> Dict[str, str]:
@@ -59,7 +69,9 @@ async def start_oauth(
         }
     """
     try:
-        oauth_state = create_signed_state(user_id=user_id, source_type=source_type)
+        oauth_state = create_signed_state(
+            user_id=user_id, source_type=source_type, return_to=return_to
+        )
         auth_url = await ingestion.initiate_oauth(
             user_id, source_type, oauth_state=oauth_state
         )
@@ -95,27 +107,39 @@ async def oauth_callback(
         /dashboard/integrations?connected={source_type}  on success
         /dashboard/integrations?error={source_type}_{reason}  on failure/denial
     """
-    # User denied or provider returned an error, or state is missing
-    if error or not code or not state:
-        reason = error or ("missing_state" if not state else "denied")
+    # Without signed state there is no trusted user or return destination.
+    if not state:
+        reason = error or "missing_state"
         logger.info(f"OAuth denied for {source_type}: {reason}")
         return RedirectResponse(
             url=f"{settings.FRONTEND_URL}/dashboard/integrations?error={source_type}_{reason}",
             status_code=302,
         )
-
+    return_path = "/dashboard/integrations"
     try:
-        user_id = validate_signed_state(state=state, expected_source_type=source_type)
+        claims = validate_signed_state_claims(
+            state=state, expected_source_type=source_type
+        )
+        user_id = claims["user_id"]
+        return_path = claims.get("return_to", return_path)
+
+        if error or not code:
+            reason = error or "denied"
+            return RedirectResponse(
+                url=_frontend_redirect(return_path, error=f"{source_type}_{reason}"),
+                status_code=302,
+            )
+
         result = await ingestion.handle_oauth_callback(
             source_type=source_type, authorization_code=code, user_id=user_id
         )
         if not result["success"]:
             return RedirectResponse(
-                url=f"{settings.FRONTEND_URL}/dashboard/integrations?error={source_type}_failed",
+                url=_frontend_redirect(return_path, error=f"{source_type}_failed"),
                 status_code=302,
             )
         return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/dashboard/integrations?connected={source_type}",
+            url=_frontend_redirect(return_path, connected=source_type),
             status_code=302,
         )
     except HTTPException:
@@ -126,7 +150,7 @@ async def oauth_callback(
     except Exception as e:
         logger.error(f"OAuth callback failed: {e}", exc_info=True)
         return RedirectResponse(
-            url=f"{settings.FRONTEND_URL}/dashboard/integrations?error=server_error",
+            url=_frontend_redirect(return_path, error="server_error"),
             status_code=302,
         )
 
