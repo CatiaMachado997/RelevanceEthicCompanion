@@ -1,231 +1,227 @@
-"""
-Embedding Service
-Generates semantic embeddings using Gemini API
+"""Semantic embeddings with Gemini or a local Ollama fallback."""
 
-THIS IS YOUR CODE - You wrap the external API with YOUR logic:
-- Batch processing for efficiency
-- Error handling and retries
-- Caching for common queries
-- Rate limiting
-"""
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import json
+import logging
+import urllib.error
+import urllib.request
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional
 
 from google import genai
 from google.genai import types
-from typing import List, Dict, Any, Optional
-import logging
-import hashlib
-from datetime import datetime, timedelta, timezone
+
+from config import settings
 
 logger = logging.getLogger(__name__)
 
 
 class EmbeddingService:
-    """
-    Service for generating embeddings using Gemini
+    """Generate and cache document/query embeddings using one vector space."""
 
-    The model (Gemini) just converts text to vectors.
-    YOUR CODE decides:
-    - When to generate embeddings
-    - How to batch requests
-    - How to handle errors
-    - What to cache
-    """
-
-    def __init__(self, api_key: str):
-        """
-        Initialize Gemini client
-
-        Args:
-            api_key: Gemini API key
-        """
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY is required")
+    def __init__(
+        self,
+        api_key: str = "",
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        base_url: Optional[str] = None,
+        dimensions: Optional[int] = None,
+    ):
+        configured_provider = (provider or settings.EMBEDDING_PROVIDER).lower()
+        if configured_provider == "auto":
+            configured_provider = "gemini" if api_key else "ollama"
+        if configured_provider not in {"gemini", "ollama"}:
+            raise ValueError("EMBEDDING_PROVIDER must be one of: auto, gemini, ollama")
+        if configured_provider == "gemini" and not api_key:
+            raise ValueError("GEMINI_API_KEY is required for Gemini embeddings")
 
         self.api_key = api_key
-        self._client = genai.Client(api_key=api_key)
-
-        # Simple in-memory cache (for MVP)
-        # In production, use Redis or similar
+        self.provider = configured_provider
+        self.model = model or (
+            "models/gemini-embedding-001"
+            if self.provider == "gemini"
+            else settings.OLLAMA_EMBEDDING_MODEL
+        )
+        self.base_url = (base_url or settings.OLLAMA_BASE_URL).rstrip("/")
+        self.dimensions = dimensions or settings.EMBEDDING_DIMENSIONS
+        self._client = (
+            genai.Client(api_key=api_key) if self.provider == "gemini" else None
+        )
         self._cache: Dict[str, tuple[List[float], datetime]] = {}
         self._cache_ttl = timedelta(hours=1)
 
-        logger.info("✅ EmbeddingService initialized with Gemini")
+        logger.info(
+            "EmbeddingService initialized with %s (%s)",
+            self.provider,
+            self.model,
+        )
 
     def _get_cache_key(self, text: str) -> str:
-        """Generate cache key from text"""
         return hashlib.sha256(text.encode()).hexdigest()
 
     def _get_from_cache(self, text: str) -> Optional[List[float]]:
-        """Get embedding from cache if valid"""
         cache_key = self._get_cache_key(text)
-        if cache_key in self._cache:
-            embedding, timestamp = self._cache[cache_key]
-            if datetime.now(timezone.utc) - timestamp < self._cache_ttl:
-                logger.debug(f"✅ Cache hit for text (len={len(text)})")
-                return embedding
-            else:
-                # Expired
-                del self._cache[cache_key]
+        cached = self._cache.get(cache_key)
+        if cached is None:
+            return None
+        embedding, timestamp = cached
+        if datetime.now(timezone.utc) - timestamp < self._cache_ttl:
+            return embedding
+        del self._cache[cache_key]
         return None
 
-    def _store_in_cache(self, text: str, embedding: List[float]):
-        """Store embedding in cache"""
-        cache_key = self._get_cache_key(text)
-        self._cache[cache_key] = (embedding, datetime.now(timezone.utc))
+    def _store_in_cache(self, text: str, embedding: List[float]) -> None:
+        self._cache[self._get_cache_key(text)] = (
+            embedding,
+            datetime.now(timezone.utc),
+        )
+
+    def _ollama_embed_sync(self, texts: List[str]) -> List[List[float]]:
+        """Call Ollama directly, avoiding a new production SDK dependency."""
+        request = urllib.request.Request(
+            f"{self.base_url}/api/embed",
+            data=json.dumps(
+                {"model": self.model, "input": texts, "truncate": True}
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=120) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except urllib.error.URLError as exc:
+            raise RuntimeError(
+                f"Ollama embeddings unavailable at {self.base_url}: {exc}"
+            ) from exc
+
+        embeddings = payload.get("embeddings")
+        if not isinstance(embeddings, list) or len(embeddings) != len(texts):
+            raise ValueError("Ollama returned an invalid embeddings response")
+        return [[float(value) for value in row] for row in embeddings]
+
+    async def _ollama_embed(self, texts: List[str]) -> List[List[float]]:
+        rows = await asyncio.to_thread(self._ollama_embed_sync, texts)
+        return [self._fit_dimensions(row) for row in rows]
+
+    def _fit_dimensions(self, embedding: List[float]) -> List[float]:
+        """Pad local vectors to the collection dimension without changing cosine."""
+        if len(embedding) > self.dimensions:
+            raise ValueError(
+                f"Embedding dimension {len(embedding)} exceeds configured "
+                f"dimension {self.dimensions}"
+            )
+        if len(embedding) == self.dimensions:
+            return embedding
+        return embedding + [0.0] * (self.dimensions - len(embedding))
 
     async def generate_embedding(self, text: str) -> List[float]:
-        """
-        Generate embedding for a single text
-
-        Args:
-            text: Text to embed
-
-        Returns:
-            Embedding vector (768 dimensions for Gemini embedding-001)
-        """
-        # Check cache first
+        """Generate one document embedding."""
         cached = self._get_from_cache(text)
-        if cached:
+        if cached is not None:
             return cached
 
         try:
-            # Call Gemini API (THE ONLY EXTERNAL INTELLIGENCE)
-            # Note: Free tier uses embedding-001
-            result = self._client.models.embed_content(
-                model="models/gemini-embedding-001",
-                contents=text,
-                config=types.EmbedContentConfig(task_type="retrieval_document"),
-            )
+            if self.provider == "ollama":
+                embedding = (await self._ollama_embed([text]))[0]
+            else:
+                if self._client is None:
+                    raise RuntimeError("Gemini client is not initialized")
+                result = self._client.models.embed_content(
+                    model=self.model,
+                    contents=text,
+                    config=types.EmbedContentConfig(task_type="retrieval_document"),
+                )
+                if not result.embeddings or result.embeddings[0].values is None:
+                    raise ValueError("Gemini returned no embedding")
+                embedding = list(result.embeddings[0].values)
 
-            if not result.embeddings or result.embeddings[0].values is None:
-                raise ValueError("Gemini returned no embedding")
-            embedding: List[float] = list(result.embeddings[0].values)
-
-            # Store in cache
             self._store_in_cache(text, embedding)
-
-            logger.debug(
-                f"✅ Generated embedding for text (len={len(text)}, dim={len(embedding)})"
-            )
             return embedding
-
-        except Exception as e:
-            logger.error(f"❌ Failed to generate embedding: {e}")
+        except Exception as exc:
+            logger.error("Failed to generate embedding: %s", exc)
             raise
 
     async def generate_embeddings_batch(
         self, texts: List[str], batch_size: int = 100
     ) -> List[List[float]]:
-        """
-        Generate embeddings for multiple texts efficiently
-
-        YOUR BATCHING LOGIC - Not from Gemini
-        Gemini can handle batches, but YOU decide how to split them
-
-        Args:
-            texts: List of texts to embed
-            batch_size: Maximum texts per API call
-
-        Returns:
-            List of embedding vectors
-        """
+        """Generate document embeddings in provider-sized batches."""
         embeddings: List[List[float]] = []
+        for offset in range(0, len(texts), batch_size):
+            batch = texts[offset : offset + batch_size]
+            ordered: List[Optional[List[float]]] = [None] * len(batch)
+            uncached_texts: List[str] = []
+            uncached_indices: List[int] = []
 
-        # Split into batches (YOUR LOGIC)
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i : i + batch_size]
+            for index, text in enumerate(batch):
+                cached = self._get_from_cache(text)
+                if cached is None:
+                    uncached_texts.append(text)
+                    uncached_indices.append(index)
+                else:
+                    ordered[index] = cached
 
-            try:
-                # Check cache first
-                batch_embeddings = []
-                uncached_texts = []
-                uncached_indices = []
-
-                for idx, text in enumerate(batch):
-                    cached = self._get_from_cache(text)
-                    if cached:
-                        batch_embeddings.append((idx, cached))
-                    else:
-                        uncached_texts.append(text)
-                        uncached_indices.append(idx)
-
-                # Generate embeddings for uncached texts
-                if uncached_texts:
+            if uncached_texts:
+                if self.provider == "ollama":
+                    generated = await self._ollama_embed(uncached_texts)
+                else:
+                    if self._client is None:
+                        raise RuntimeError("Gemini client is not initialized")
                     result = self._client.models.embed_content(
-                        model="models/gemini-embedding-001",
+                        model=self.model,
                         contents=uncached_texts,
                         config=types.EmbedContentConfig(task_type="retrieval_document"),
                     )
-
-                    # New SDK always returns a list of ContentEmbedding objects
                     if not result.embeddings:
                         raise ValueError("Gemini returned no embeddings")
-                    new_embeddings: List[List[float]] = [
-                        list(emb.values) if emb.values is not None else []
-                        for emb in result.embeddings
+                    generated = [
+                        list(item.values) if item.values is not None else []
+                        for item in result.embeddings
                     ]
 
-                    # Store in cache and add to results
-                    for text, embedding, idx in zip(
-                        uncached_texts, new_embeddings, uncached_indices
-                    ):
-                        self._store_in_cache(text, embedding)
-                        batch_embeddings.append((idx, embedding))
+                if len(generated) != len(uncached_texts):
+                    raise ValueError("Embedding provider returned the wrong row count")
+                for text, index, embedding in zip(
+                    uncached_texts, uncached_indices, generated
+                ):
+                    self._store_in_cache(text, embedding)
+                    ordered[index] = embedding
 
-                # Sort by original index and extract embeddings
-                batch_embeddings.sort(key=lambda x: x[0])
-                embeddings.extend([emb for _, emb in batch_embeddings])
-
-                logger.debug(
-                    f"✅ Generated batch {i // batch_size + 1}: {len(batch)} texts"
-                )
-
-            except Exception as e:
-                logger.error(f"❌ Failed to generate batch embeddings: {e}")
-                raise
+            if any(item is None for item in ordered):
+                raise ValueError("Embedding batch contains a missing row")
+            embeddings.extend(item for item in ordered if item is not None)
 
         return embeddings
 
     async def generate_query_embedding(self, query: str) -> List[float]:
-        """
-        Generate embedding for a search query
+        """Generate a query embedding in the same provider vector space."""
+        if self.provider == "ollama":
+            return await self.generate_embedding(query)
 
-        Uses different task_type for better retrieval performance
-
-        Args:
-            query: Search query
-
-        Returns:
-            Query embedding vector
-        """
         try:
-            # Use retrieval_query task type (optimized for queries)
+            if self._client is None:
+                raise RuntimeError("Gemini client is not initialized")
             result = self._client.models.embed_content(
-                model="models/gemini-embedding-001",
+                model=self.model,
                 contents=query,
                 config=types.EmbedContentConfig(task_type="retrieval_query"),
             )
-
             if not result.embeddings or result.embeddings[0].values is None:
                 raise ValueError("Gemini returned no embedding")
-            embedding_q: List[float] = list(result.embeddings[0].values)
-            logger.debug(
-                f"✅ Generated query embedding (len={len(query)}, dim={len(embedding_q)})"
-            )
-            return embedding_q
-
-        except Exception as e:
-            logger.error(f"❌ Failed to generate query embedding: {e}")
+            return list(result.embeddings[0].values)
+        except Exception as exc:
+            logger.error("Failed to generate query embedding: %s", exc)
             raise
 
-    def clear_cache(self):
-        """Clear embedding cache"""
+    def clear_cache(self) -> None:
         self._cache.clear()
-        logger.info("✅ Embedding cache cleared")
 
     def get_cache_stats(self) -> Dict[str, Any]:
-        """Get cache statistics"""
         return {
             "size": len(self._cache),
             "ttl_hours": self._cache_ttl.total_seconds() / 3600,
+            "provider": self.provider,
+            "model": self.model,
         }

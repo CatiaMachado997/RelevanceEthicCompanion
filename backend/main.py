@@ -110,6 +110,7 @@ async def lifespan(app: FastAPI):
                                     CHECK (status IN ('processing', 'ready', 'failed')),
                       chunk_count   INTEGER NOT NULL DEFAULT 0,
                       error_message TEXT,
+                      raw_content   BYTEA,
                       created_at    TIMESTAMPTZ DEFAULT NOW(),
                       updated_at    TIMESTAMPTZ DEFAULT NOW()
                     )

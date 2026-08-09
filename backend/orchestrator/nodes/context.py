@@ -17,8 +17,7 @@ def get_context_manager() -> ContextManager:
             from config import settings
             from services.embedding_service import EmbeddingService
 
-            if settings.GEMINI_API_KEY:
-                embedding = EmbeddingService(api_key=settings.GEMINI_API_KEY)
+            embedding = EmbeddingService(api_key=settings.GEMINI_API_KEY)
         except Exception:
             embedding = None
 
