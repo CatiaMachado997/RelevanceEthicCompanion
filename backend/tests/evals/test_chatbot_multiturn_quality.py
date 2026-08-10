@@ -22,11 +22,18 @@ class ChatbotCallback:
 
     def __call__(self, message: str) -> str:
         result = asyncio.run(
-            run_traced_chatbot_turn(
-                user_id=settings.DEV_USER_ID,
-                message=message,
-                model=os.getenv("CHATBOT_EVAL_APP_MODEL", "llama-3.3-70b-versatile"),
-                conversation_history=self.history,
+            asyncio.wait_for(
+                run_traced_chatbot_turn(
+                    user_id=settings.DEV_USER_ID,
+                    message=message,
+                    model=os.getenv(
+                        "CHATBOT_EVAL_APP_MODEL", "llama-3.3-70b-versatile"
+                    ),
+                    conversation_history=self.history,
+                ),
+                timeout=float(
+                    os.getenv("CHATBOT_EVAL_TURN_TIMEOUT_SECONDS", "90")
+                ),
             )
         )
         answer = result["answer"]

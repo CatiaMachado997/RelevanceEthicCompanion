@@ -18,7 +18,7 @@ from services.rag_retrieval import RagRetrievalService
 from tests.evals.metrics import RAG_RETRIEVER_METRICS
 
 EVAL_DIR = Path(__file__).resolve().parent
-SHARD_DIR = EVAL_DIR / "synthetic_data"
+SHARD_DIR = Path(os.getenv("RAG_EVAL_DATA_DIR", str(EVAL_DIR / "synthetic_data")))
 SHARD_PATTERN = re.compile(r"rag_(\d+)_(\d+)\.json")
 
 

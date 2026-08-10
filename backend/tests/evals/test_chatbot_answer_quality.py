@@ -30,8 +30,20 @@ def load_cases() -> list[dict]:
     for path in sorted(SHARD_DIR.glob("rag_[0-9]*_[0-9]*.json")):
         if SHARD_PATTERN.fullmatch(path.name):
             cases.extend(json.loads(path.read_text(encoding="utf-8")))
-    limit = int(os.getenv("CHATBOT_EVAL_LIMIT", "20"))
-    return cases[:limit]
+    requested_limit = int(os.getenv("CHATBOT_EVAL_LIMIT", "20"))
+    if requested_limit < 0:
+        raise ValueError("CHATBOT_EVAL_LIMIT must be non-negative")
+    limit = min(requested_limit, len(cases))
+    if limit == 0 or limit == len(cases):
+        return cases[:limit]
+    if os.getenv("CHATBOT_EVAL_SAMPLE_MODE", "even") == "head":
+        return cases[:limit]
+    # Spread expensive judge-backed cases across the full canonical dataset.
+    if limit == 1:
+        return [cases[len(cases) // 2]]
+    return [
+        cases[index * (len(cases) - 1) // (limit - 1)] for index in range(limit)
+    ]
 
 
 CASES = load_cases()
@@ -55,10 +67,15 @@ def chatbot_eval_hyperparameters():
 )
 def test_chatbot_answer_quality(case: dict):
     result = asyncio.run(
-        run_traced_chatbot_turn(
-            user_id=settings.DEV_USER_ID,
-            message=case["scenario"],
-            model=os.getenv("CHATBOT_EVAL_APP_MODEL", "llama-3.3-70b-versatile"),
+        asyncio.wait_for(
+            run_traced_chatbot_turn(
+                user_id=settings.DEV_USER_ID,
+                message=case["scenario"],
+                model=os.getenv(
+                    "CHATBOT_EVAL_APP_MODEL", "llama-3.3-70b-versatile"
+                ),
+            ),
+            timeout=float(os.getenv("CHATBOT_EVAL_TURN_TIMEOUT_SECONDS", "90")),
         )
     )
     assert result["answer"], "The application returned an empty answer"
