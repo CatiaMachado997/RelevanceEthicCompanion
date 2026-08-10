@@ -14,10 +14,13 @@ from fastapi.testclient import TestClient
 
 # Build a minimal test app containing only the autolab routes
 from routes.autolab import router, insights_router
+from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 
 _test_app = FastAPI()
 _test_app.include_router(router)
 _test_app.include_router(insights_router)
+_test_app.dependency_overrides[get_current_user_id] = lambda: "test-user"
+_test_app.dependency_overrides[get_current_read_user_id] = lambda: "test-user"
 
 client = TestClient(_test_app, raise_server_exceptions=False)
 

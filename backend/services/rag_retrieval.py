@@ -24,6 +24,7 @@ from typing import Any
 from config import settings
 from services.deepeval_tracing import observe_retriever, update_retriever_span
 from services.embedding_service import EmbeddingService
+from services.feature_flags import rag_rollout_config
 from services.rag_query import (
     build_retrieval_queries,
     reciprocal_rank_fusion,
@@ -224,6 +225,16 @@ class RagRetrievalService:
             "final": [],
             "final_document_ids": [],
         }
+        rollout = rag_rollout_config(str(user_id))
+        trace["rollout"] = rollout
+        if rollout["variant"] == "treatment":
+            alpha = rollout["alpha"]
+            requested_k = rollout["top_k"] if k == DEFAULT_K else k
+            expand_queries = rollout["query_expansion"]
+        else:
+            alpha = DEFAULT_ALPHA
+            requested_k = k
+            expand_queries = QUERY_EXPANSION_ENABLED
 
         weaviate = get_weaviate_client()
         if weaviate is None:
@@ -233,7 +244,7 @@ class RagRetrievalService:
         try:
             embedder = _get_embedding_service()
             retrieval_queries = build_retrieval_queries(
-                query, expand=QUERY_EXPANSION_ENABLED
+                query, expand=expand_queries
             )
             trace["retrieval_queries"] = retrieval_queries
             query_vectors = [
@@ -245,8 +256,8 @@ class RagRetrievalService:
             return [], trace
 
         # Sprint G Task 3: fetch a wider candidate pool so the reranker has
-        # meaningful choices. The reranker (or fallback) trims back to `k`.
-        candidate_limit = max(RERANK_CANDIDATE_FLOOR, k)
+        # meaningful choices. The reranker (or fallback) trims to the variant's K.
+        candidate_limit = max(RERANK_CANDIDATE_FLOOR, requested_k)
         try:
             ranked_lists = [
                 weaviate.hybrid_search(
@@ -255,7 +266,7 @@ class RagRetrievalService:
                     query_vector=query_vector,
                     user_id=str(user_id),
                     limit=candidate_limit,
-                    alpha=DEFAULT_ALPHA,
+                    alpha=alpha,
                     embedding_model=embedder.model,
                 )
                 for retrieval_query, query_vector in zip(
@@ -290,7 +301,7 @@ class RagRetrievalService:
         ]
 
         # Cross-encoder rerank pass — graceful no-op if JINA_API_KEY is empty
-        # or the call fails. Returns at most `k` rows.
+        # or the call fails. Returns at most the requested rows.
         reranked = await rerank(
             retrieval_queries[0],
             candidates,
@@ -300,7 +311,7 @@ class RagRetrievalService:
             provider=settings.RAG_RERANK_PROVIDER,
             metadata_weight=METADATA_RERANK_WEIGHT,
         )
-        results = select_diverse_results(reranked, top_k=k)
+        results = select_diverse_results(reranked, top_k=requested_k)
         results = expand_with_candidate_neighbors(results, candidates)
 
         # `rerank()` annotates kept candidates with `rerank_score` on success
@@ -329,8 +340,9 @@ class RagRetrievalService:
                 "candidate_count": len(candidates),
                 "returned_count": len(results),
                 "rerank_applied": rerank_applied,
-                "alpha": DEFAULT_ALPHA,
-                "k": k,
+                "alpha": alpha,
+                "k": requested_k,
+                "rollout_variant": rollout["variant"],
                 "retrieval_queries": retrieval_queries,
                 "embedding_model": embedder.model,
                 "rerank_provider": settings.RAG_RERANK_PROVIDER,

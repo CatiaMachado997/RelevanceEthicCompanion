@@ -213,7 +213,7 @@ class ContextManager:
         content: str,
         conversation_id: Optional[str] = None,
         metadata: Optional[dict] = None,
-    ) -> None:
+    ) -> Optional[str]:
         """Store a single conversation turn in PostgreSQL for reliable ordered retrieval.
 
         `metadata` carries per-turn structured data (e.g. document_sources for
@@ -232,6 +232,7 @@ class ContextManager:
                         """
                         INSERT INTO conversation_turns (user_id, role, content, conversation_id, metadata)
                         VALUES (%s, %s, %s, %s, %s::jsonb)
+                        RETURNING id
                     """,
                         (user_id, role, content, conversation_id, meta_json),
                     )
@@ -240,10 +241,15 @@ class ContextManager:
                         """
                         INSERT INTO conversation_turns (user_id, role, content, metadata)
                         VALUES (%s, %s, %s, %s::jsonb)
+                        RETURNING id
                     """,
                         (user_id, role, content, meta_json),
                     )
+                row = cur.fetchone()
         logger.debug(f"Stored conversation turn ({role}) for user {user_id}")
+        if not row:
+            return None
+        return str(row["id"] if isinstance(row, dict) else row[0])
 
     async def get_conversation_history(
         self, user_id: str, limit: int = 20, conversation_id: Optional[str] = None
@@ -258,7 +264,7 @@ class ContextManager:
                 if conversation_id:
                     cur.execute(
                         """
-                        SELECT role, content, created_at, metadata FROM conversation_turns
+                        SELECT id, role, content, created_at, metadata FROM conversation_turns
                         WHERE user_id = %s AND conversation_id = %s
                         ORDER BY created_at ASC LIMIT %s
                     """,
@@ -267,9 +273,9 @@ class ContextManager:
                 else:
                     cur.execute(
                         """
-                        SELECT role, content, metadata, created_at
+                        SELECT id, role, content, metadata, created_at
                         FROM (
-                            SELECT role, content, metadata, created_at
+                            SELECT id, role, content, metadata, created_at
                             FROM conversation_turns
                             WHERE user_id = %s
                             ORDER BY created_at DESC
@@ -282,6 +288,7 @@ class ContextManager:
                 rows = cur.fetchall()
         return [
             {
+                "id": str(row["id"]) if row.get("id") is not None else None,
                 "role": row["role"],
                 "content": row["content"],
                 "created_at": row.get("created_at"),

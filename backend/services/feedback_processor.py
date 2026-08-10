@@ -44,6 +44,48 @@ class FeedbackProcessor:
         """Initialize feedback processor"""
         logger.info("✅ FeedbackProcessor initialized")
 
+    @staticmethod
+    def _resolve_chat_context(user_id: str, item_id: str) -> Dict[str, Any]:
+        """Resolve the rated turn server-side so feedback becomes trusted eval data."""
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, conversation_id, content, metadata, created_at
+                    FROM conversation_turns
+                    WHERE id = %s AND user_id = %s AND role = 'assistant'
+                    """,
+                    (item_id, user_id),
+                )
+                assistant = cur.fetchone()
+                if not assistant:
+                    return {}
+                cur.execute(
+                    """
+                    SELECT id, content
+                    FROM conversation_turns
+                    WHERE user_id = %s
+                      AND conversation_id IS NOT DISTINCT FROM %s
+                      AND role = 'user'
+                      AND created_at <= %s
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                    """,
+                    (user_id, assistant.get("conversation_id"), assistant["created_at"]),
+                )
+                prompt = cur.fetchone()
+        return {
+            "conversation_id": (
+                str(assistant["conversation_id"])
+                if assistant.get("conversation_id") is not None
+                else None
+            ),
+            "prompt_turn_id": str(prompt["id"]) if prompt else None,
+            "prompt": prompt["content"] if prompt else None,
+            "answer": assistant["content"],
+            "answer_metadata": assistant.get("metadata") or {},
+        }
+
     async def submit_feedback(
         self,
         user_id: str,
@@ -52,6 +94,7 @@ class FeedbackProcessor:
         feedback_type: str,
         context_snapshot: Optional[Dict[str, Any]] = None,
         additional_notes: Optional[str] = None,
+        corrected_answer: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Submit user feedback on an item
@@ -63,6 +106,7 @@ class FeedbackProcessor:
             feedback_type: Type of feedback (thumbs_up, thumbs_down, etc.)
             context_snapshot: Optional context at time of feedback
             additional_notes: Optional user notes
+            corrected_answer: Optional user-provided replacement answer
 
         Returns:
             Dict with success status and feedback ID
@@ -86,6 +130,11 @@ class FeedbackProcessor:
             if item_type not in [it.value for it in ItemType]:
                 raise ValueError(f"Invalid item_type: {item_type}")
 
+            if item_type == ItemType.CHAT_RESPONSE.value and context_snapshot is None:
+                context_snapshot = self._resolve_chat_context(user_id, item_id)
+                if not context_snapshot:
+                    raise ValueError("Chat response not found for this user")
+
             feedback_id = str(uuid4())
 
             with get_db_connection() as conn:
@@ -100,9 +149,10 @@ class FeedbackProcessor:
                             feedback_type,
                             context_snapshot,
                             additional_notes,
+                            corrected_answer,
                             timestamp
                         )
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                         RETURNING id
                     """,
                         (
@@ -113,6 +163,7 @@ class FeedbackProcessor:
                             feedback_type,
                             Json(context_snapshot or {}),
                             additional_notes,
+                            corrected_answer,
                             datetime.now(timezone.utc),
                         ),
                     )

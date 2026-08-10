@@ -332,6 +332,10 @@ export default function ChatPage({ conversationId: conversationIdProp }: { conve
   const [extractedSuggestions, setExtractedSuggestions] = useState<Array<ExtractedTaskType & { _key: string }>>([])
   const [extractLoading, setExtractLoading] = useState(false)
   const [savedNoteFor, setSavedNoteFor] = useState<string | null>(null)
+  const [feedbackTarget, setFeedbackTarget] = useState<string | null>(null)
+  const [feedbackReason, setFeedbackReason] = useState<'thumbs_down' | 'not_relevant' | 'inaccurate' | 'value_conflict'>('thumbs_down')
+  const [feedbackNotes, setFeedbackNotes] = useState('')
+  const [correctedAnswer, setCorrectedAnswer] = useState('')
 
   // Sprint J — reasoning panel + paused-action state
   const [reasoningByMsg, setReasoningByMsg] = useState<Record<string, { thought: string; actions: ActionEntry[]; isStreaming: boolean }>>({})
@@ -362,17 +366,42 @@ export default function ChatPage({ conversationId: conversationIdProp }: { conve
 
   /* feedback */
   const handleFeedback = useCallback(async (messageId: string, type: 'up' | 'down') => {
+    if (type === 'down') {
+      setFeedbackTarget(messageId)
+      return
+    }
     setMessages(prev => prev.map(m => m.id === messageId ? { ...m, feedback: type } : m))
     try {
       await api.feedback.submit({
         item_id:       messageId,
         item_type:     'chat_response',
-        feedback_type: type === 'up' ? 'thumbs_up' : 'thumbs_down',
+        feedback_type: 'thumbs_up',
       })
     } catch {
       setMessages(prev => prev.map(m => m.id === messageId ? { ...m, feedback: null } : m))
     }
   }, [])
+
+  const submitNegativeFeedback = useCallback(async () => {
+    if (!feedbackTarget) return
+    const messageId = feedbackTarget
+    setMessages(prev => prev.map(m => m.id === messageId ? { ...m, feedback: 'down' } : m))
+    setFeedbackTarget(null)
+    try {
+      await api.feedback.submit({
+        item_id: messageId,
+        item_type: 'chat_response',
+        feedback_type: feedbackReason,
+        additional_notes: feedbackNotes.trim() || undefined,
+        corrected_answer: correctedAnswer.trim() || undefined,
+      })
+      setFeedbackNotes('')
+      setCorrectedAnswer('')
+      setFeedbackReason('thumbs_down')
+    } catch {
+      setMessages(prev => prev.map(m => m.id === messageId ? { ...m, feedback: null } : m))
+    }
+  }, [correctedAnswer, feedbackNotes, feedbackReason, feedbackTarget])
 
   /* history */
   useEffect(() => {
@@ -381,7 +410,7 @@ export default function ChatPage({ conversationId: conversationIdProp }: { conve
     api.chat.history(50, 0, conversationId)
       .then(h => {
         setMessages((h.messages ?? []).map((m, i) => ({
-          id:        `h-${i}`,
+          id:        m.id ?? `h-${i}`,
           role:      m.role as 'user' | 'assistant',
           content:   m.content,
           timestamp: m.timestamp ?? '',
@@ -513,9 +542,10 @@ export default function ChatPage({ conversationId: conversationIdProp }: { conve
     setIsThinking(true)
     setUserScrolled(false)
 
+    const userId = `u-${Date.now()}`
     setMessages(prev => [
       ...prev,
-      { id: `u-${Date.now()}`, role: 'user', content: userMessage, timestamp: new Date().toISOString() },
+      { id: userId, role: 'user', content: userMessage, timestamp: new Date().toISOString() },
     ])
 
     const assistantId = `a-${Date.now()}`
@@ -587,14 +617,21 @@ export default function ChatPage({ conversationId: conversationIdProp }: { conve
               : m
           ))
         },
-        onDone: ({ citations, document_sources }) => {
-          if ((citations && citations.length > 0) || (document_sources && document_sources.length > 0)) {
-            setMessages(prev => prev.map(m =>
-              m.id === assistantId
-                ? { ...m, citations: citations ?? m.citations, documentSources: document_sources ?? m.documentSources }
-                : m
-            ))
-          }
+        onDone: ({ citations, document_sources, user_turn_id, assistant_turn_id }) => {
+          setMessages(prev => prev.map(m => {
+            if (m.id === assistantId) {
+              return {
+                ...m,
+                id: assistant_turn_id ?? m.id,
+                citations: citations ?? m.citations,
+                documentSources: document_sources ?? m.documentSources,
+              }
+            }
+            if (user_turn_id && m.id === userId) {
+              return { ...m, id: user_turn_id }
+            }
+            return m
+          }))
         },
         onThoughtToken: (token: string) => {
           setReasoningByMsg(prev => {
@@ -762,6 +799,31 @@ export default function ChatPage({ conversationId: conversationIdProp }: { conve
       className="flex flex-col"
       style={{ height: 'calc(100vh - 56px - 40px)' }}
     >
+      {feedbackTarget && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 px-4" role="dialog" aria-modal="true" aria-label="Response feedback">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+            <h2 className="text-sm font-semibold text-neutral-900">What should be improved?</h2>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {([
+                ['thumbs_down', 'Not helpful'],
+                ['not_relevant', 'Not relevant'],
+                ['inaccurate', 'Inaccurate'],
+                ['value_conflict', 'Value conflict'],
+              ] as const).map(([value, label]) => (
+                <button key={value} onClick={() => setFeedbackReason(value)} className="rounded-lg border px-3 py-2 text-left text-xs" style={{ borderColor: feedbackReason === value ? '#B04A3A' : '#ddd', color: '#333' }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <textarea value={feedbackNotes} onChange={e => setFeedbackNotes(e.target.value)} maxLength={2000} placeholder="What went wrong? (optional)" className="mt-3 min-h-20 w-full rounded-lg border border-neutral-200 p-3 text-sm outline-none" />
+            <textarea value={correctedAnswer} onChange={e => setCorrectedAnswer(e.target.value)} maxLength={8000} placeholder="What would a better answer say? (optional)" className="mt-2 min-h-24 w-full rounded-lg border border-neutral-200 p-3 text-sm outline-none" />
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setFeedbackTarget(null)} className="rounded-lg px-3 py-2 text-xs text-neutral-600">Cancel</button>
+              <button onClick={submitNegativeFeedback} className="rounded-lg bg-neutral-900 px-3 py-2 text-xs font-medium text-white">Submit feedback</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* ── Chat header: title + new chat ── */}
       <div className="shrink-0 px-4 pt-2">
         <div className="mx-auto max-w-[700px] flex items-center gap-2">
@@ -1073,7 +1135,21 @@ export default function ChatPage({ conversationId: conversationIdProp }: { conve
                                 : m
                             ))
                           },
-                          onDone: () => {},
+                          onDone: (data) => {
+                            if (!data?.assistant_turn_id && !data?.user_turn_id) return
+                            setMessages(prev => {
+                              const latestUserId = [...prev].reverse().find(turn => turn.role === 'user')?.id
+                              return prev.map(turn => {
+                                if (data.assistant_turn_id && turn.id === msg.id) {
+                                  return { ...turn, id: data.assistant_turn_id }
+                                }
+                                if (data.user_turn_id && turn.id === latestUserId) {
+                                  return { ...turn, id: data.user_turn_id }
+                                }
+                                return turn
+                              })
+                            })
+                          },
                         })
                       }}
                     />

@@ -36,7 +36,14 @@ class FeedbackSubmission(BaseModel):
     item_id: str = Field(..., description="ID of the item being rated")
     item_type: ItemType = Field(..., description="Type of item")
     feedback_type: FeedbackType = Field(..., description="Type of feedback")
-    additional_notes: Optional[str] = Field(None, description="Optional user notes")
+    additional_notes: Optional[str] = Field(
+        None, max_length=2000, description="Optional explanation of the rating"
+    )
+    corrected_answer: Optional[str] = Field(
+        None,
+        max_length=8000,
+        description="Optional answer the user expected instead",
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -45,6 +52,7 @@ class FeedbackSubmission(BaseModel):
                 "item_type": "chat_response",
                 "feedback_type": "thumbs_up",
                 "additional_notes": "Very helpful response!",
+                "corrected_answer": None,
             }
         }
     )
@@ -60,6 +68,7 @@ class FeedbackRecord(BaseModel):
     feedback_type: FeedbackType
     context_snapshot: Dict[str, Any] = Field(default_factory=dict)
     additional_notes: Optional[str] = None
+    corrected_answer: Optional[str] = None
     timestamp: datetime
 
 

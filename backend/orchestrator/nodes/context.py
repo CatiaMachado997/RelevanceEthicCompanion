@@ -5,6 +5,23 @@ from services.context_manager import ContextManager
 from utils.weaviate_client import get_weaviate_client
 
 
+def bound_conversation_history(history: list[dict], max_chars: int = 12000) -> list[dict]:
+    """Keep the newest complete turns within a predictable prompt budget."""
+    selected: list[dict] = []
+    used = 0
+    for turn in reversed(history):
+        content = str(turn.get("content") or "")
+        cost = len(content) + 32
+        if selected and used + cost > max_chars:
+            break
+        if cost > max_chars:
+            turn = {**turn, "content": content[-max_chars:]}
+            cost = max_chars
+        selected.append(turn)
+        used += cost
+    return list(reversed(selected))
+
+
 def get_context_manager() -> ContextManager:
     try:
         weaviate = get_weaviate_client()
@@ -28,9 +45,25 @@ async def context_builder_node(state: AgentState) -> dict:
     """Populate user_context, conversation_history, and source_context from M1 + M2."""
     cm = get_context_manager()
     ctx = await cm.get_user_context(state["user_id"])
-    history = await cm.get_conversation_history(
-        state["user_id"], limit=20, conversation_id=state.get("conversation_id")
+    history_override = state.get("conversation_history_override")
+    history = (
+        history_override
+        if history_override is not None
+        else await cm.get_conversation_history(
+            state["user_id"], limit=20, conversation_id=state.get("conversation_id")
+        )
     )
+    history = bound_conversation_history(history or [])
+
+    approved_memories: list = []
+    try:
+        from services.controlled_memory import ControlledMemoryService
+
+        approved_memories = ControlledMemoryService().list(
+            state["user_id"], active_only=True, limit=20
+        )
+    except Exception:
+        pass
 
     # Compute 360° snapshot (tasks, projects, events) — non-blocking on failure
     snapshot: dict = {}
@@ -62,8 +95,9 @@ async def context_builder_node(state: AgentState) -> dict:
             "additional_context": getattr(ctx, "additional_context", {}),
             "snapshot": snapshot,
             "source_context": source_context,
+            "approved_memories": approved_memories,
         },
-        "conversation_history": history or [],
+        "conversation_history": history,
         "source_context": source_context,
         # Reset any stale confirmation from the previous turn before routing begins.
         "pending_tool_confirmation": None,

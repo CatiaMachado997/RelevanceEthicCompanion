@@ -316,6 +316,7 @@ from routes import (
     today,
     onboarding,
     safety_preferences,
+    memories,
 )
 from routes import settings as settings_router
 from routes.insight import router as insight_router
@@ -326,6 +327,7 @@ from routes.status import router as status_router
 app.include_router(health_router)
 app.include_router(auth.router)
 app.include_router(values.router)
+app.include_router(memories.router)
 app.include_router(chat.router)
 app.include_router(goals.router)
 app.include_router(transparency.router)

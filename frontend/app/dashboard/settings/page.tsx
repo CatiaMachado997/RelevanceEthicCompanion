@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Bell, Lock, Calendar, CheckCircle2, XCircle, RefreshCw, SlidersHorizontal, Globe, LogOut } from 'lucide-react'
+import { Bell, Lock, Calendar, CheckCircle2, XCircle, RefreshCw, SlidersHorizontal, Globe, LogOut, Brain, Trash2 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
-import { dataSourcesApi, DataSource, settingsApi, UserSettings } from '@/lib/api'
+import { dataSourcesApi, DataSource, settingsApi, UserSettings, memoriesApi, ControlledMemory } from '@/lib/api'
 import { PageHeader } from '@/components/ui/page-header'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
@@ -69,6 +69,8 @@ const LANGUAGES = [
 export default function SettingsPage() {
   const router = useRouter()
   const [dataSources, setDataSources] = useState<DataSource[]>([])
+  const [memories, setMemories] = useState<ControlledMemory[]>([])
+  const [newMemory, setNewMemory] = useState('')
   const [syncing, setSyncing] = useState<string | null>(null)
 
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS)
@@ -98,7 +100,26 @@ export default function SettingsPage() {
   useEffect(() => {
     dataSourcesApi.list().then(({ sources }) => setDataSources(sources)).catch(console.error)
     settingsApi.get().then(setSettings).catch(console.error)
+    memoriesApi.list().then(({ memories: rows }) => setMemories(rows)).catch(console.error)
   }, [])
+
+  const addMemory = async () => {
+    const content = newMemory.trim()
+    if (!content) return
+    const created = await memoriesApi.create(content)
+    setMemories(prev => [created, ...prev])
+    setNewMemory('')
+  }
+
+  const toggleMemory = async (memory: ControlledMemory) => {
+    const updated = await memoriesApi.update(memory.id, { active: !memory.active })
+    setMemories(prev => prev.map(item => item.id === updated.id ? updated : item))
+  }
+
+  const forgetMemory = async (id: string) => {
+    await memoriesApi.forget(id)
+    setMemories(prev => prev.filter(item => item.id !== id))
+  }
 
   const handleToggle = (key: keyof UserSettings) => (checked: boolean) => {
     setSettings(prev => ({ ...prev, [key]: checked }))
@@ -211,6 +232,29 @@ export default function SettingsPage() {
             checked={!!appearance.reduceMotion}
             onCheckedChange={v => saveAppearance({ reduceMotion: v })}
           />
+        </div>
+      </div>
+
+      {/* User-controlled long-term memory */}
+      <div className="rounded-2xl p-5" style={CARD_STYLE}>
+        <div className="flex items-center gap-2 mb-1">
+          <Brain size={15} style={{ color: '#000000' }} />
+          <h3 className="text-sm font-semibold" style={{ color: '#0a0a0a' }}>Chat memory</h3>
+        </div>
+        <p className="mb-4 text-xs" style={{ color: '#9e9e9e' }}>Only active memories below are added to future chats. You can pause, correct, or forget them at any time.</p>
+        <div className="flex gap-2">
+          <input value={newMemory} onChange={e => setNewMemory(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void addMemory() }} maxLength={2000} placeholder="Something you want the companion to remember" className="min-w-0 flex-1 rounded-lg border border-neutral-200 px-3 py-2 text-sm outline-none" />
+          <button onClick={() => void addMemory()} disabled={!newMemory.trim()} className="rounded-lg bg-neutral-900 px-3 py-2 text-xs font-medium text-white disabled:opacity-40">Remember</button>
+        </div>
+        <div className="mt-3 space-y-2">
+          {memories.map(memory => (
+            <div key={memory.id} className="flex items-start gap-3 rounded-lg border border-neutral-100 p-3">
+              <button onClick={() => void toggleMemory(memory)} className="mt-0.5 text-xs font-medium" style={{ color: memory.active ? '#4A7C59' : '#9e9e9e' }}>{memory.active ? 'Active' : 'Paused'}</button>
+              <p className="min-w-0 flex-1 text-sm text-neutral-700">{memory.content}</p>
+              <button onClick={() => void forgetMemory(memory.id)} aria-label="Forget memory" title="Forget memory" className="text-neutral-400 hover:text-red-700"><Trash2 size={14} /></button>
+            </div>
+          ))}
+          {memories.length === 0 && <p className="py-2 text-xs text-neutral-400">No saved memories.</p>}
         </div>
       </div>
 

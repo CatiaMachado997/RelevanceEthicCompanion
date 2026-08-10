@@ -172,3 +172,49 @@ RAG_STRICT_CHUNK_METRICS = [
     ExpectedContextHitMetric(threshold=1.0),
     ExpectedContextReciprocalRankMetric(threshold=0.5),
 ]
+
+
+def chatbot_answer_metrics():
+    """Create judge-backed metrics after the selected eval provider is configured."""
+    from deepeval.metrics import (
+        AnswerRelevancyMetric,
+        FaithfulnessMetric,
+        GEval,
+    )
+    from deepeval.test_case import LLMTestCaseParams
+
+    return [
+        FaithfulnessMetric(threshold=0.7),
+        AnswerRelevancyMetric(threshold=0.7),
+        GEval(
+            name="Grounded answer correctness",
+            criteria=(
+                "The answer must correctly address the request, preserve important "
+                "qualifications from the expected answer, and avoid unsupported claims."
+            ),
+            evaluation_params=[
+                LLMTestCaseParams.INPUT,
+                LLMTestCaseParams.ACTUAL_OUTPUT,
+                LLMTestCaseParams.EXPECTED_OUTPUT,
+                LLMTestCaseParams.RETRIEVAL_CONTEXT,
+            ],
+            threshold=0.7,
+        ),
+    ]
+
+
+def chatbot_conversation_metrics():
+    """Metrics that evaluate behavior across turns, not isolated answers."""
+    from deepeval.metrics import (
+        ConversationCompletenessMetric,
+        KnowledgeRetentionMetric,
+        RoleAdherenceMetric,
+        TurnRelevancyMetric,
+    )
+
+    return [
+        ConversationCompletenessMetric(threshold=0.7),
+        KnowledgeRetentionMetric(threshold=0.7),
+        TurnRelevancyMetric(threshold=0.7),
+        RoleAdherenceMetric(threshold=0.7),
+    ]

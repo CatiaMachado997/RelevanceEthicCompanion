@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from autolab.config import settings as autolab_settings
 from autolab.obsidian import ObsidianClient
+from utils.supabase_auth import get_current_user_id, get_current_read_user_id
 
 router = APIRouter(prefix="/api/autolab", tags=["AutoLab"])
 logger = logging.getLogger(__name__)
@@ -25,6 +27,8 @@ SURFACE_PATHS = {
     "prompt_opt": TRACKS_DIR / "prompt_opt" / "surface.py",
     "context_scoring": TRACKS_DIR / "context_scoring" / "surface.py",
 }
+_run_lock = threading.Lock()
+_run_state: dict[str, Any] = {"running": False, "track": None}
 
 
 # ---------------------------------------------------------------------------
@@ -150,6 +154,7 @@ def _run_experiment(track: str, max_trials: int) -> None:
     from autolab.runner import HillClimbingRunner
 
     try:
+        _run_state.update({"running": True, "track": track})
         evaluate_fn = _get_evaluate_fn(track)
         if evaluate_fn is None:
             logger.error(f"[autolab] No evaluator found for track '{track}'")
@@ -174,6 +179,10 @@ def _run_experiment(track: str, max_trials: int) -> None:
         logger.error(
             f"[autolab] Background run failed for '{track}': {exc}", exc_info=True
         )
+    finally:
+        _run_state.update({"running": False, "track": None})
+        if _run_lock.locked():
+            _run_lock.release()
 
 
 # ---------------------------------------------------------------------------
@@ -183,7 +192,7 @@ def _run_experiment(track: str, max_trials: int) -> None:
 
 class RunRequest(BaseModel):
     track: str
-    max_trials: int = 5
+    max_trials: int = Field(default=5, ge=1, le=20)
 
 
 # ---------------------------------------------------------------------------
@@ -192,7 +201,9 @@ class RunRequest(BaseModel):
 
 
 @router.get("/status")
-async def get_autolab_status() -> dict:
+async def get_autolab_status(
+    _user_id: str = Depends(get_current_read_user_id),
+) -> dict:
     """Return current status of all three experiment tracks."""
     tracks: dict[str, Any] = {}
     for track in TRACK_NAMES:
@@ -200,11 +211,19 @@ async def get_autolab_status() -> dict:
 
     obsidian_available = _obsidian_client().ping()
 
-    return {"tracks": tracks, "obsidian_available": obsidian_available}
+    return {
+        "tracks": tracks,
+        "obsidian_available": obsidian_available,
+        "run": dict(_run_state),
+    }
 
 
 @router.post("/run")
-async def trigger_run(body: RunRequest, background_tasks: BackgroundTasks) -> dict:
+async def trigger_run(
+    body: RunRequest,
+    background_tasks: BackgroundTasks,
+    _user_id: str = Depends(get_current_user_id),
+) -> dict:
     """Trigger a background experiment run for a given track."""
     if body.track not in TRACK_NAMES:
         raise HTTPException(
@@ -212,6 +231,9 @@ async def trigger_run(body: RunRequest, background_tasks: BackgroundTasks) -> di
             detail=f"Unknown track '{body.track}'. Valid tracks: {TRACK_NAMES}",
         )
 
+    if not _run_lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="An AutoLab run is already active")
+    _run_state.update({"running": True, "track": body.track})
     background_tasks.add_task(_run_experiment, body.track, body.max_trials)
     return {"status": "started", "track": body.track}
 

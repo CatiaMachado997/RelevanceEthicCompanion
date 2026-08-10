@@ -1,0 +1,69 @@
+"""DeepEval-simulated multi-turn conversations over the real chatbot entrypoint."""
+
+from __future__ import annotations
+
+import asyncio
+import os
+from pathlib import Path
+
+import pytest
+from deepeval import assert_test
+from deepeval.dataset import EvaluationDataset
+from deepeval.simulator import ConversationSimulator
+
+from config import settings
+from services.deepeval_tracing import run_traced_chatbot_turn
+from tests.evals.metrics import chatbot_conversation_metrics
+
+
+class ChatbotCallback:
+    def __init__(self):
+        self.history: list[dict[str, str]] = []
+
+    def __call__(self, message: str) -> str:
+        result = asyncio.run(
+            run_traced_chatbot_turn(
+                user_id=settings.DEV_USER_ID,
+                message=message,
+                model=os.getenv("CHATBOT_EVAL_APP_MODEL", "llama-3.3-70b-versatile"),
+                conversation_history=self.history,
+            )
+        )
+        answer = result["answer"]
+        self.history.extend(
+            [
+                {"role": "user", "content": message},
+                {"role": "assistant", "content": answer},
+            ]
+        )
+        return answer
+
+
+def simulate_cases() -> list:
+    if os.getenv("RUN_CHATBOT_EVALS") != "1":
+        return []
+    dataset = EvaluationDataset()
+    dataset.add_goldens_from_json_file(
+        file_path=str(Path(__file__).with_name("chatbot_conversations.json"))
+    )
+    cases = []
+    for golden in dataset.goldens:
+        simulator = ConversationSimulator(
+            model_callback=ChatbotCallback(), max_concurrent=1, async_mode=False
+        )
+        cases.extend(
+            simulator.simulate(
+                conversational_goldens=[golden],
+                max_user_simulations=int(os.getenv("CHATBOT_EVAL_MAX_TURNS", "5")),
+            )
+        )
+    return cases
+
+
+CASES = simulate_cases()
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("test_case", CASES)
+def test_chatbot_multiturn_quality(test_case):
+    assert_test(test_case=test_case, metrics=chatbot_conversation_metrics())

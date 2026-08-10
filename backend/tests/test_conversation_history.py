@@ -10,9 +10,10 @@ async def test_store_conversation_turn(mock_db):
     mock_db.return_value.__enter__.return_value = mock_conn
     mock_cur = MagicMock()
     mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+    mock_cur.fetchone.return_value = {"id": "turn-123"}
 
     cm = ContextManager()
-    await cm.store_conversation_turn(
+    turn_id = await cm.store_conversation_turn(
         user_id="00000000-0000-0000-0000-000000000000", role="user", content="Hello"
     )
 
@@ -22,6 +23,7 @@ async def test_store_conversation_turn(mock_db):
     params = call_args[1]
     # Includes the JSONB metadata column (defaults to "{}" when not provided).
     assert params == ("00000000-0000-0000-0000-000000000000", "user", "Hello", "{}")
+    assert turn_id == "turn-123"
 
 
 @pytest.mark.asyncio
