@@ -31,6 +31,20 @@ def _document_relevance_flags(test_case: LLMTestCase) -> list[bool]:
     return flags
 
 
+def _source_relevance_flags(test_case: LLMTestCase) -> list[bool]:
+    metadata = test_case.metadata or {}
+    expected = str(metadata.get("expected_source_name") or "").casefold()
+    retrieved = metadata.get("retrieved_filenames") or []
+    found = False
+    flags: list[bool] = []
+    for filename in retrieved:
+        normalized = str(filename or "").rsplit("/", 1)[-1].casefold()
+        relevant = bool(expected) and normalized == expected and not found
+        flags.append(relevant)
+        found = found or relevant
+    return flags
+
+
 class _ExpectedContextMetric(BaseMetric):
     _required_params = [SingleTurnParams.CONTEXT, SingleTurnParams.RETRIEVAL_CONTEXT]
     async_mode = False
@@ -103,7 +117,7 @@ class ExpectedContextReciprocalRankMetric(_ExpectedContextMetric):
 
 
 class _ExpectedDocumentMetric(_ExpectedContextMetric):
-    """Base class for stable document-identity retrieval metrics."""
+    """Base class for strict synthetic context-container identity metrics."""
 
 
 class ExpectedDocumentPrecisionMetric(_ExpectedDocumentMetric):
@@ -161,7 +175,70 @@ class ExpectedDocumentReciprocalRankMetric(_ExpectedDocumentMetric):
         return "Expected Document Reciprocal Rank"
 
 
+class ExpectedSourcePrecisionMetric(_ExpectedContextMetric):
+    """Average precision using the authoritative source filename identity."""
+
+    def measure(self, test_case: LLMTestCase, *args, **kwargs) -> float:
+        flags = _source_relevance_flags(test_case)
+        precisions = [
+            sum(flags[: index + 1]) / (index + 1)
+            for index, relevant in enumerate(flags)
+            if relevant
+        ]
+        self.score = sum(precisions) / len(precisions) if precisions else 0.0
+        ranks = [index + 1 for index, relevant in enumerate(flags) if relevant]
+        self.reason = (
+            f"expected source matches at ranks {ranks}"
+            if ranks
+            else "expected source missed"
+        )
+        self.success = self.is_successful()
+        return self.score
+
+    @property
+    def __name__(self) -> str:
+        return "Expected Source Average Precision"
+
+
+class ExpectedSourceHitMetric(_ExpectedContextMetric):
+    def measure(self, test_case: LLMTestCase, *args, **kwargs) -> float:
+        self.score = 1.0 if any(_source_relevance_flags(test_case)) else 0.0
+        self.reason = (
+            "expected source retrieved" if self.score else "expected source missed"
+        )
+        self.success = self.is_successful()
+        return self.score
+
+    @property
+    def __name__(self) -> str:
+        return "Expected Source Hit Rate"
+
+
+class ExpectedSourceReciprocalRankMetric(_ExpectedContextMetric):
+    def measure(self, test_case: LLMTestCase, *args, **kwargs) -> float:
+        flags = _source_relevance_flags(test_case)
+        first_rank = next((index + 1 for index, flag in enumerate(flags) if flag), None)
+        self.score = 1.0 / first_rank if first_rank else 0.0
+        self.reason = (
+            f"expected source first appears at rank {first_rank}"
+            if first_rank
+            else "expected source absent"
+        )
+        self.success = self.is_successful()
+        return self.score
+
+    @property
+    def __name__(self) -> str:
+        return "Expected Source Reciprocal Rank"
+
+
 RAG_RETRIEVER_METRICS = [
+    ExpectedSourcePrecisionMetric(threshold=0.6),
+    ExpectedSourceHitMetric(threshold=1.0),
+    ExpectedSourceReciprocalRankMetric(threshold=0.5),
+]
+
+RAG_STRICT_DOCUMENT_ID_METRICS = [
     ExpectedDocumentPrecisionMetric(threshold=0.6),
     ExpectedDocumentHitMetric(threshold=1.0),
     ExpectedDocumentReciprocalRankMetric(threshold=0.5),

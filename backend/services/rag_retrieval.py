@@ -49,6 +49,7 @@ ORIGINAL_QUERY_WEIGHT = float(
 QUERY_EXPANSION_ENABLED = os.getenv("RAG_QUERY_EXPANSION", "0") == "1"
 QUERY_EXPANSION_WEIGHT = float(os.getenv("RAG_QUERY_EXPANSION_WEIGHT", "0.8"))
 METADATA_RERANK_WEIGHT = float(os.getenv("RAG_METADATA_RERANK_WEIGHT", "0"))
+LOCAL_RERANK_LEXICAL_WEIGHT = float(os.getenv("RAG_LOCAL_RERANK_LEXICAL_WEIGHT", "0.2"))
 MAX_CHUNKS_PER_DOCUMENT = int(
     os.getenv(
         "RAG_MAX_CHUNKS_PER_DOCUMENT",
@@ -243,9 +244,7 @@ class RagRetrievalService:
 
         try:
             embedder = _get_embedding_service()
-            retrieval_queries = build_retrieval_queries(
-                query, expand=expand_queries
-            )
+            retrieval_queries = build_retrieval_queries(query, expand=expand_queries)
             trace["retrieval_queries"] = retrieval_queries
             query_vectors = [
                 await embedder.generate_query_embedding(retrieval_query)
@@ -310,6 +309,7 @@ class RagRetrievalService:
             model=settings.RERANK_MODEL,
             provider=settings.RAG_RERANK_PROVIDER,
             metadata_weight=METADATA_RERANK_WEIGHT,
+            lexical_weight=LOCAL_RERANK_LEXICAL_WEIGHT,
         )
         results = select_diverse_results(reranked, top_k=requested_k)
         results = expand_with_candidate_neighbors(results, candidates)
@@ -346,6 +346,7 @@ class RagRetrievalService:
                 "retrieval_queries": retrieval_queries,
                 "embedding_model": embedder.model,
                 "rerank_provider": settings.RAG_RERANK_PROVIDER,
+                "local_rerank_lexical_weight": LOCAL_RERANK_LEXICAL_WEIGHT,
             },
         )
         return results, trace
