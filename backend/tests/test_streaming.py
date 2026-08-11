@@ -34,9 +34,10 @@ async def test_stream_langgraph_yields_tokens():
     mock_graph = MagicMock()
     mock_graph.astream_events = fake_astream_events
 
-    with patch("orchestrator.graph.get_graph", return_value=mock_graph), patch(
-        "orchestrator.graph._post_stream_store", new_callable=AsyncMock
-    ):
+    with patch("orchestrator.graph._settings") as flags, patch(
+        "orchestrator.graph.get_graph", return_value=mock_graph
+    ), patch("orchestrator.graph._post_stream_store", new_callable=AsyncMock):
+        flags.STREAMING_REASONING_ENABLED = False
         received = []
         async for event in stream_langgraph(
             user_id="test-user",

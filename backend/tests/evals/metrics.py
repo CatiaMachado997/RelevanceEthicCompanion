@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from deepeval.metrics import BaseMetric
 from deepeval.test_case import LLMTestCase, SingleTurnParams
 
@@ -260,9 +262,10 @@ def chatbot_answer_metrics():
     )
     from deepeval.test_case import LLMTestCaseParams
 
+    async_mode = os.getenv("DEEPEVAL_METRICS_ASYNC", "0") == "1"
     return [
-        FaithfulnessMetric(threshold=0.7),
-        AnswerRelevancyMetric(threshold=0.7),
+        FaithfulnessMetric(threshold=0.7, async_mode=async_mode),
+        AnswerRelevancyMetric(threshold=0.7, async_mode=async_mode),
         GEval(
             name="Grounded answer correctness",
             criteria=(
@@ -276,6 +279,7 @@ def chatbot_answer_metrics():
                 LLMTestCaseParams.RETRIEVAL_CONTEXT,
             ],
             threshold=0.7,
+            async_mode=async_mode,
         ),
     ]
 

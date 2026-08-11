@@ -62,15 +62,22 @@ def _mk_synth_llm():
 
 @pytest.mark.asyncio
 async def test_two_independent_actions_run_in_parallel():
-    """Both actions complete; latency reflects parallelism."""
-    import time
+    """Both actions start before either can finish."""
+    started: set[str] = set()
+    both_started = asyncio.Event()
 
     async def slow_docs(_p):
-        await asyncio.sleep(0.1)
+        started.add("documents")
+        if len(started) == 2:
+            both_started.set()
+        await asyncio.wait_for(both_started.wait(), timeout=0.5)
         return [{"chunk_uuid": "u1", "snippet": "m-kopa"}]
 
     async def slow_cal(_p):
-        await asyncio.sleep(0.1)
+        started.add("calendar")
+        if len(started) == 2:
+            both_started.set()
+        await asyncio.wait_for(both_started.wait(), timeout=0.5)
         return [{"title": "Standup", "start": "2026-04-20T09:00"}]
 
     docs_tool = MagicMock()
@@ -96,15 +103,12 @@ async def test_two_independent_actions_run_in_parallel():
         _mk_synth_llm(),
     ):
         flag.PLANNER_PARALLEL_ENABLED = True
-        started = time.perf_counter()
+        flag.STREAMING_REASONING_ENABLED = False
         result = await tool_execution_node(_base_state())
-        elapsed = time.perf_counter() - started
 
     tool_names = {r["tool"] for r in result["tool_results"]}
     assert tool_names == {"search_documents", "query_calendar"}
-    # Two 100 ms sleeps in parallel should net ~100 ms, not 200 ms.
-    # Generous bound: parallelism is real if < 180 ms.
-    assert elapsed < 0.18, f"expected parallel (<180ms), got {elapsed*1000:.0f}ms"
+    assert started == {"documents", "calendar"}
     # Observations attached to the step
     assert len(result["plan_steps"][-1]["observations"]) == 2
     # All observations are status=ok
@@ -115,15 +119,19 @@ async def test_two_independent_actions_run_in_parallel():
 @pytest.mark.asyncio
 async def test_two_independent_actions_run_sequentially_when_flag_off():
     """PLANNER_PARALLEL_ENABLED=False falls back to the legacy one-at-a-time
-    behavior — latency reflects serial execution, not parallelism."""
-    import time
+    behavior and completes each action before starting the next."""
+    order: list[str] = []
 
     async def slow_docs(_p):
-        await asyncio.sleep(0.1)
+        order.append("documents-start")
+        await asyncio.sleep(0.01)
+        order.append("documents-end")
         return [{"chunk_uuid": "u1", "snippet": "m-kopa"}]
 
     async def slow_cal(_p):
-        await asyncio.sleep(0.1)
+        order.append("calendar-start")
+        await asyncio.sleep(0.01)
+        order.append("calendar-end")
         return [{"title": "Standup", "start": "2026-04-20T09:00"}]
 
     docs_tool = MagicMock()
@@ -149,14 +157,17 @@ async def test_two_independent_actions_run_sequentially_when_flag_off():
         _mk_synth_llm(),
     ):
         flag.PLANNER_PARALLEL_ENABLED = False
-        started = time.perf_counter()
+        flag.STREAMING_REASONING_ENABLED = False
         result = await tool_execution_node(_base_state())
-        elapsed = time.perf_counter() - started
 
     tool_names = {r["tool"] for r in result["tool_results"]}
     assert tool_names == {"search_documents", "query_calendar"}
-    # Two 100 ms sleeps run serially should net ~200 ms.
-    assert elapsed >= 0.19, f"expected serial (>=190ms), got {elapsed*1000:.0f}ms"
+    assert order == [
+        "documents-start",
+        "documents-end",
+        "calendar-start",
+        "calendar-end",
+    ]
     statuses = [o["status"] for o in result["plan_steps"][-1]["observations"]]
     assert statuses == ["ok", "ok"]
 

@@ -231,6 +231,9 @@ async def lifespan(app: FastAPI):
         _scheduler.stop()
         print("✅ Background scheduler stopped")
 
+    from utils.weaviate_client import close_weaviate_client
+
+    close_weaviate_client()
     close_pool()
 
 

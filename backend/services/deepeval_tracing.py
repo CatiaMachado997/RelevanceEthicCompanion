@@ -22,9 +22,9 @@ def observe_retriever(function: F) -> F:
         try:
             from langsmith import traceable
 
-            wrapped = traceable(
-                run_type="retriever", name="ethic-companion-rag"
-            )(wrapped)  # type: ignore[assignment]
+            wrapped = traceable(run_type="retriever", name="ethic-companion-rag")(
+                wrapped
+            )  # type: ignore[assignment]
         except ImportError:
             pass
     if os.getenv("DEEPEVAL_TRACING_ENABLED") == "1":
@@ -105,6 +105,31 @@ def update_chatbot_span(
     update_current_trace(**values)
 
 
+def assert_grounded_turn_contract(result: dict[str, Any]) -> None:
+    """Validate that a forced-retrieval eval kept evidence and citations linked."""
+    answer = str(result.get("answer") or "").strip()
+    assert answer, "The application returned an empty answer"
+
+    done = result.get("done") or {}
+    sources = done.get("document_sources") or []
+    retrieval_context = result.get("retrieval_context") or []
+    assert sources, "Forced retrieval returned no structured document sources"
+    assert retrieval_context, "Forced retrieval returned no context for evaluation"
+    assert len(retrieval_context) == len(sources), (
+        "Trace retrieval context and structured document sources diverged: "
+        f"{len(retrieval_context)} contexts != {len(sources)} sources"
+    )
+
+    citation_tools = {
+        str(citation.get("tool") or "")
+        for citation in (done.get("citations") or [])
+        if isinstance(citation, dict)
+    }
+    assert (
+        "search_documents" in citation_tools
+    ), "Retrieved document evidence was not represented in structured citations"
+
+
 @observe_chatbot
 async def run_traced_chatbot_turn(
     *,
@@ -151,6 +176,17 @@ async def run_traced_chatbot_turn(
             "model": model,
             "conversation_id": conversation_id,
             "citations": done.get("citations") or [],
+            "citation_tools": [
+                str(citation.get("tool") or "")
+                for citation in (done.get("citations") or [])
+                if isinstance(citation, dict)
+            ],
+            "retrieved_sources": [
+                str(source.get("filename") or source.get("source_type") or "")
+                for source in sources
+                if isinstance(source, dict)
+            ],
+            "retrieval_count": len(retrieval_context),
             "assistant_turn_id": done.get("assistant_turn_id"),
         },
     )

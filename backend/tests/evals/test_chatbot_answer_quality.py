@@ -13,7 +13,10 @@ from deepeval import assert_test, log_hyperparameters
 from deepeval.dataset import Golden
 
 from config import settings
-from services.deepeval_tracing import run_traced_chatbot_turn
+from services.deepeval_tracing import (
+    assert_grounded_turn_contract,
+    run_traced_chatbot_turn,
+)
 from tests.evals.metrics import chatbot_answer_metrics
 
 SHARD_DIR = Path(
@@ -41,9 +44,7 @@ def load_cases() -> list[dict]:
     # Spread expensive judge-backed cases across the full canonical dataset.
     if limit == 1:
         return [cases[len(cases) // 2]]
-    return [
-        cases[index * (len(cases) - 1) // (limit - 1)] for index in range(limit)
-    ]
+    return [cases[index * (len(cases) - 1) // (limit - 1)] for index in range(limit)]
 
 
 CASES = load_cases()
@@ -54,6 +55,7 @@ def chatbot_eval_hyperparameters():
     return {
         "app_model": os.getenv("CHATBOT_EVAL_APP_MODEL", "llama-3.3-70b-versatile"),
         "judge_model": os.getenv("GROQ_EVAL_MODEL", "openai/gpt-oss-20b"),
+        "metrics_async": os.getenv("DEEPEVAL_METRICS_ASYNC", "0") == "1",
         "force_retrieval": True,
         "rag_rollout_variant": os.getenv("RAG_ROLLOUT_FORCE_VARIANT", "assigned"),
     }
@@ -71,14 +73,12 @@ def test_chatbot_answer_quality(case: dict):
             run_traced_chatbot_turn(
                 user_id=settings.DEV_USER_ID,
                 message=case["scenario"],
-                model=os.getenv(
-                    "CHATBOT_EVAL_APP_MODEL", "llama-3.3-70b-versatile"
-                ),
+                model=os.getenv("CHATBOT_EVAL_APP_MODEL", "llama-3.3-70b-versatile"),
             ),
             timeout=float(os.getenv("CHATBOT_EVAL_TURN_TIMEOUT_SECONDS", "90")),
         )
     )
-    assert result["answer"], "The application returned an empty answer"
+    assert_grounded_turn_contract(result)
     golden = Golden(
         input=case["scenario"],
         expected_output=case.get("expected_outcome"),

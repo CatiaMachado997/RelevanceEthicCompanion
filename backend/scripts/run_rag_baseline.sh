@@ -4,13 +4,15 @@ set -euo pipefail
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 BACKEND_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 RESULT_DIR="$BACKEND_DIR/tests/evals/results"
+. "$SCRIPT_DIR/python_runtime.sh"
+PYTHON_BIN=$(resolve_backend_python "$BACKEND_DIR")
 
 mkdir -p "$RESULT_DIR"
 cd "$BACKEND_DIR"
 
 export RUN_INTEGRATION_TESTS=1
 export DEEPEVAL_TRACING_ENABLED=1
-export DEEPEVAL_HOSTED=1
+export DEEPEVAL_HOSTED="${DEEPEVAL_HOSTED:-0}"
 export GROQ_EVAL_MODEL="${GROQ_EVAL_MODEL:-groq/compound}"
 export RAG_EVAL_LIMIT="${2:-${RAG_EVAL_LIMIT:-20}}"
 export RAG_EVAL_DELAY_SECONDS="${RAG_EVAL_DELAY_SECONDS:-0}"
@@ -36,7 +38,7 @@ set +e
 TEST_STATUS=${PIPESTATUS[0]}
 set -e
 
-"$BACKEND_DIR/venv/bin/python" "$SCRIPT_DIR/summarize_rag_run.py" \
+"$PYTHON_BIN" "$SCRIPT_DIR/summarize_rag_run.py" \
   "$BACKEND_DIR/.deepeval/.latest_run_full.json" \
   "$RESULT_DIR/comparison.json" \
   --run-id "$RAG_EVAL_RUN_ID" \
