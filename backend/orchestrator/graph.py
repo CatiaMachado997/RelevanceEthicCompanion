@@ -248,6 +248,7 @@ async def stream_langgraph(
     conversation_id: Optional[str] = None,
     active_sources: Optional[list] = None,
     force_retrieval: bool = False,
+    request_id: Optional[str] = None,
     persist_turn: bool = True,
     conversation_history_override: Optional[list] = None,
 ) -> AsyncGenerator[dict, None]:
@@ -271,6 +272,7 @@ async def stream_langgraph(
         "message": message,
         "conversation_id": conversation_id,
         "model": model,
+        "request_id": request_id,
         "user_context": {},
         "conversation_history": [],
         "conversation_history_override": conversation_history_override,
@@ -398,7 +400,13 @@ async def stream_langgraph(
                     continue
                 tool_events_yielded = True
                 for ev in output.get("response_events", []):
-                    if ev.get("event") in ("tool_use", "tool_result"):
+                    if ev.get("event") in (
+                        "tool_use",
+                        "tool_result",
+                        "tool_error",
+                        "tool_cancelled",
+                        "tool_skipped",
+                    ):
                         yield ev
                 # Capture citation sources for the done event
                 citations = output.get("citations", [])

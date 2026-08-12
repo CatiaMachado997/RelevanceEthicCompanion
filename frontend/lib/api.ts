@@ -280,11 +280,13 @@ export const chatApi = {
           onThoughtToken?: (token: string) => void
           onPlanStepActions?: (step: number, actions: Array<{ tool: string; params: unknown }>) => void
           onActionComplete?: (step: number, action_index: number, status: string, latency_ms: number) => void
+          onToolError?: (data: { tool: string; message: string; error_code: string; retryable: boolean }) => void
           onPlanPaused?: (payload: unknown) => void
           model?: string
           conversation_id?: string
           active_sources?: string[]
           force_retrieval?: boolean
+          request_id?: string
         },
   ): Promise<void> & { cancel: () => void } => {
     const callbacks =
@@ -306,7 +308,8 @@ export const chatApi = {
       const token = await resolveAccessToken()
       const tokenParam = token ? `&token=${encodeURIComponent(token)}` : ''
       const forceParam = callbacks.force_retrieval ? '&force_retrieval=true' : ''
-      const url = `${API_URL}/api/chat/stream?message=${encodeURIComponent(message)}${modelParam}${convParam}${sourcesParam}${tokenParam}${forceParam}`
+      const requestParam = callbacks.request_id ? `&request_id=${encodeURIComponent(callbacks.request_id)}` : ''
+      const url = `${API_URL}/api/chat/stream?message=${encodeURIComponent(message)}${modelParam}${convParam}${sourcesParam}${tokenParam}${forceParam}${requestParam}`
       es = new EventSource(url, { withCredentials: true })
 
       es.onmessage = (e) => {
@@ -320,6 +323,10 @@ export const chatApi = {
           }
           if (data.event === 'tool_result') {
             callbacks.onToolResult?.(data.tool)
+            return
+          }
+          if (data.event === 'tool_error') {
+            callbacks.onToolError?.(data)
             return
           }
           if (data.event === 'tool_pending_confirmation') {
@@ -504,6 +511,9 @@ export const chatApi = {
 
     return { cancel: () => controller.abort() }
   },
+
+  paused: (threadId: string): Promise<Record<string, unknown>> =>
+    apiRequest<Record<string, unknown>>(`/api/chat/paused/${encodeURIComponent(threadId)}`),
 
   /**
    * Get conversation history

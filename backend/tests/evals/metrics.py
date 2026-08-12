@@ -60,6 +60,47 @@ class _ExpectedContextMetric(BaseMetric):
         return self.measure(test_case, *args, **kwargs)
 
 
+class ToolActionReliabilityMetric(BaseMetric):
+    """Deterministic contract metric for tool execution safety outcomes."""
+
+    _required_params = [
+        SingleTurnParams.ACTUAL_OUTPUT,
+        SingleTurnParams.EXPECTED_OUTPUT,
+    ]
+    async_mode = False
+    include_reason = True
+    evaluation_model = "deterministic-tool-action-contract"
+
+    def __init__(self, threshold: float = 1.0):
+        self.threshold = threshold
+
+    def measure(self, test_case: LLMTestCase, *args, **kwargs) -> float:
+        import json
+
+        actual = json.loads(test_case.actual_output or "{}")
+        expected = json.loads(test_case.expected_output or "{}")
+        mismatches = {
+            key: {"expected": value, "actual": actual.get(key)}
+            for key, value in expected.items()
+            if actual.get(key) != value
+        }
+        self.score = 0.0 if mismatches else 1.0
+        self.reason = (
+            f"contract mismatches: {mismatches}"
+            if mismatches
+            else "tool action reliability contract satisfied"
+        )
+        self.success = self.is_successful()
+        return self.score
+
+    async def a_measure(self, test_case: LLMTestCase, *args, **kwargs) -> float:
+        return self.measure(test_case, *args, **kwargs)
+
+    @property
+    def __name__(self) -> str:
+        return "Tool Action Reliability"
+
+
 class ExpectedContextPrecisionMetric(_ExpectedContextMetric):
     """Average precision of source chunks, independent of how many chunks exist."""
 

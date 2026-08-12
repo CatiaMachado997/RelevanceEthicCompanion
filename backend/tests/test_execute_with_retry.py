@@ -48,6 +48,18 @@ async def test_fails_both_attempts_returns_error_observation():
 
 
 @pytest.mark.asyncio
+async def test_error_string_is_treated_as_failure_and_retried():
+    t = _fake_tool(
+        "web_search",
+        side_effect=["Error performing web search: timeout", "search result"],
+    )
+    obs = await _execute_with_retry(t, {"q": "x"})
+    assert obs["status"] == "ok"
+    assert obs["result"] == "search result"
+    assert obs["attempts"] == 2
+
+
+@pytest.mark.asyncio
 async def test_backoff_delay_between_attempts():
     """Retry waits ~200 ms (a small delay) before the second try.
 

@@ -11,6 +11,7 @@ class AgentState(TypedDict):
     message: str
     conversation_id: Optional[str]
     model: str
+    request_id: Optional[str]  # stable across explicit client retries
 
     # Context
     user_context: dict  # goals, values, focus_mode, recent_memory

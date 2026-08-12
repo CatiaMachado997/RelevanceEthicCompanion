@@ -145,6 +145,7 @@ async def run_traced_chatbot_turn(
 
     answer_parts: list[str] = []
     done: dict[str, Any] = {}
+    tool_events: list[dict[str, Any]] = []
     async for event in stream_langgraph(
         user_id=user_id,
         message=message,
@@ -160,6 +161,31 @@ async def run_traced_chatbot_turn(
             raise RuntimeError(str(event.get("message") or "Chat evaluation failed"))
         elif event.get("event") == "done":
             done = event
+        elif event.get("event") in {
+            "tool_use",
+            "tool_result",
+            "tool_error",
+            "tool_cancelled",
+            "tool_skipped",
+            "plan_paused",
+        }:
+            # Trace only operational outcomes and identifiers; never copy raw
+            # tool inputs or provider responses into hosted metadata.
+            tool_events.append(
+                {
+                    key: event.get(key)
+                    for key in (
+                        "event",
+                        "tool",
+                        "step",
+                        "action_index",
+                        "status",
+                        "error_code",
+                        "retryable",
+                    )
+                    if event.get(key) is not None
+                }
+            )
 
     answer = "".join(answer_parts)
     sources = done.get("document_sources") or []
@@ -188,10 +214,18 @@ async def run_traced_chatbot_turn(
             ],
             "retrieval_count": len(retrieval_context),
             "assistant_turn_id": done.get("assistant_turn_id"),
+            "tool_events": tool_events,
+            "tool_error_count": sum(
+                event.get("event") == "tool_error" for event in tool_events
+            ),
+            "paused_action_count": sum(
+                event.get("event") == "plan_paused" for event in tool_events
+            ),
         },
     )
     return {
         "answer": answer,
         "retrieval_context": retrieval_context,
         "done": done,
+        "tool_events": tool_events,
     }

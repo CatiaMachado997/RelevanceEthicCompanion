@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import ChatPage from '../app/dashboard/chat/page'
+import ChatPage from '../app/dashboard/chat/ChatPageContent'
 import api from '../lib/api'
 
 jest.mock('@/hooks/useAuth', () => ({
@@ -18,6 +18,7 @@ jest.mock('../lib/api', () => ({
   default: {
     chat: {
       history: jest.fn(),
+      paused: jest.fn(),
       send: jest.fn(),
       stream: jest.fn(),
       conversations: {
@@ -60,6 +61,7 @@ beforeAll(() => {
 beforeEach(() => {
   jest.resetAllMocks()
   ;(api.chat.history as jest.Mock).mockResolvedValue({ messages: [] })
+  ;(api.chat.paused as jest.Mock).mockResolvedValue({ paused: false })
   ;(api.chat.conversations.create as jest.Mock).mockResolvedValue({
     id: 'test-conv-id',
     title: 'New conversation',
