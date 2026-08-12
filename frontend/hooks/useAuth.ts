@@ -59,6 +59,7 @@ export function useAuth() {
     // Keep in sync with auth state changes (sign in / sign out / token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        console.warn('DIAG useAuth.authchange ' + JSON.stringify({ event, hasSession: !!session, hasRefresh: !!session?.refresh_token }))
         setUser(session?.user ?? null)
         if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
           exchangeSessionCookie(session)

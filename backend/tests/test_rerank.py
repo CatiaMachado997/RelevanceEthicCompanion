@@ -28,8 +28,8 @@ def _candidates(n: int = 4) -> list[dict]:
 
 
 @pytest.mark.asyncio
-async def test_rerank_falls_back_without_key():
-    """Empty api_key → return candidates[:top_k] unchanged, no HTTP call."""
+async def test_rerank_uses_local_scorer_without_key():
+    """Empty API key uses the dependency-free local relevance scorer."""
     cands = _candidates(4)
 
     with patch("services.rerank.httpx.AsyncClient") as client_cls:
@@ -37,16 +37,15 @@ async def test_rerank_falls_back_without_key():
 
     # No HTTP client should have been constructed.
     client_cls.assert_not_called()
-    # Same objects, in original order, no rerank_score.
     assert len(result) == 3
-    assert [r["chunk_uuid"] for r in result] == ["u-0", "u-1", "u-2"]
     for r in result:
-        assert "rerank_score" not in r
+        assert "rerank_score" in r
+        assert r["rerank_provider"] == "local-idf"
 
 
 @pytest.mark.asyncio
 async def test_rerank_falls_back_on_http_error():
-    """If the Jina call raises, fall back to raw top-K (no rerank_score)."""
+    """If Jina fails, fall back to the local scorer."""
     cands = _candidates(4)
 
     def _raise(*args, **kwargs):
@@ -63,7 +62,8 @@ async def test_rerank_falls_back_on_http_error():
     assert len(result) == 2
     assert [r["chunk_uuid"] for r in result] == ["u-0", "u-1"]
     for r in result:
-        assert "rerank_score" not in r
+        assert "rerank_score" in r
+        assert r["rerank_provider"] == "local-idf"
 
 
 @pytest.mark.asyncio
@@ -97,6 +97,7 @@ async def test_rerank_sorts_by_jina_response():
 
     assert [r["chunk_uuid"] for r in result] == ["u-2", "u-0"]
     assert result[0]["rerank_score"] == 0.95
+    assert result[0]["rerank_provider"] == "jina"
     assert result[1]["rerank_score"] == 0.7
     # Original fields preserved.
     assert result[0]["snippet"] == "chunk text 2"
@@ -138,3 +139,48 @@ async def test_rerank_empty_candidates_short_circuits():
         result = await rerank("q", [], top_k=5, api_key="fake-key")
     client_cls.assert_not_called()
     assert result == []
+
+
+@pytest.mark.asyncio
+async def test_local_reranker_promotes_rare_query_terms():
+    candidates = [
+        {"chunk_uuid": "generic", "snippet": "general AI policy", "score": 0.5},
+        {
+            "chunk_uuid": "specific",
+            "snippet": "NIST AI RMF govern map measure manage",
+            "score": 0.5,
+        },
+    ]
+    result = await rerank(
+        "NIST AI RMF governance measure", candidates, top_k=2, provider="local"
+    )
+    assert result[0]["chunk_uuid"] == "specific"
+
+
+@pytest.mark.asyncio
+async def test_local_reranker_can_boost_matching_source_metadata():
+    candidates = [
+        {
+            "chunk_uuid": "generic",
+            "filename": "generic-policy.pdf",
+            "snippet": "AI governance requirements",
+            "score": 0.5,
+        },
+        {
+            "chunk_uuid": "authority",
+            "filename": "who-lmm-ethics-governance.pdf",
+            "snippet": "AI governance requirements",
+            "score": 0.5,
+        },
+    ]
+
+    result = await rerank(
+        "WHO LMM governance",
+        candidates,
+        top_k=2,
+        provider="local",
+        metadata_weight=0.2,
+    )
+
+    assert result[0]["chunk_uuid"] == "authority"
+    assert result[0]["metadata_score"] > result[1]["metadata_score"]

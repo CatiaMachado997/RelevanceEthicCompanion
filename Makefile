@@ -3,7 +3,7 @@ SHELL         := /bin/bash
 BACKEND_DIR   := backend
 FRONTEND_DIR  := frontend
 
-.PHONY: help setup dev-up dev-down dev-reset migrate-dry migrate migrate-prod test lint
+.PHONY: help setup dev-up dev-down dev-reset storage-audit migrate-dry migrate migrate-prod test lint
 
 help:
 	@echo ""
@@ -11,6 +11,7 @@ help:
 	@echo "  make dev-up         Start Postgres + Weaviate"
 	@echo "  make dev-down       Stop and remove containers"
 	@echo "  make dev-reset      Wipe volumes, restart, seed DB"
+	@echo "  make storage-audit  Inspect canonical/orphan Docker volumes (read-only)"
 	@echo "  make migrate-dry    Preview pending migrations (no changes)"
 	@echo "  make migrate        Apply pending migrations (local DB)"
 	@echo "  make migrate-prod   Apply migrations to PROD (requires confirmation)"
@@ -28,6 +29,7 @@ setup:
 	@echo "==> Setup complete. Fill in real API keys in backend/.env"
 
 dev-up:
+	@$(MAKE) storage-audit
 	@cd $(BACKEND_DIR) && docker compose up -d
 	@echo "==> Postgres + Weaviate running"
 
@@ -43,6 +45,9 @@ dev-reset:
 	@cd $(BACKEND_DIR) && source venv/bin/activate && python -m scripts.run_migrations
 	@cd $(BACKEND_DIR) && source venv/bin/activate && python -m scripts.seed_dev
 	@echo "==> Dev DB reset and seeded"
+
+storage-audit:
+	@bash $(BACKEND_DIR)/scripts/audit_docker_storage.sh
 
 migrate-dry:
 	@cd $(BACKEND_DIR) && source venv/bin/activate && python -m scripts.run_migrations --dry-run

@@ -5,12 +5,20 @@ Loads environment variables and application settings
 
 import os
 import logging as _logging
+from pathlib import Path
 
+from dotenv import load_dotenv
 from pydantic import computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List, Optional
 
 _secrets_logger = _logging.getLogger(__name__)
+
+# Export private local overrides into the process so SDKs such as LangSmith,
+# which read os.environ directly, receive them. Existing process values retain
+# precedence, which lets tests and deployments explicitly disable tracing.
+_CONFIG_DIR = Path(__file__).resolve().parent
+load_dotenv(_CONFIG_DIR / ".env.local", override=False)
 
 # Ordered list of (GCP secret name → env var name) pairs.
 _GCP_SECRETS: list[tuple[str, str]] = [
@@ -84,7 +92,15 @@ class Settings(BaseSettings):
 
     # APIs - V2 (new)
     GEMINI_API_KEY: str = ""
+    OPENAI_API_KEY: str = ""
     TAVILY_API_KEY: str
+
+    # Embeddings default to one stable local vector space. Deployments may opt
+    # into Gemini explicitly, but a leftover key must not silently mix vectors.
+    EMBEDDING_PROVIDER: str = "ollama"
+    OLLAMA_BASE_URL: str = "http://127.0.0.1:11434"
+    OLLAMA_EMBEDDING_MODEL: str = "bge-m3"
+    EMBEDDING_DIMENSIONS: int = 1024
 
     # Google Cloud (optional — only needed when using GCP Secret Manager)
     GOOGLE_CLOUD_PROJECT: Optional[str] = None
@@ -148,6 +164,12 @@ class Settings(BaseSettings):
     # over hybrid-search results. Empty key → graceful no-op fallback.
     JINA_API_KEY: str = ""
     RERANK_MODEL: str = "jina-reranker-v2-base-multilingual"
+    RAG_RERANK_PROVIDER: str = "local"
+    RAG_RRF_K: int = 60
+    RAG_ORIGINAL_QUERY_WEIGHT: float = 0.0
+    RAG_MAX_CHUNKS_PER_DOCUMENT: int = 2
+    RAG_NEAR_DUPLICATE_THRESHOLD: float = 0.88
+    RAG_NEIGHBOR_WINDOW: int = 1
 
     # Sprint I — explicit ReAct + parallel actions. When False (default),
     # the planner emits one tool call per step (legacy behavior) and the
@@ -187,6 +209,15 @@ class Settings(BaseSettings):
     LANGFUSE_SECRET_KEY: Optional[str] = None
     LANGFUSE_HOST: str = "https://cloud.langfuse.com"
 
+    # DeepEval remains local unless explicitly enabled. LangSmith tracing is
+    # independently opt-in and its key belongs only in ignored env files.
+    DEEPEVAL_TRACING_ENABLED: bool = False
+    DEEPEVAL_HOSTED: bool = False
+    CONFIDENT_API_KEY: str = ""
+    LANGSMITH_TRACING: bool = False
+    LANGSMITH_PROJECT: str = "ethic-companion-rag"
+    LANGSMITH_API_KEY: str = ""
+
     # Feature flags
     USE_LANGGRAPH: bool = (
         True  # orchestrator_v2 removed in sprint-2a; LangGraph is the only orchestrator
@@ -198,7 +229,11 @@ class Settings(BaseSettings):
     # Retention — daily prune job for tool_call_events / esl_audit_log
     RETENTION_DAYS: int = 90
 
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
+    # Local overrides (including tracing credentials) stay in the ignored
+    # .env.local file and take precedence over the shared .env values.
+    model_config = SettingsConfigDict(
+        env_file=(".env", ".env.local"), case_sensitive=True
+    )
 
 
 # Load GCP secrets before instantiating Settings so pydantic picks them up from env.

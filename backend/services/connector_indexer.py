@@ -11,14 +11,20 @@ from typing import Optional
 from config import settings
 from services.connectors.base import SourceItem
 from services.embedding_service import EmbeddingService
+from services.text_chunking import (
+    TextChunk,
+    detect_language,
+    embedding_text,
+    structure_aware_chunks,
+)
 from utils.weaviate_client import get_weaviate_client
 from utils.db import get_db_connection
 
 logger = logging.getLogger(__name__)
 
 DOCUMENT_COLLECTION = "DocumentMemory"
-CHUNK_SIZE = 800  # characters — matches DocumentProcessor's chunker
-CHUNK_OVERLAP = 100
+CHUNK_SIZE = 300
+CHUNK_OVERLAP = 45
 
 
 _embedding_service: Optional[EmbeddingService] = None
@@ -35,19 +41,11 @@ def get_embedding_service() -> EmbeddingService:
 def _chunk_text(
     text: str, size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP
 ) -> list[str]:
-    """Naive sliding-window chunker. Mirrors document_processor's behavior so
-    connector chunks and document chunks rank against one another fairly."""
-    text = (text or "").strip()
-    if not text:
-        return []
-    if len(text) <= size:
-        return [text]
-    chunks: list[str] = []
-    i = 0
-    while i < len(text):
-        chunks.append(text[i : i + size])
-        i += size - overlap
-    return chunks
+    """String view over the shared structure-aware chunker."""
+    return [
+        chunk.content
+        for chunk in structure_aware_chunks(text, max_words=size, overlap_words=overlap)
+    ]
 
 
 class ConnectorIndexer:
@@ -65,18 +63,27 @@ class ConnectorIndexer:
 
         # Prepend the title so the first chunk anchors on subject/channel.
         full = f"{item.title}\n\n{body}" if item.title else body
-        chunks = _chunk_text(full)
-        if not chunks:
+        structured_chunks = structure_aware_chunks(
+            full, max_words=CHUNK_SIZE, overlap_words=CHUNK_OVERLAP
+        )
+        if not structured_chunks:
             return 0
 
         embed = get_embedding_service()
         now = datetime.now(timezone.utc).isoformat()
+        language = detect_language(full)
 
         last_error: Optional[Exception] = None
 
-        for idx, chunk in enumerate(chunks):
+        for idx, structured_chunk in enumerate(structured_chunks):
+            chunk = structured_chunk.content
             try:
-                vec = await embed.generate_embedding(chunk)
+                vec = await embed.generate_embedding(
+                    embedding_text(
+                        TextChunk(chunk, structured_chunk.section_title),
+                        title=item.title or item.external_id,
+                    )
+                )
                 weav.store_memory(
                     DOCUMENT_COLLECTION,
                     {
@@ -85,8 +92,12 @@ class ConnectorIndexer:
                         "document_id": f"{item.source_type}:{item.external_id}",
                         "filename": item.title or item.external_id,
                         "chunk_index": idx,
-                        "chunk_count": len(chunks),
+                        "chunk_count": len(structured_chunks),
                         "source_type": item.source_type,
+                        "embedding_model": embed.model,
+                        "section_title": structured_chunk.section_title,
+                        "language": language,
+                        "document_version": "",
                         "created_at": now,
                     },
                     vec,
@@ -138,4 +149,4 @@ class ConnectorIndexer:
             # Re-raise so data_ingestion's success-update path is skipped.
             raise last_error
 
-        return len(chunks)
+        return len(structured_chunks)

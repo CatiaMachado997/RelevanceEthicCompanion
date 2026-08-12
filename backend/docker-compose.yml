@@ -28,5 +28,10 @@ services:
       - weaviate_data:/var/lib/weaviate
 
 volumes:
+  # Explicit names keep the same data volumes when the repository directory,
+  # worktree, or Compose project name changes. Without these, Compose prefixes
+  # volumes with the current project name and can silently create empty copies.
   postgres_data:
+    name: backend_postgres_data
   weaviate_data:
+    name: backend_weaviate_data

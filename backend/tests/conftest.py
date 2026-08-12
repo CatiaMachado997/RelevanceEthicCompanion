@@ -2,6 +2,11 @@
 
 import os
 
+# Unit tests never emit hosted traces. Explicit integration/evaluation runs may
+# opt in and load their ignored local LangSmith configuration via config.py.
+if os.environ.get("RUN_INTEGRATION_TESTS") != "1":
+    os.environ["LANGSMITH_TRACING"] = "false"
+
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock

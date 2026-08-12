@@ -16,6 +16,12 @@ from typing import TYPE_CHECKING, List, Optional
 
 from services.context_manager import ContextManager
 from services.document_extractors import extract_text as _extract_from_path
+from services.text_chunking import (
+    TextChunk,
+    detect_language,
+    embedding_text,
+    structure_aware_chunks,
+)
 from utils.db import get_db_connection
 
 if TYPE_CHECKING:
@@ -24,30 +30,20 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 DOCUMENT_COLLECTION = "DocumentMemory"
-CHUNK_SIZE = 2000
-CHUNK_OVERLAP = 200
+CHUNK_SIZE = 400
+CHUNK_OVERLAP = 60
 
 
 def chunk_text(
     text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP
 ) -> List[str]:
-    """Split text into overlapping chunks. Returns empty list if text is blank."""
-    text = text.strip()
-    if not text:
-        return []
-
-    chunks = []
-    start = 0
-    while start < len(text):
-        end = start + chunk_size
-        chunk = text[start:end]
-        if chunk.strip():
-            chunks.append(chunk)
-        start = end - overlap
-        if start >= len(text):
-            break
-
-    return chunks
+    """Return structure-aware chunk content; sizes are measured in words."""
+    return [
+        chunk.content
+        for chunk in structure_aware_chunks(
+            text, max_words=chunk_size, overlap_words=overlap
+        )
+    ]
 
 
 class DocumentProcessor:
@@ -138,12 +134,16 @@ class DocumentProcessor:
                 raise ValueError("Document contains no extractable text")
 
             # 2. Chunk
-            chunks = chunk_text(text)
-            if not chunks:
+            structured_chunks = structure_aware_chunks(
+                text, max_words=CHUNK_SIZE, overlap_words=CHUNK_OVERLAP
+            )
+            if not structured_chunks:
                 raise ValueError("Document produced no chunks after splitting")
+            language = detect_language(text)
 
             # 3. Store each chunk in M1 (source_items) + M2 (Weaviate)
-            for idx, chunk in enumerate(chunks):
+            for idx, structured_chunk in enumerate(structured_chunks):
+                chunk = structured_chunk.content
                 chunk_external_id = f"{document_id}_chunk_{idx}"
 
                 # M1 write (auto-committed by context manager)
@@ -162,14 +162,17 @@ class DocumentProcessor:
                             (
                                 user_id,
                                 chunk_external_id,
-                                f"{filename} [chunk {idx + 1}/{len(chunks)}]",
+                                f"{filename} [chunk {idx + 1}/{len(structured_chunks)}]",
                                 chunk,
                                 json.dumps(
                                     {
                                         "document_id": document_id,
                                         "chunk_index": idx,
-                                        "chunk_count": len(chunks),
+                                        "chunk_count": len(structured_chunks),
                                         "filename": filename,
+                                        "section_title": structured_chunk.section_title,
+                                        "language": language,
+                                        "embedding_model": self.embedding_service.model,
                                     }
                                 ),
                             ),
@@ -182,13 +185,21 @@ class DocumentProcessor:
                     document_id=document_id,
                     filename=filename,
                     chunk_index=idx,
-                    chunk_count=len(chunks),
+                    chunk_count=len(structured_chunks),
+                    section_title=structured_chunk.section_title,
+                    language=language,
                 )
 
             # 4. Mark document as ready
-            self._update_document_status(document_id, "ready", chunk_count=len(chunks))
-            logger.info(f"✅ Document {document_id} processed: {len(chunks)} chunks")
-            return len(chunks)
+            self._update_document_status(
+                document_id, "ready", chunk_count=len(structured_chunks)
+            )
+            logger.info(
+                "Document %s processed: %d chunks",
+                document_id,
+                len(structured_chunks),
+            )
+            return len(structured_chunks)
 
         except Exception as e:
             logger.error(f"❌ Document processing failed for {document_id}: {e}")
@@ -205,12 +216,16 @@ class DocumentProcessor:
         filename: str,
         chunk_index: int,
         chunk_count: int,
+        section_title: str = "",
+        language: str = "en",
     ):
         """Store a single chunk in Weaviate DocumentMemory (best-effort)."""
         if not (self.context_manager.weaviate and self.embedding_service):
             return
         try:
-            embedding = await self.embedding_service.generate_embedding(chunk)
+            embedding = await self.embedding_service.generate_embedding(
+                embedding_text(TextChunk(chunk, section_title), title=filename)
+            )
             self.context_manager.weaviate.store_memory(
                 DOCUMENT_COLLECTION,
                 {
@@ -220,6 +235,11 @@ class DocumentProcessor:
                     "filename": filename,
                     "chunk_index": chunk_index,
                     "chunk_count": chunk_count,
+                    "source_type": "document",
+                    "embedding_model": self.embedding_service.model,
+                    "section_title": section_title,
+                    "language": language,
+                    "document_version": "",
                     "created_at": datetime.now(timezone.utc).isoformat(),
                 },
                 embedding,
