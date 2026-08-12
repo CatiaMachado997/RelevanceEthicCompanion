@@ -33,7 +33,9 @@ def load_generated_scenarios() -> list[dict]:
         shard_rows = json.loads(shard.read_text(encoding="utf-8"))
         expected_rows = (end - start + 1) * 2
         if len(shard_rows) != expected_rows:
-            raise ValueError(f"{shard} has {len(shard_rows)} rows; expected {expected_rows}")
+            raise ValueError(
+                f"{shard} has {len(shard_rows)} rows; expected {expected_rows}"
+            )
         for offset, row in enumerate(shard_rows):
             context_index = start + offset // 2
             rows.append(

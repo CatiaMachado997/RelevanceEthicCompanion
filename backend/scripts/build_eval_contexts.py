@@ -20,7 +20,11 @@ def read_source(path: Path) -> str:
 def chunks(text: str, size: int = 600, overlap: int = 80) -> list[str]:
     words = re.sub(r"\s+", " ", text).strip().split(" ")
     step = size - overlap
-    return [" ".join(words[i : i + size]) for i in range(0, len(words), step) if len(words[i : i + size]) >= 120]
+    return [
+        " ".join(words[i : i + size])
+        for i in range(0, len(words), step)
+        if len(words[i : i + size]) >= 120
+    ]
 
 
 def main() -> None:
@@ -33,7 +37,8 @@ def main() -> None:
     sources = sorted(
         path
         for path in args.knowledge_base.glob("**/*")
-        if path.is_file() and path.suffix.lower() in {".pdf", ".md", ".txt"}
+        if path.is_file()
+        and path.suffix.lower() in {".pdf", ".md", ".txt"}
         and path.name not in {"README.md", "catalog.md", ".gitkeep"}
     )
     fingerprint = hashlib.sha256()
@@ -65,7 +70,9 @@ def main() -> None:
             break
         offset += 1
     if len(selected) < args.count:
-        raise SystemExit(f"Only {len(selected)} usable contexts; requested {args.count}")
+        raise SystemExit(
+            f"Only {len(selected)} usable contexts; requested {args.count}"
+        )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     manifest = args.output.with_suffix(".manifest.json")
@@ -80,7 +87,9 @@ def main() -> None:
             return
     args.output.write_text(json.dumps(selected, ensure_ascii=False, indent=2) + "\n")
     manifest.write_text(json.dumps(state, indent=2) + "\n")
-    print(f"wrote: {args.output} ({len(selected)} contexts from {len(sources)} sources)")
+    print(
+        f"wrote: {args.output} ({len(selected)} contexts from {len(sources)} sources)"
+    )
 
 
 if __name__ == "__main__":

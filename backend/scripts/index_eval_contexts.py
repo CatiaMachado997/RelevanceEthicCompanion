@@ -94,10 +94,7 @@ async def main() -> None:
         base_url=settings.OLLAMA_BASE_URL,
     )
     vectors = await embedder.generate_embeddings_batch(
-        [
-            embedding_text(row[3], title=source_name(row[1]))
-            for row in rows
-        ],
+        [embedding_text(row[3], title=source_name(row[1])) for row in rows],
         batch_size=args.batch_size,
     )
 

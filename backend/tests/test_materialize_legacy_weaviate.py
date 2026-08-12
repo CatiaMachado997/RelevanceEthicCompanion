@@ -9,9 +9,31 @@ def test_materialize_groups_orders_and_deduplicates(tmp_path):
         json.dumps(
             {
                 "objects": [
-                    {"properties": {"source": "policy.pdf", "page": 1, "start_index": 2, "text": "second"}},
-                    {"properties": {"source": "policy.pdf", "page": 0, "start_index": 1, "text": "first", "title": "Policy"}},
-                    {"properties": {"source": "policy.pdf", "page": 1, "start_index": 3, "text": "second"}},
+                    {
+                        "properties": {
+                            "source": "policy.pdf",
+                            "page": 1,
+                            "start_index": 2,
+                            "text": "second",
+                        }
+                    },
+                    {
+                        "properties": {
+                            "source": "policy.pdf",
+                            "page": 0,
+                            "start_index": 1,
+                            "text": "first",
+                            "title": "Policy",
+                        }
+                    },
+                    {
+                        "properties": {
+                            "source": "policy.pdf",
+                            "page": 1,
+                            "start_index": 3,
+                            "text": "second",
+                        }
+                    },
                 ]
             }
         ),

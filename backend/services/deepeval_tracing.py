@@ -22,9 +22,9 @@ def observe_retriever(function: F) -> F:
         try:
             from langsmith import traceable
 
-            wrapped = traceable(
-                run_type="retriever", name="ethic-companion-rag"
-            )(wrapped)  # type: ignore[assignment]
+            wrapped = traceable(run_type="retriever", name="ethic-companion-rag")(
+                wrapped
+            )  # type: ignore[assignment]
         except ImportError:
             pass
     if os.getenv("DEEPEVAL_TRACING_ENABLED") == "1":

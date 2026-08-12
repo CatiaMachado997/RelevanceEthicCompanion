@@ -36,6 +36,5 @@ generate_command.Synthesizer = LocalSynthesizer
 
 from deepeval.cli.main import app  # noqa: E402
 
-
 if __name__ == "__main__":
     app()

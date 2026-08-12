@@ -110,9 +110,7 @@ def validate_grounding(
             )
 
         outcome_anchors = context_tokens.union(field_tokens["scenario"])
-        outcome_overlap = outcome_anchors.intersection(
-            field_tokens["expected_outcome"]
-        )
+        outcome_overlap = outcome_anchors.intersection(field_tokens["expected_outcome"])
         outcome_similarity = None
         if len(outcome_overlap) < minimum_overlap and semantic_similarity:
             outcome_similarity = semantic_similarity(
@@ -261,9 +259,7 @@ def main() -> None:
 
     contexts = json.loads(args.contexts.read_text(encoding="utf-8"))
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    semantic_threshold = float(
-        os.getenv("RAG_GOLDEN_SEMANTIC_THRESHOLD", "0.50")
-    )
+    semantic_threshold = float(os.getenv("RAG_GOLDEN_SEMANTIC_THRESHOLD", "0.50"))
     semantic_similarity = (
         ollama_semantic_similarity if args.provider == "ollama" else None
     )
