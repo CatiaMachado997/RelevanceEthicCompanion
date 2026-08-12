@@ -7,7 +7,7 @@ Tests mock orchestrator.graph.stream_langgraph to avoid real DB/LLM calls.
 
 import pytest
 from httpx import AsyncClient, ASGITransport
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 
 async def mock_stream_langgraph(
@@ -77,3 +77,23 @@ async def test_stream_endpoint_ends_with_done_event():
             response = await client.get("/api/chat/stream?message=hello")
 
     assert '"event": "done"' in response.text or '"event":"done"' in response.text
+
+
+@pytest.mark.asyncio
+async def test_stream_endpoint_forwards_request_id():
+    from main import app
+    from config import settings
+
+    mocked = MagicMock(side_effect=mock_stream_langgraph)
+    with patch("orchestrator.graph.stream_langgraph", mocked), patch.object(
+        settings, "AUTH_ENFORCEMENT_ENABLED", False
+    ), patch.object(settings, "ENVIRONMENT", "development"):
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.get(
+                "/api/chat/stream?message=hello&request_id=request-123"
+            )
+
+    assert response.status_code == 200
+    assert mocked.call_args.kwargs["request_id"] == "request-123"

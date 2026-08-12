@@ -14,6 +14,9 @@ from tests.evals.metrics import (
     ExpectedContextHitMetric,
     ExpectedContextPrecisionMetric,
     ExpectedContextReciprocalRankMetric,
+    ExpectedSourceHitMetric,
+    ExpectedSourcePrecisionMetric,
+    ExpectedSourceReciprocalRankMetric,
 )
 
 
@@ -26,6 +29,12 @@ def make_case(retrieved):
         metadata={
             "expected_document_id": "doc-b",
             "retrieved_document_ids": ["doc-a", "doc-b", "doc-b"],
+            "expected_source_name": "authority.pdf",
+            "retrieved_filenames": [
+                "other.pdf",
+                "authority.pdf",
+                "authority.pdf",
+            ],
         },
     )
 
@@ -56,6 +65,18 @@ def test_expected_document_metrics_use_stable_document_identity():
     precision = ExpectedDocumentPrecisionMetric(0.5)
     hit = ExpectedDocumentHitMetric(1.0)
     reciprocal_rank = ExpectedDocumentReciprocalRankMetric(0.5)
+
+    assert precision.measure(case) == 0.5
+    assert hit.measure(case) == 1.0
+    assert reciprocal_rank.measure(case) == 0.5
+
+
+def test_expected_source_metrics_accept_another_chunk_from_same_source():
+    case = make_case(["different chunk", "expected context chunk"])
+
+    precision = ExpectedSourcePrecisionMetric(0.5)
+    hit = ExpectedSourceHitMetric(1.0)
+    reciprocal_rank = ExpectedSourceReciprocalRankMetric(0.5)
 
     assert precision.measure(case) == 0.5
     assert hit.measure(case) == 1.0

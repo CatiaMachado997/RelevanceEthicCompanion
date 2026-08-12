@@ -1,10 +1,35 @@
 from services.rag_query import (
     build_retrieval_queries,
     clean_retrieval_query,
+    contextualize_followup_query,
     expand_multilingual_query,
     reciprocal_rank_fusion,
     retrieval_query_weights,
 )
+
+
+def test_contextualize_followup_query_uses_latest_user_turn():
+    history = [
+        {"role": "user", "content": "Compare the NIST and EU AI Act approaches."},
+        {"role": "assistant", "content": "Here is the comparison."},
+        {"role": "user", "content": "Use the NIST approach for the checklist."},
+        {"role": "assistant", "content": "Drafted."},
+    ]
+
+    query = contextualize_followup_query("Change it to a two-week review.", history)
+
+    assert "Use the NIST approach for the checklist." in query
+    assert query.endswith("Current follow-up: Change it to a two-week review.")
+
+
+def test_contextualize_followup_query_leaves_standalone_request_unchanged():
+    query = "Explain the documentation requirements for high-risk AI systems."
+    assert (
+        contextualize_followup_query(
+            query, [{"role": "user", "content": "Unrelated earlier request."}]
+        )
+        == query
+    )
 
 
 def test_clean_retrieval_query_removes_synthetic_wrapper_and_tail():

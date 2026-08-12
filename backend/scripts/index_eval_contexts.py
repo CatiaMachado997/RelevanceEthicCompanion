@@ -39,6 +39,16 @@ def chunk_text(text: str) -> list[str]:
     ]
 
 
+def evaluation_document_id(source: dict[str, str], context_index: int) -> str:
+    """Return one stable document identity for every chunk from a source file."""
+    source_key = (
+        source.get("source_path")
+        or source.get("source_name")
+        or f"evaluation-context-{context_index:03d}.txt"
+    )
+    return f"eval-source-{uuid.uuid5(NAMESPACE, source_key).hex}"
+
+
 async def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("contexts", type=Path)
@@ -69,24 +79,28 @@ async def main() -> None:
         )
 
     rows: list[tuple[str, int, int, TextChunk, str]] = []
+    next_chunk_index: dict[str, int] = {}
     for context_index, context in enumerate(contexts):
+        document_id = evaluation_document_id(
+            source_metadata(context_index), context_index
+        )
         source_chunks = context if isinstance(context, list) else [str(context)]
-        chunk_index = 0
         for source in source_chunks:
             language = detect_language(str(source))
             for chunk in structure_aware_chunks(
                 str(source), max_words=CHUNK_SIZE, overlap_words=CHUNK_OVERLAP
             ):
+                chunk_index = next_chunk_index.get(document_id, 0)
                 rows.append(
                     (
-                        f"eval-context-{context_index:03d}",
+                        document_id,
                         context_index,
                         chunk_index,
                         chunk,
                         language,
                     )
                 )
-                chunk_index += 1
+                next_chunk_index[document_id] = chunk_index + 1
 
     embedder = EmbeddingService(
         provider="ollama",
@@ -111,13 +125,13 @@ async def main() -> None:
     for document_id, _, _, _, _ in rows:
         chunk_counts[document_id] = chunk_counts.get(document_id, 0) + 1
 
-    # Replace each document atomically at the logical level so changed chunk
-    # boundaries or embedding models never leave stale duplicate chunks.
-    for document_id in chunk_counts:
-        weaviate.delete_by_filter(
-            COLLECTION,
-            {"user_id": str(args.user_id), "document_id": document_id},
-        )
+    # Eval data is a derived index. Replace the user's eval namespace in one
+    # pass so removed sources, old per-context IDs, changed chunk boundaries,
+    # and embedding-model changes never leave stale duplicate objects.
+    removed = weaviate.delete_by_filter(
+        COLLECTION,
+        {"user_id": str(args.user_id), "source_type": "evaluation"},
+    )
 
     for row, vector in zip(rows, vectors):
         document_id, context_index, chunk_index, chunk, language = row
@@ -148,9 +162,11 @@ async def main() -> None:
             inserted += 1
 
     print(
-        f"indexed {len(rows)} chunks for {len(contexts)} contexts "
-        f"(inserted={inserted}, replaced={replaced}, dimension={len(vectors[0])})"
+        f"indexed {len(rows)} chunks from {len(contexts)} contexts into "
+        f"{len(chunk_counts)} source documents (removed={removed}, "
+        f"inserted={inserted}, replaced={replaced}, dimension={len(vectors[0])})"
     )
+    weaviate.close()
 
 
 if __name__ == "__main__":

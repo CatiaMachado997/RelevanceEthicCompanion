@@ -275,16 +275,18 @@ export const chatApi = {
           onToolPendingConfirmation?: (data: { tool_id: string; tool_name: string; action_name: string; preview: string }) => void
           onRateLimitWarning?: (level: string, message: string) => void
           onRateLimitExceeded?: (retryAfter: string, message: string) => void
-          onDone?: (data: { esl_decision?: Record<string, unknown>; citations?: CitationSource[]; document_sources?: DocumentSource[] }) => void
+          onDone?: (data: { esl_decision?: Record<string, unknown>; citations?: CitationSource[]; document_sources?: DocumentSource[]; user_turn_id?: string; assistant_turn_id?: string; persisted?: boolean }) => void
           // Sprint J callbacks
           onThoughtToken?: (token: string) => void
           onPlanStepActions?: (step: number, actions: Array<{ tool: string; params: unknown }>) => void
           onActionComplete?: (step: number, action_index: number, status: string, latency_ms: number) => void
+          onToolError?: (data: { tool: string; message: string; error_code: string; retryable: boolean }) => void
           onPlanPaused?: (payload: unknown) => void
           model?: string
           conversation_id?: string
           active_sources?: string[]
           force_retrieval?: boolean
+          request_id?: string
         },
   ): Promise<void> & { cancel: () => void } => {
     const callbacks =
@@ -318,6 +320,10 @@ export const chatApi = {
             callbacks.onToolResult?.(data.tool)
             return
           }
+          if (data.event === 'tool_error') {
+            callbacks.onToolError?.(data)
+            return
+          }
           if (data.event === 'tool_pending_confirmation') {
             callbacks.onToolPendingConfirmation?.(data)
             return
@@ -337,7 +343,7 @@ export const chatApi = {
             return
           }
           if (data.event === 'done') {
-            callbacks.onDone?.({ esl_decision: data.esl_decision, citations: data.citations, document_sources: data.document_sources })
+            callbacks.onDone?.({ esl_decision: data.esl_decision, citations: data.citations, document_sources: data.document_sources, user_turn_id: data.user_turn_id, assistant_turn_id: data.assistant_turn_id, persisted: data.persisted })
             controller.abort()
             finish()
             return
@@ -378,7 +384,7 @@ export const chatApi = {
             return
           }
           if (data.done) {
-            callbacks.onDone?.({ esl_decision: data.esl_decision, citations: data.citations, document_sources: data.document_sources })
+            callbacks.onDone?.({ esl_decision: data.esl_decision, citations: data.citations, document_sources: data.document_sources, user_turn_id: data.user_turn_id, assistant_turn_id: data.assistant_turn_id, persisted: data.persisted })
             controller.abort()
             finish()
             return
@@ -397,6 +403,7 @@ export const chatApi = {
         if (callbacks.conversation_id) params.set('conversation_id', callbacks.conversation_id)
         if (callbacks.active_sources?.length) params.set('active_sources', callbacks.active_sources.join(','))
         if (callbacks.force_retrieval) params.set('force_retrieval', 'true')
+        if (callbacks.request_id) params.set('request_id', callbacks.request_id)
 
         const token = await resolveAccessToken()
         const headers: Record<string, string> = { Accept: 'text/event-stream' }
@@ -464,7 +471,7 @@ export const chatApi = {
     trust?: boolean
     onToken?: (token: string) => void
     onPlanPaused?: (payload: unknown) => void
-    onDone?: () => void
+    onDone?: (data?: { user_turn_id?: string; assistant_turn_id?: string; persisted?: boolean }) => void
     onError?: (msg: string) => void
   }): { cancel: () => void } => {
     const controller = new AbortController()
@@ -495,6 +502,7 @@ export const chatApi = {
         const reader = response.body.getReader()
         const decoder = new TextDecoder()
         let buf = ''
+        let finished = false
 
         while (true) {
           const { value, done } = await reader.read()
@@ -511,20 +519,23 @@ export const chatApi = {
               } else if (data.event === 'plan_paused') {
                 params.onPlanPaused?.(data)
               } else if (data.event === 'done') {
-                params.onDone?.()
+                finished = true
+                params.onDone?.(data)
               } else if (data.event === 'error') {
-                params.onError?.(data.error)
+                finished = true
+                params.onError?.(data.message ?? data.error ?? 'Resume failed')
               } else if (data.token !== undefined) {
                 params.onToken?.(data.token)
               } else if (data.done) {
-                params.onDone?.()
+                finished = true
+                params.onDone?.(data)
               }
             } catch {
               // ignore parse errors
             }
           }
         }
-        params.onDone?.()
+        if (!finished) params.onError?.('Resume stream ended before completion')
       } catch (err) {
         if (err instanceof Error && err.name !== 'AbortError') {
           params.onError?.(err.message)
@@ -535,6 +546,9 @@ export const chatApi = {
     return { cancel: () => controller.abort() }
   },
 
+  paused: (threadId: string): Promise<Record<string, unknown>> =>
+    apiRequest<Record<string, unknown>>(`/api/chat/paused/${encodeURIComponent(threadId)}`),
+
   /**
    * Get conversation history
    */
@@ -542,6 +556,7 @@ export const chatApi = {
     apiRequest<{
       user_id: string
       messages: Array<{
+        id?: string
         role: string
         content: string
         timestamp: string
@@ -861,11 +876,37 @@ export const feedbackApi = {
     item_type: 'chat_response' | 'search_result' | 'calendar_event' | 'proactive_insight' | 'memory_recall'
     feedback_type: 'thumbs_up' | 'thumbs_down' | 'not_relevant' | 'value_conflict' | 'inaccurate'
     additional_notes?: string
+    corrected_answer?: string
   }) =>
     apiRequest<{ status: string; data: { success: boolean; feedback_id: string } }>('/api/feedback/', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+}
+
+export interface ControlledMemory {
+  id: string
+  content: string
+  kind: 'fact' | 'preference' | 'summary'
+  active: boolean
+  source_turn_id?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export const memoriesApi = {
+  list: () => apiRequest<{ memories: ControlledMemory[] }>('/api/memories'),
+  create: (content: string, kind: ControlledMemory['kind'] = 'fact') =>
+    apiRequest<ControlledMemory>('/api/memories', {
+      method: 'POST',
+      body: JSON.stringify({ content, kind }),
+    }),
+  update: (id: string, changes: Partial<Pick<ControlledMemory, 'content' | 'kind' | 'active'>>) =>
+    apiRequest<ControlledMemory>(`/api/memories/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(changes),
+    }),
+  forget: (id: string) => apiRequest<void>(`/api/memories/${id}`, { method: 'DELETE' }),
 }
 
 // ==================== Relevance API ====================
@@ -1720,6 +1761,7 @@ export const api = {
   transparency: transparencyApi,
   relevance: relevanceApi,
   feedback: feedbackApi,
+  memories: memoriesApi,
   events: eventsApi,
   dataSources: dataSourcesApi,
   settings: settingsApi,

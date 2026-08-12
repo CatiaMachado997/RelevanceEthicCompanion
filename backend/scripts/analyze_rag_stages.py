@@ -28,11 +28,18 @@ def _normalize(text: str) -> str:
     return " ".join(str(text).lower().split())
 
 
-def _flags(rows: list[dict], expected_document_id: str, top_k: int) -> list[bool]:
-    return [
-        str(row.get("document_id") or "") == expected_document_id
-        for row in rows[:top_k]
-    ]
+def _source_flags(
+    rows: list[dict], expected_source_name: str, top_k: int
+) -> list[bool]:
+    expected = expected_source_name.casefold()
+    found = False
+    flags: list[bool] = []
+    for row in rows[:top_k]:
+        filename = str(row.get("filename") or "").rsplit("/", 1)[-1].casefold()
+        relevant = filename == expected and not found
+        flags.append(relevant)
+        found = found or relevant
+    return flags
 
 
 def _summary(all_flags: list[list[bool]]) -> dict[str, float]:
@@ -58,12 +65,50 @@ def _summary(all_flags: list[list[bool]]) -> dict[str, float]:
     }
 
 
+def _rank_distribution(ranks: list[int | None]) -> dict[str, int]:
+    buckets = {
+        "rank_1": 0,
+        "rank_2_3": 0,
+        "rank_4_5": 0,
+        "rank_6_10": 0,
+        "rank_11_20": 0,
+        "missing": 0,
+    }
+    for rank in ranks:
+        if rank is None:
+            buckets["missing"] += 1
+        elif rank == 1:
+            buckets["rank_1"] += 1
+        elif rank <= 3:
+            buckets["rank_2_3"] += 1
+        elif rank <= 5:
+            buckets["rank_4_5"] += 1
+        elif rank <= 10:
+            buckets["rank_6_10"] += 1
+        else:
+            buckets["rank_11_20"] += 1
+    return buckets
+
+
 async def main() -> None:
     rows: list[dict] = []
-    for shard in sorted((BACKEND_DIR / "tests/evals/synthetic_data").glob("*.json")):
+    shard_dir = Path(
+        os.getenv(
+            "RAG_EVAL_DATA_DIR",
+            str(BACKEND_DIR / "tests/evals/synthetic_data"),
+        )
+    )
+    for shard in sorted(shard_dir.glob("rag_[0-9]*_[0-9]*.json")):
         rows.extend(json.loads(shard.read_text()))
     limit = int(os.getenv("RAG_STAGE_LIMIT", str(len(rows))))
     rows = rows[:limit]
+    manifest_path = Path(
+        os.getenv(
+            "RAG_EVAL_MANIFEST",
+            str(shard_dir.parent / "contexts.manifest.json"),
+        )
+    )
+    source_contexts = json.loads(manifest_path.read_text()).get("contexts") or []
     top_k = int(os.getenv("RAG_EVAL_TOP_K", "3"))
     candidate_limit = int(os.getenv("RAG_CANDIDATE_FLOOR", "20"))
     query_expansion = os.getenv("RAG_QUERY_EXPANSION", "0") == "1"
@@ -78,13 +123,16 @@ async def main() -> None:
     if weaviate is None:
         raise SystemExit("Weaviate is unavailable")
 
-    stage_flags: dict[str, list[list[bool]]] = {
+    source_stage_flags: dict[str, list[list[bool]]] = {
         "original-hybrid": [],
         "cleaned-hybrid": [],
         "rrf-fusion": [],
         "local-rerank": [],
         "diversity": [],
     }
+    candidate_ranks: list[int | None] = []
+    difficult_examples: list[dict] = []
+    example_limit = int(os.getenv("RAG_STAGE_EXAMPLE_LIMIT", "0"))
     for case_index, golden in enumerate(rows):
         query = golden["scenario"]
         queries = build_retrieval_queries(query, expand=query_expansion)
@@ -136,7 +184,39 @@ async def main() -> None:
         ]
         reranked = local_rerank(queries[0], fused, top_k=len(fused))
         diverse = select_diverse_results(reranked, top_k=top_k)
-        expected_document_id = f"eval-context-{case_index // 2:03d}"
+        expected_source_name = source_contexts[case_index // 2]["source_name"]
+        candidate_rank = next(
+            (
+                index
+                for index, row in enumerate(original[:candidate_limit], start=1)
+                if str(row.get("filename") or "").rsplit("/", 1)[-1].casefold()
+                == expected_source_name.casefold()
+            ),
+            None,
+        )
+        candidate_ranks.append(candidate_rank)
+        if (
+            example_limit
+            and candidate_rank != 1
+            and len(difficult_examples) < example_limit
+        ):
+            difficult_examples.append(
+                {
+                    "case_index": case_index,
+                    "query": query[:240],
+                    "expected_source_name": expected_source_name,
+                    "expected_rank": candidate_rank,
+                    "top_candidates": [
+                        {
+                            "document_id": row.get("document_id"),
+                            "filename": row.get("filename"),
+                            "score": row.get("score"),
+                            "snippet": str(row.get("snippet") or "")[:160],
+                        }
+                        for row in original[:5]
+                    ],
+                }
+            )
         for name, result in (
             ("original-hybrid", original),
             ("cleaned-hybrid", cleaned),
@@ -144,11 +224,22 @@ async def main() -> None:
             ("local-rerank", reranked),
             ("diversity", diverse),
         ):
-            stage_flags[name].append(_flags(result, expected_document_id, top_k))
+            source_stage_flags[name].append(
+                _source_flags(result, expected_source_name, top_k)
+            )
 
     print(
         json.dumps(
-            {name: _summary(flags) for name, flags in stage_flags.items()}, indent=2
+            {
+                "source_stages": {
+                    name: _summary(flags) for name, flags in source_stage_flags.items()
+                },
+                "source_candidate_rank_distribution": _rank_distribution(
+                    candidate_ranks
+                ),
+                "difficult_examples": difficult_examples,
+            },
+            indent=2,
         )
     )
     weaviate.client.close()

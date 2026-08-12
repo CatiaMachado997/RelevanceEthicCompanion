@@ -239,11 +239,12 @@ CREATE INDEX IF NOT EXISTS idx_data_sources_enabled ON data_sources(enabled);
 CREATE TABLE IF NOT EXISTS relevance_feedback (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    item_type TEXT NOT NULL CHECK (item_type IN ('search_result', 'memory', 'calendar_event', 'summary', 'proactive_suggestion')),
+    item_type TEXT NOT NULL CHECK (item_type IN ('chat_response', 'search_result', 'calendar_event', 'proactive_insight', 'memory_recall', 'memory', 'summary', 'proactive_suggestion')),
     item_id TEXT NOT NULL,
-    feedback_type TEXT NOT NULL CHECK (feedback_type IN ('thumbs_up', 'thumbs_down', 'dismiss', 'engage')),
+    feedback_type TEXT NOT NULL CHECK (feedback_type IN ('thumbs_up', 'thumbs_down', 'not_relevant', 'value_conflict', 'inaccurate', 'dismiss', 'engage')),
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    context_snapshot JSONB DEFAULT '{}'
+    context_snapshot JSONB DEFAULT '{}',
+    corrected_answer TEXT
 );
 
 -- Indexes
@@ -296,6 +297,22 @@ CREATE INDEX IF NOT EXISTS idx_conversation_turns_user_time
 
 ALTER TABLE conversation_turns ADD COLUMN IF NOT EXISTS conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS idx_conversation_turns_conv_id ON conversation_turns(conversation_id, created_at ASC);
+
+-- Explicit long-term memory: only user-approved active rows enter prompts.
+CREATE TABLE IF NOT EXISTS user_memories (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    content TEXT NOT NULL CHECK (char_length(content) BETWEEN 1 AND 2000),
+    kind TEXT NOT NULL DEFAULT 'fact' CHECK (kind IN ('fact', 'preference', 'summary')),
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    source_turn_id UUID REFERENCES conversation_turns(id) ON DELETE SET NULL,
+    metadata JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_memories_active
+    ON user_memories(user_id, updated_at DESC) WHERE active = TRUE;
 
 -- ==================== Relevance Adjustments Table ====================
 -- User-specific multipliers nudged by feedback signals

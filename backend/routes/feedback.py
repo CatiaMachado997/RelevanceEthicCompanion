@@ -27,7 +27,12 @@ async def submit_feedback(
             item_type=request.item_type,
             feedback_type=request.feedback_type,
             additional_notes=request.additional_notes,
+            corrected_answer=request.corrected_answer,
         )
+        if result.get("success") is False:
+            raise HTTPException(
+                status_code=400, detail=result.get("error", "Invalid feedback")
+            )
         # Close the feedback loop: nudge relevance weights based on patterns
         await processor.adjust_signal_from_feedback(
             user_id=str(user_id),
@@ -41,6 +46,8 @@ async def submit_feedback(
                 content_category=request.item_type,
             )
         return {"status": "success", "data": result}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error submitting feedback: {str(e)}"

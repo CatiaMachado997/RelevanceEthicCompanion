@@ -10,9 +10,10 @@ async def test_store_conversation_turn(mock_db):
     mock_db.return_value.__enter__.return_value = mock_conn
     mock_cur = MagicMock()
     mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+    mock_cur.fetchone.return_value = {"id": "turn-123"}
 
     cm = ContextManager()
-    await cm.store_conversation_turn(
+    turn_id = await cm.store_conversation_turn(
         user_id="00000000-0000-0000-0000-000000000000", role="user", content="Hello"
     )
 
@@ -22,6 +23,7 @@ async def test_store_conversation_turn(mock_db):
     params = call_args[1]
     # Includes the JSONB metadata column (defaults to "{}" when not provided).
     assert params == ("00000000-0000-0000-0000-000000000000", "user", "Hello", "{}")
+    assert turn_id == "turn-123"
 
 
 @pytest.mark.asyncio
@@ -49,6 +51,33 @@ async def test_get_conversation_history_returns_ordered(mock_db):
     call_args = mock_cur.execute.call_args[0]
     params = call_args[1]
     assert params[1] == 20  # limit parameter
+
+
+@pytest.mark.asyncio
+@patch("services.context_manager.get_db_connection")
+async def test_conversation_history_uses_newest_window_for_conversation(mock_db):
+    mock_conn = MagicMock()
+    mock_db.return_value.__enter__.return_value = mock_conn
+    mock_cur = MagicMock()
+    mock_conn.cursor.return_value.__enter__.return_value = mock_cur
+    mock_cur.fetchall.return_value = []
+
+    cm = ContextManager()
+    await cm.get_conversation_history(
+        user_id="00000000-0000-0000-0000-000000000000",
+        limit=20,
+        conversation_id="10000000-0000-0000-0000-000000000000",
+    )
+
+    sql, params = mock_cur.execute.call_args[0]
+    assert "ORDER BY created_at DESC" in sql
+    assert ") recent" in sql
+    assert sql.rstrip().endswith("ORDER BY created_at ASC")
+    assert params == (
+        "00000000-0000-0000-0000-000000000000",
+        "10000000-0000-0000-0000-000000000000",
+        20,
+    )
 
 
 @pytest.mark.asyncio

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from deepeval.metrics import BaseMetric
 from deepeval.test_case import LLMTestCase, SingleTurnParams
 
@@ -31,6 +33,20 @@ def _document_relevance_flags(test_case: LLMTestCase) -> list[bool]:
     return flags
 
 
+def _source_relevance_flags(test_case: LLMTestCase) -> list[bool]:
+    metadata = test_case.metadata or {}
+    expected = str(metadata.get("expected_source_name") or "").casefold()
+    retrieved = metadata.get("retrieved_filenames") or []
+    found = False
+    flags: list[bool] = []
+    for filename in retrieved:
+        normalized = str(filename or "").rsplit("/", 1)[-1].casefold()
+        relevant = bool(expected) and normalized == expected and not found
+        flags.append(relevant)
+        found = found or relevant
+    return flags
+
+
 class _ExpectedContextMetric(BaseMetric):
     _required_params = [SingleTurnParams.CONTEXT, SingleTurnParams.RETRIEVAL_CONTEXT]
     async_mode = False
@@ -42,6 +58,47 @@ class _ExpectedContextMetric(BaseMetric):
 
     async def a_measure(self, test_case: LLMTestCase, *args, **kwargs) -> float:
         return self.measure(test_case, *args, **kwargs)
+
+
+class ToolActionReliabilityMetric(BaseMetric):
+    """Deterministic contract metric for tool execution safety outcomes."""
+
+    _required_params = [
+        SingleTurnParams.ACTUAL_OUTPUT,
+        SingleTurnParams.EXPECTED_OUTPUT,
+    ]
+    async_mode = False
+    include_reason = True
+    evaluation_model = "deterministic-tool-action-contract"
+
+    def __init__(self, threshold: float = 1.0):
+        self.threshold = threshold
+
+    def measure(self, test_case: LLMTestCase, *args, **kwargs) -> float:
+        import json
+
+        actual = json.loads(test_case.actual_output or "{}")
+        expected = json.loads(test_case.expected_output or "{}")
+        mismatches = {
+            key: {"expected": value, "actual": actual.get(key)}
+            for key, value in expected.items()
+            if actual.get(key) != value
+        }
+        self.score = 0.0 if mismatches else 1.0
+        self.reason = (
+            f"contract mismatches: {mismatches}"
+            if mismatches
+            else "tool action reliability contract satisfied"
+        )
+        self.success = self.is_successful()
+        return self.score
+
+    async def a_measure(self, test_case: LLMTestCase, *args, **kwargs) -> float:
+        return self.measure(test_case, *args, **kwargs)
+
+    @property
+    def __name__(self) -> str:
+        return "Tool Action Reliability"
 
 
 class ExpectedContextPrecisionMetric(_ExpectedContextMetric):
@@ -103,7 +160,7 @@ class ExpectedContextReciprocalRankMetric(_ExpectedContextMetric):
 
 
 class _ExpectedDocumentMetric(_ExpectedContextMetric):
-    """Base class for stable document-identity retrieval metrics."""
+    """Base class for strict synthetic context-container identity metrics."""
 
 
 class ExpectedDocumentPrecisionMetric(_ExpectedDocumentMetric):
@@ -161,7 +218,70 @@ class ExpectedDocumentReciprocalRankMetric(_ExpectedDocumentMetric):
         return "Expected Document Reciprocal Rank"
 
 
+class ExpectedSourcePrecisionMetric(_ExpectedContextMetric):
+    """Average precision using the authoritative source filename identity."""
+
+    def measure(self, test_case: LLMTestCase, *args, **kwargs) -> float:
+        flags = _source_relevance_flags(test_case)
+        precisions = [
+            sum(flags[: index + 1]) / (index + 1)
+            for index, relevant in enumerate(flags)
+            if relevant
+        ]
+        self.score = sum(precisions) / len(precisions) if precisions else 0.0
+        ranks = [index + 1 for index, relevant in enumerate(flags) if relevant]
+        self.reason = (
+            f"expected source matches at ranks {ranks}"
+            if ranks
+            else "expected source missed"
+        )
+        self.success = self.is_successful()
+        return self.score
+
+    @property
+    def __name__(self) -> str:
+        return "Expected Source Average Precision"
+
+
+class ExpectedSourceHitMetric(_ExpectedContextMetric):
+    def measure(self, test_case: LLMTestCase, *args, **kwargs) -> float:
+        self.score = 1.0 if any(_source_relevance_flags(test_case)) else 0.0
+        self.reason = (
+            "expected source retrieved" if self.score else "expected source missed"
+        )
+        self.success = self.is_successful()
+        return self.score
+
+    @property
+    def __name__(self) -> str:
+        return "Expected Source Hit Rate"
+
+
+class ExpectedSourceReciprocalRankMetric(_ExpectedContextMetric):
+    def measure(self, test_case: LLMTestCase, *args, **kwargs) -> float:
+        flags = _source_relevance_flags(test_case)
+        first_rank = next((index + 1 for index, flag in enumerate(flags) if flag), None)
+        self.score = 1.0 / first_rank if first_rank else 0.0
+        self.reason = (
+            f"expected source first appears at rank {first_rank}"
+            if first_rank
+            else "expected source absent"
+        )
+        self.success = self.is_successful()
+        return self.score
+
+    @property
+    def __name__(self) -> str:
+        return "Expected Source Reciprocal Rank"
+
+
 RAG_RETRIEVER_METRICS = [
+    ExpectedSourcePrecisionMetric(threshold=0.6),
+    ExpectedSourceHitMetric(threshold=1.0),
+    ExpectedSourceReciprocalRankMetric(threshold=0.5),
+]
+
+RAG_STRICT_DOCUMENT_ID_METRICS = [
     ExpectedDocumentPrecisionMetric(threshold=0.6),
     ExpectedDocumentHitMetric(threshold=1.0),
     ExpectedDocumentReciprocalRankMetric(threshold=0.5),
@@ -172,3 +292,52 @@ RAG_STRICT_CHUNK_METRICS = [
     ExpectedContextHitMetric(threshold=1.0),
     ExpectedContextReciprocalRankMetric(threshold=0.5),
 ]
+
+
+def chatbot_answer_metrics():
+    """Create judge-backed metrics after the selected eval provider is configured."""
+    from deepeval.metrics import (
+        AnswerRelevancyMetric,
+        FaithfulnessMetric,
+        GEval,
+    )
+    from deepeval.test_case import LLMTestCaseParams
+
+    async_mode = os.getenv("DEEPEVAL_METRICS_ASYNC", "0") == "1"
+    return [
+        FaithfulnessMetric(threshold=0.7, async_mode=async_mode),
+        AnswerRelevancyMetric(threshold=0.7, async_mode=async_mode),
+        GEval(
+            name="Grounded answer correctness",
+            criteria=(
+                "The answer must correctly address the request, preserve important "
+                "qualifications from the expected answer, and avoid unsupported claims."
+            ),
+            evaluation_params=[
+                LLMTestCaseParams.INPUT,
+                LLMTestCaseParams.ACTUAL_OUTPUT,
+                LLMTestCaseParams.EXPECTED_OUTPUT,
+                LLMTestCaseParams.RETRIEVAL_CONTEXT,
+            ],
+            threshold=0.7,
+            async_mode=async_mode,
+        ),
+    ]
+
+
+def chatbot_conversation_metrics():
+    """Metrics that evaluate behavior across turns, not isolated answers."""
+    from deepeval.metrics import (
+        ConversationCompletenessMetric,
+        KnowledgeRetentionMetric,
+        RoleAdherenceMetric,
+        TurnRelevancyMetric,
+    )
+
+    async_mode = os.getenv("DEEPEVAL_METRICS_ASYNC", "0") == "1"
+    return [
+        ConversationCompletenessMetric(threshold=0.7, async_mode=async_mode),
+        KnowledgeRetentionMetric(threshold=0.7, async_mode=async_mode),
+        TurnRelevancyMetric(threshold=0.7, async_mode=async_mode),
+        RoleAdherenceMetric(threshold=0.7, async_mode=async_mode),
+    ]

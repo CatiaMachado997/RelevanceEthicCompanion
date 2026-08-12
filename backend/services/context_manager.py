@@ -213,7 +213,7 @@ class ContextManager:
         content: str,
         conversation_id: Optional[str] = None,
         metadata: Optional[dict] = None,
-    ) -> None:
+    ) -> Optional[str]:
         """Store a single conversation turn in PostgreSQL for reliable ordered retrieval.
 
         `metadata` carries per-turn structured data (e.g. document_sources for
@@ -232,6 +232,7 @@ class ContextManager:
                         """
                         INSERT INTO conversation_turns (user_id, role, content, conversation_id, metadata)
                         VALUES (%s, %s, %s, %s, %s::jsonb)
+                        RETURNING id
                     """,
                         (user_id, role, content, conversation_id, meta_json),
                     )
@@ -240,10 +241,85 @@ class ContextManager:
                         """
                         INSERT INTO conversation_turns (user_id, role, content, metadata)
                         VALUES (%s, %s, %s, %s::jsonb)
+                        RETURNING id
                     """,
                         (user_id, role, content, meta_json),
                     )
+                row = cur.fetchone()
         logger.debug(f"Stored conversation turn ({role}) for user {user_id}")
+        if not row:
+            return None
+        return str(row["id"] if isinstance(row, dict) else row[0])
+
+    async def store_conversation_exchange(
+        self,
+        user_id: str,
+        user_content: str,
+        assistant_content: str,
+        conversation_id: Optional[str] = None,
+        assistant_metadata: Optional[dict] = None,
+    ) -> dict[str, Optional[str]]:
+        """Atomically store both sides of one completed chat exchange.
+
+        A single transaction prevents half-saved conversations where the user
+        turn exists but the assistant turn does not. Named conversations are
+        also touched and receive a useful title after their first user turn.
+        """
+        meta_json = json.dumps(assistant_metadata or {})
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO conversation_turns
+                        (user_id, role, content, conversation_id, metadata)
+                    VALUES (%s, 'user', %s, %s, '{}'::jsonb)
+                    RETURNING id
+                    """,
+                    (user_id, user_content, conversation_id),
+                )
+                user_row = cur.fetchone()
+                if not user_row:
+                    raise RuntimeError("User conversation turn insert returned no row")
+
+                cur.execute(
+                    """
+                    INSERT INTO conversation_turns
+                        (user_id, role, content, conversation_id, metadata)
+                    VALUES (%s, 'assistant', %s, %s, %s::jsonb)
+                    RETURNING id
+                    """,
+                    (user_id, assistant_content, conversation_id, meta_json),
+                )
+                assistant_row = cur.fetchone()
+                if not assistant_row:
+                    raise RuntimeError(
+                        "Assistant conversation turn insert returned no row"
+                    )
+
+                if conversation_id:
+                    title = " ".join(user_content.split())[:100] or "New conversation"
+                    cur.execute(
+                        """
+                        UPDATE conversations
+                        SET updated_at = NOW(),
+                            title = CASE
+                                WHEN title = 'New conversation' THEN %s
+                                ELSE title
+                            END
+                        WHERE id = %s AND user_id = %s
+                        """,
+                        (title, conversation_id, user_id),
+                    )
+                    if cur.rowcount != 1:
+                        raise RuntimeError("Conversation not found for stored exchange")
+
+        def row_id(row: Any) -> str:
+            return str(row["id"] if isinstance(row, dict) else row[0])
+
+        return {
+            "user_turn_id": row_id(user_row),
+            "assistant_turn_id": row_id(assistant_row),
+        }
 
     async def get_conversation_history(
         self, user_id: str, limit: int = 20, conversation_id: Optional[str] = None
@@ -258,18 +334,24 @@ class ContextManager:
                 if conversation_id:
                     cur.execute(
                         """
-                        SELECT role, content, created_at, metadata FROM conversation_turns
-                        WHERE user_id = %s AND conversation_id = %s
-                        ORDER BY created_at ASC LIMIT %s
+                        SELECT id, role, content, created_at, metadata
+                        FROM (
+                            SELECT id, role, content, created_at, metadata
+                            FROM conversation_turns
+                            WHERE user_id = %s AND conversation_id = %s
+                            ORDER BY created_at DESC
+                            LIMIT %s
+                        ) recent
+                        ORDER BY created_at ASC
                     """,
                         (user_id, conversation_id, limit),
                     )
                 else:
                     cur.execute(
                         """
-                        SELECT role, content, metadata, created_at
+                        SELECT id, role, content, metadata, created_at
                         FROM (
-                            SELECT role, content, metadata, created_at
+                            SELECT id, role, content, metadata, created_at
                             FROM conversation_turns
                             WHERE user_id = %s
                             ORDER BY created_at DESC
@@ -282,6 +364,7 @@ class ContextManager:
                 rows = cur.fetchall()
         return [
             {
+                "id": str(row["id"]) if row.get("id") is not None else None,
                 "role": row["role"],
                 "content": row["content"],
                 "created_at": row.get("created_at"),
@@ -306,7 +389,7 @@ class ContextManager:
                            target_date, created_at, completed_at, metadata
                     FROM goals
                     WHERE user_id = %s AND status = 'active'
-                    ORDER BY priority DESC
+                    ORDER BY priority ASC
                 """,
                     (user_id,),
                 )
@@ -359,8 +442,12 @@ class ContextManager:
                 result = cur.fetchone()
                 if result is None:
                     raise RuntimeError("Insert goals returned no row")
-                goal.id = str(result[0])
-                goal.created_at = result[1]
+                if isinstance(result, dict):
+                    goal.id = str(result["id"])
+                    goal.created_at = result["created_at"]
+                else:
+                    goal.id = str(result[0])
+                    goal.created_at = result[1]
 
                 logger.debug(f"✅ Created goal: {goal.id}")
                 return goal

@@ -27,6 +27,13 @@ os.environ.update(
         "LOCAL_MODEL_FORMAT": "json",
     }
 )
+# Groq's free/on-demand TPM window commonly asks callers to retry after
+# 10–20 seconds. DeepEval's 5-second default cap retries too early, so use a
+# provider-appropriate backoff while keeping the run fully automatic.
+os.environ.setdefault("DEEPEVAL_RETRY_MAX_ATTEMPTS", "4")
+os.environ.setdefault("DEEPEVAL_RETRY_INITIAL_SECONDS", "16")
+os.environ.setdefault("DEEPEVAL_RETRY_CAP_SECONDS", "30")
+os.environ.setdefault("DEEPEVAL_RETRY_JITTER", "1")
 
 # DeepEval 4.1's LocalModel stores LOCAL_MODEL_FORMAT but does not forward it
 # to OpenAI-compatible chat completions. Groq requires prompts to mention JSON
@@ -45,6 +52,9 @@ def _needs_json_mode(prompt, schema) -> bool:
 def _generate_with_conditional_json(self, prompt, schema=None):
     original_kwargs = self.generation_kwargs
     self.generation_kwargs = dict(original_kwargs)
+    self.generation_kwargs.setdefault(
+        "max_completion_tokens", int(os.getenv("GROQ_EVAL_MAX_TOKENS", "4096"))
+    )
     if _needs_json_mode(prompt, schema):
         self.generation_kwargs.setdefault("response_format", {"type": "json_object"})
     try:
@@ -56,6 +66,9 @@ def _generate_with_conditional_json(self, prompt, schema=None):
 async def _a_generate_with_conditional_json(self, prompt, schema=None):
     original_kwargs = self.generation_kwargs
     self.generation_kwargs = dict(original_kwargs)
+    self.generation_kwargs.setdefault(
+        "max_completion_tokens", int(os.getenv("GROQ_EVAL_MAX_TOKENS", "4096"))
+    )
     if _needs_json_mode(prompt, schema):
         self.generation_kwargs.setdefault("response_format", {"type": "json_object"})
     try:

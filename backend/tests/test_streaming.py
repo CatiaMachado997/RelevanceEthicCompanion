@@ -18,10 +18,10 @@ async def test_stream_langgraph_yields_tokens():
     mock_chunk.content = "Hello world"
 
     async def fake_astream_events(state, config=None, *, version="v2"):
-        # Simulate on_chat_model_stream from tool_planner (a RESPONSE_NODE)
+        # Simulate on_chat_model_stream from the final synthesis node.
         yield {
             "event": "on_chat_model_stream",
-            "metadata": {"langgraph_node": "tool_planner"},
+            "metadata": {"langgraph_node": "tool_execution"},
             "data": {"chunk": mock_chunk},
         }
         # Simulate LangGraph graph-level completion event
@@ -34,9 +34,10 @@ async def test_stream_langgraph_yields_tokens():
     mock_graph = MagicMock()
     mock_graph.astream_events = fake_astream_events
 
-    with patch("orchestrator.graph.get_graph", return_value=mock_graph), patch(
-        "orchestrator.graph._post_stream_store", new_callable=AsyncMock
-    ):
+    with patch("orchestrator.graph._settings") as flags, patch(
+        "orchestrator.graph.get_graph", return_value=mock_graph
+    ), patch("orchestrator.graph._post_stream_store", new_callable=AsyncMock):
+        flags.STREAMING_REASONING_ENABLED = False
         received = []
         async for event in stream_langgraph(
             user_id="test-user",
@@ -51,6 +52,43 @@ async def test_stream_langgraph_yields_tokens():
     assert event_types.count("done") == 1, f"Expected exactly one done: {event_types}"
     # done must be last
     assert event_types[-1] == "done", f"done must be last: {event_types}"
+
+
+@pytest.mark.asyncio
+async def test_planner_text_is_not_exposed_as_answer():
+    """Planner scratch text must stay hidden when reasoning streaming is off."""
+    from orchestrator.graph import stream_langgraph
+
+    mock_chunk = MagicMock()
+    mock_chunk.content = "I should call create_goal"
+
+    async def fake_astream_events(state, config=None, *, version="v2"):
+        yield {
+            "event": "on_chat_model_stream",
+            "metadata": {"langgraph_node": "tool_planner"},
+            "data": {"chunk": mock_chunk},
+        }
+        yield {
+            "event": "on_chain_end",
+            "name": "LangGraph",
+            "data": {"output": {"response_text": "Goal saved."}},
+        }
+
+    graph = MagicMock()
+    graph.astream_events = fake_astream_events
+    with patch("orchestrator.graph._settings") as flags, patch(
+        "orchestrator.graph.get_graph", return_value=graph
+    ), patch("orchestrator.graph._post_stream_store", new_callable=AsyncMock):
+        flags.STREAMING_REASONING_ENABLED = False
+        events = [
+            event
+            async for event in stream_langgraph(
+                user_id="test-user", message="Save a goal"
+            )
+        ]
+
+    tokens = [event["token"] for event in events if event.get("event") == "token"]
+    assert tokens == ["Goal saved."]
 
 
 @pytest.mark.asyncio

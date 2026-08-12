@@ -11,10 +11,12 @@ class AgentState(TypedDict):
     message: str
     conversation_id: Optional[str]
     model: str
+    request_id: Optional[str]  # stable across explicit client retries
 
     # Context
     user_context: dict  # goals, values, focus_mode, recent_memory
     conversation_history: list  # [{role, content}, ...]
+    conversation_history_override: Optional[list]  # eval-only, avoids DB writes
 
     # Intent
     intent: str  # "chat" | "research_quick" | "plan" | "search" | "file_question"

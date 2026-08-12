@@ -29,6 +29,7 @@ JINA_RERANK_URL = "https://api.jina.ai/v1/rerank"
 DEFAULT_MODEL = "jina-reranker-v2-base-multilingual"
 DEFAULT_TIMEOUT = 10.0
 DEFAULT_METADATA_WEIGHT = float(os.getenv("RAG_METADATA_RERANK_WEIGHT", "0"))
+DEFAULT_LEXICAL_WEIGHT = float(os.getenv("RAG_LOCAL_RERANK_LEXICAL_WEIGHT", "0.2"))
 _TOKEN = re.compile(r"[^\W_]+", re.UNICODE)
 _STOPWORDS = {
     "a",
@@ -76,6 +77,7 @@ def local_rerank(
     top_k: int,
     text_field: str = "snippet",
     metadata_weight: float = DEFAULT_METADATA_WEIGHT,
+    lexical_weight: float = DEFAULT_LEXICAL_WEIGHT,
 ) -> list[dict]:
     """Rerank locally using query-term IDF coverage plus the hybrid score."""
     if not candidates:
@@ -83,6 +85,10 @@ def local_rerank(
     query_terms = set(_tokens(query))
     if not 0 <= metadata_weight <= 0.4:
         raise ValueError("metadata_weight must be between 0 and 0.4")
+    if not 0 <= lexical_weight <= 0.8:
+        raise ValueError("lexical_weight must be between 0 and 0.8")
+    if lexical_weight + metadata_weight > 0.8:
+        raise ValueError("lexical and metadata weights must total at most 0.8")
     documents = [set(_tokens(str(item.get(text_field, "")))) for item in candidates]
     metadata_documents = [
         set(
@@ -126,9 +132,9 @@ def local_rerank(
         # The hybrid retriever already carries strong semantic evidence. The
         # local scorer acts as a conservative lexical correction, not a reset.
         score = (
-            0.2 * lexical
+            lexical_weight * lexical
             + metadata_weight * metadata_score
-            + (0.8 - metadata_weight) * normalized_hybrid
+            + (1.0 - lexical_weight - metadata_weight) * normalized_hybrid
         )
         row = dict(item)
         row["rerank_score"] = score
@@ -149,6 +155,7 @@ async def rerank(
     text_field: str = "snippet",
     provider: str = "auto",
     metadata_weight: float = DEFAULT_METADATA_WEIGHT,
+    lexical_weight: float = DEFAULT_LEXICAL_WEIGHT,
 ) -> list[dict]:
     """Rerank a list of candidate chunks by query relevance using Jina API.
 
@@ -175,6 +182,7 @@ async def rerank(
             top_k=top_k,
             text_field=text_field,
             metadata_weight=metadata_weight,
+            lexical_weight=lexical_weight,
         )
 
     model_name = model or DEFAULT_MODEL
@@ -203,6 +211,7 @@ async def rerank(
             top_k=top_k,
             text_field=text_field,
             metadata_weight=metadata_weight,
+            lexical_weight=lexical_weight,
         )
 
     try:
@@ -226,6 +235,7 @@ async def rerank(
             top_k=top_k,
             text_field=text_field,
             metadata_weight=metadata_weight,
+            lexical_weight=lexical_weight,
         )
 
     logger.info(

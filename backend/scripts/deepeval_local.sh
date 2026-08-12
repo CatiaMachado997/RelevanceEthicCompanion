@@ -3,6 +3,8 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 BACKEND_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+. "$SCRIPT_DIR/python_runtime.sh"
+PYTHON_BIN=$(resolve_backend_python "$BACKEND_DIR")
 
 # Ollama model defaults with no dotenv or global DeepEval provider state.
 # Set DEEPEVAL_HOSTED=1 plus CONFIDENT_API_KEY to upload run comparisons.
@@ -23,4 +25,4 @@ export LOCAL_EMBEDDING_MODEL_NAME=${LOCAL_EMBEDDING_MODEL_NAME:-bge-m3:latest}
 export LOCAL_EMBEDDING_BASE_URL=${LOCAL_EMBEDDING_BASE_URL:-http://127.0.0.1:11434}
 export DEEPEVAL_TRACING_ENABLED=1
 
-exec "$BACKEND_DIR/venv/bin/python" "$SCRIPT_DIR/deepeval_cli_local.py" "$@"
+exec "$PYTHON_BIN" "$SCRIPT_DIR/deepeval_cli_local.py" "$@"

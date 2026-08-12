@@ -75,10 +75,10 @@ async def test_force_retrieval_injects_search_documents(
 @patch("services.langchain_tools.create_langchain_tools")
 @patch("langchain_groq.ChatGroq")
 @patch("orchestrator.nodes.tools.get_context_manager")
-async def test_force_retrieval_does_not_duplicate_existing_call(
+async def test_force_retrieval_bypasses_provider_tool_selection(
     mock_cm, mock_groq_cls, mock_create_tools
 ):
-    """If the planner LLM already chose search_documents, don't add a second."""
+    """Explicit retrieval is deterministic even if provider tool calls are flaky."""
     from orchestrator.nodes.tools import tool_planner_node
 
     mock_cm.return_value = MagicMock()
@@ -101,7 +101,40 @@ async def test_force_retrieval_does_not_duplicate_existing_call(
     out = await tool_planner_node(_base_state(force_retrieval=True))
 
     assert len(out["tool_calls"]) == 1
-    assert out["tool_calls"][0]["id"] == "call_abc"
+    assert out["tool_calls"][0]["id"] == "forced_search_documents"
+    llm_with_tools.ainvoke.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@patch("services.langchain_tools.create_langchain_tools")
+@patch("langchain_groq.ChatGroq")
+@patch("orchestrator.nodes.tools.get_context_manager")
+async def test_force_retrieval_contextualizes_pronoun_followup(
+    mock_cm, mock_groq_cls, mock_create_tools
+):
+    from orchestrator.nodes.tools import tool_planner_node
+
+    mock_cm.return_value = MagicMock()
+    mock_create_tools.return_value = []
+    mock_groq_cls.return_value = MagicMock()
+
+    out = await tool_planner_node(
+        _base_state(
+            force_retrieval=True,
+            message="What about its documentation?",
+            conversation_history=[
+                {
+                    "role": "user",
+                    "content": "Explain obligations for a high-risk AI system.",
+                },
+                {"role": "assistant", "content": "Here is a summary."},
+            ],
+        )
+    )
+
+    query = out["tool_calls"][0]["args"]["query"]
+    assert "high-risk AI system" in query
+    assert query.endswith("Current follow-up: What about its documentation?")
 
 
 @pytest.mark.asyncio

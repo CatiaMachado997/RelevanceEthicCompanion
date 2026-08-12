@@ -3,6 +3,8 @@ Weaviate Client Wrapper
 Manages connection and operations for M2 (semantic memory)
 """
 
+import atexit
+
 import weaviate
 from weaviate.classes.query import Filter
 from typing import List, Dict, Any, Optional
@@ -429,3 +431,9 @@ def close_weaviate_client():
         _weaviate_client = None
     _weaviate_unavailable = False
     _weaviate_last_probe = 0.0
+
+
+# Short-lived scripts and evaluation workers do not run FastAPI's lifespan
+# shutdown hook. Register the singleton cleanup once so those processes do not
+# leak Weaviate sockets when they exit.
+atexit.register(close_weaviate_client)

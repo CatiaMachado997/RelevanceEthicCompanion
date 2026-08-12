@@ -3,6 +3,9 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 BACKEND_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+. "$SCRIPT_DIR/python_runtime.sh"
+PYTHON_BIN=$(resolve_backend_python "$BACKEND_DIR")
+DEEPEVAL_BIN=$(dirname "$PYTHON_BIN")/deepeval
 
 # DeepEval loads the ignored backend/.env.local for OPENAI_API_KEY.
 export DEEPEVAL_TELEMETRY_OPT_OUT=1
@@ -12,4 +15,4 @@ export USE_OPENAI_MODEL=1
 export OPENAI_MODEL_NAME=${OPENAI_MODEL_NAME:-gpt-4.1-mini}
 
 cd "$BACKEND_DIR"
-exec "$BACKEND_DIR/venv/bin/deepeval" "$@"
+exec "$DEEPEVAL_BIN" "$@"

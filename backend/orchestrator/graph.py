@@ -248,6 +248,9 @@ async def stream_langgraph(
     conversation_id: Optional[str] = None,
     active_sources: Optional[list] = None,
     force_retrieval: bool = False,
+    request_id: Optional[str] = None,
+    persist_turn: bool = True,
+    conversation_history_override: Optional[list] = None,
 ) -> AsyncGenerator[dict, None]:
     """
     Stream SSE events from the LangGraph orchestrator.
@@ -269,8 +272,10 @@ async def stream_langgraph(
         "message": message,
         "conversation_id": conversation_id,
         "model": model,
+        "request_id": request_id,
         "user_context": {},
         "conversation_history": [],
+        "conversation_history_override": conversation_history_override,
         "active_sources": active_sources or [],
         "intent": "",
         "tool_calls": [],
@@ -330,7 +335,9 @@ async def stream_langgraph(
     if multi_agent:
         RESPONSE_NODES = frozenset({"agent"})
     else:
-        RESPONSE_NODES = frozenset({"tool_planner", "tool_execution", "deep_research"})
+        # Planner content is internal reasoning/tool selection. Direct answers
+        # fall back from final graph state; only synthesis nodes stream visibly.
+        RESPONSE_NODES = frozenset({"tool_execution", "deep_research"})
 
     response_text = ""
     esl_data = {}
@@ -350,7 +357,13 @@ async def stream_langgraph(
             node = metadata.get("langgraph_node", "")
 
             # ── True token streaming from LLM calls in content-generating nodes ──
-            if kind == "on_chat_model_stream" and node in RESPONSE_NODES:
+            is_visible_response = node in RESPONSE_NODES
+            is_visible_thought = (
+                _settings.STREAMING_REASONING_ENABLED and node == "tool_planner"
+            )
+            if kind == "on_chat_model_stream" and (
+                is_visible_response or is_visible_thought
+            ):
                 chunk = event.get("data", {}).get("chunk")
                 if chunk is None:
                     continue
@@ -365,7 +378,7 @@ async def stream_langgraph(
                 if isinstance(content, str) and content:
                     # Sprint J: planner tokens go to thought_token when flag is on;
                     # synthesis tokens (tool_execution / deep_research) stay on token.
-                    if _settings.STREAMING_REASONING_ENABLED and node == "tool_planner":
+                    if is_visible_thought:
                         yield {"event": "thought_token", "token": content}
                     else:
                         response_text += content
@@ -377,11 +390,31 @@ async def stream_langgraph(
                 and node == "tool_execution"
                 and not tool_events_yielded
             ):
-                tool_events_yielded = True
                 raw_output = event.get("data", {}).get("output")
                 output = raw_output if isinstance(raw_output, dict) else {}
+                # astream_events also labels nested runnables with their parent
+                # LangGraph node. Ignore those inner on_chain_end events and
+                # wait for the node output that carries our state fields.
+                if not any(
+                    key in output
+                    for key in (
+                        "response_events",
+                        "document_sources",
+                        "citations",
+                        "plan_steps",
+                        "tool_results",
+                    )
+                ):
+                    continue
+                tool_events_yielded = True
                 for ev in output.get("response_events", []):
-                    if ev.get("event") in ("tool_use", "tool_result"):
+                    if ev.get("event") in (
+                        "tool_use",
+                        "tool_result",
+                        "tool_error",
+                        "tool_cancelled",
+                        "tool_skipped",
+                    ):
                         yield ev
                 # Capture citation sources for the done event
                 citations = output.get("citations", [])
@@ -555,29 +588,12 @@ async def stream_langgraph(
                     if response_text:
                         yield {"event": "token", "token": response_text}
 
-                if not done_yielded:
-                    done_yielded = True
-                    yield {
-                        "event": "done",
-                        "esl_decision": esl_data,
-                        "citations": citations,
-                        "document_sources": document_sources,
-                    }
-
     except Exception as e:
         logger.error(f"stream_langgraph error: {e}", exc_info=True)
         if not done_yielded:
             yield {"event": "error", "message": str(e)}
             yield {"event": "done", "esl_decision": {}}
         return
-
-    if not done_yielded:
-        yield {
-            "event": "done",
-            "esl_decision": esl_data,
-            "citations": citations,
-            "document_sources": document_sources,
-        }
 
     # A paused turn hasn't finished — the run stays 'running' in
     # planner_runs until it's actually resumed and completed, and there's
@@ -617,15 +633,31 @@ async def stream_langgraph(
             logger.warning("planner_runs finalize failed: %s", exc)
 
     # Store conversation turns non-blocking
-    await _post_stream_store(
-        user_id=user_id,
-        user_msg=message,
-        assistant_msg=response_text,
-        conversation_id=conversation_id,
-        document_sources=document_sources,
-        citations=citations,
-        plan_steps=plan_steps,
-    )
+    turn_ids = {"user_turn_id": None, "assistant_turn_id": None}
+    if persist_turn:
+        stored_ids = await _post_stream_store(
+            user_id=user_id,
+            user_msg=message,
+            assistant_msg=response_text,
+            conversation_id=conversation_id,
+            document_sources=document_sources,
+            citations=citations,
+            plan_steps=plan_steps,
+        )
+        if isinstance(stored_ids, dict):
+            turn_ids = stored_ids
+
+    if not done_yielded:
+        yield {
+            "event": "done",
+            "esl_decision": esl_data,
+            "citations": citations,
+            "document_sources": document_sources,
+            **turn_ids,
+            "persisted": bool(
+                turn_ids.get("user_turn_id") and turn_ids.get("assistant_turn_id")
+            ),
+        }
 
 
 async def _post_stream_store(
@@ -636,7 +668,7 @@ async def _post_stream_store(
     document_sources: Optional[list] = None,
     citations: Optional[list] = None,
     plan_steps: Optional[list] = None,  # Sprint I — denormalized cache
-) -> None:
+) -> dict[str, Optional[str]]:
     """Persist conversation turns to M1 + M2. Non-blocking — errors are logged."""
     import logging
 
@@ -655,11 +687,23 @@ async def _post_stream_store(
             assistant_meta["plan_steps"] = plan_steps  # Sprint I cache
 
         # Adapt to actual ContextManager API (check what store methods exist)
-        if hasattr(cm, "store_conversation_turn"):
-            await cm.store_conversation_turn(
+        user_turn_id = None
+        assistant_turn_id = None
+        if hasattr(cm, "store_conversation_exchange"):
+            exchange_ids = await cm.store_conversation_exchange(
+                user_id=user_id,
+                user_content=user_msg,
+                assistant_content=assistant_msg,
+                conversation_id=conversation_id,
+                assistant_metadata=assistant_meta or None,
+            )
+            user_turn_id = exchange_ids.get("user_turn_id")
+            assistant_turn_id = exchange_ids.get("assistant_turn_id")
+        elif hasattr(cm, "store_conversation_turn"):
+            user_turn_id = await cm.store_conversation_turn(
                 user_id, "user", user_msg, conversation_id=conversation_id
             )
-            await cm.store_conversation_turn(
+            assistant_turn_id = await cm.store_conversation_turn(
                 user_id,
                 "assistant",
                 assistant_msg,
@@ -680,5 +724,10 @@ async def _post_stream_store(
                     await cm.store_semantic_memory(entry)
             except ImportError:
                 pass
+        return {
+            "user_turn_id": user_turn_id,
+            "assistant_turn_id": assistant_turn_id,
+        }
     except Exception as e:
         logger.warning(f"Post-stream storage failed (non-blocking): {e}")
+        return {"user_turn_id": None, "assistant_turn_id": None}

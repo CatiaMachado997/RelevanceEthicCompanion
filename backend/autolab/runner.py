@@ -203,14 +203,30 @@ class HillClimbingRunner:
         """Apply a unified diff to surface_path using the `patch` CLI tool."""
         import os
 
+        if len(diff.encode("utf-8")) > 64_000:
+            raise ValueError("proposed diff exceeds the 64 KB safety limit")
+        if "--- a/surface.py" not in diff or "+++ b/surface.py" not in diff:
+            raise ValueError("proposed diff may only target surface.py")
+        if diff.count("\n--- ") > 1 or diff.count("\n+++ ") > 1:
+            raise ValueError("multi-file diffs are not allowed")
+
         with tempfile.NamedTemporaryFile(mode="w", suffix=".patch", delete=False) as f:
             f.write(diff)
             patch_file = f.name
         try:
-            result = subprocess.run(
-                ["patch", str(self.surface_path), patch_file],
+            dry_run = subprocess.run(
+                ["patch", "--dry-run", "--fuzz=0", str(self.surface_path), patch_file],
                 capture_output=True,
                 text=True,
+                timeout=30,
+            )
+            if dry_run.returncode != 0:
+                raise RuntimeError(f"patch dry-run failed: {dry_run.stderr}")
+            result = subprocess.run(
+                ["patch", "--fuzz=0", str(self.surface_path), patch_file],
+                capture_output=True,
+                text=True,
+                timeout=30,
             )
             if result.returncode != 0:
                 raise RuntimeError(f"patch failed: {result.stderr}")

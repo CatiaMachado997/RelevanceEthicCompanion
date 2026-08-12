@@ -184,3 +184,29 @@ async def test_local_reranker_can_boost_matching_source_metadata():
 
     assert result[0]["chunk_uuid"] == "authority"
     assert result[0]["metadata_score"] > result[1]["metadata_score"]
+
+
+@pytest.mark.asyncio
+async def test_local_reranker_supports_stronger_lexical_correction():
+    candidates = [
+        {
+            "chunk_uuid": "semantic",
+            "snippet": "general governance considerations",
+            "score": 0.9,
+        },
+        {
+            "chunk_uuid": "anchored",
+            "snippet": "Regulation EU 2024 1689 high risk systems",
+            "score": 0.5,
+        },
+    ]
+
+    result = await rerank(
+        "Regulation EU 2024 1689",
+        candidates,
+        top_k=2,
+        provider="local",
+        lexical_weight=0.8,
+    )
+
+    assert result[0]["chunk_uuid"] == "anchored"

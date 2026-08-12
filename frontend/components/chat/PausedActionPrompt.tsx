@@ -9,6 +9,9 @@ export interface PausedAction {
   params: Record<string, unknown>
   reason: string
   trust_would_help: boolean
+  preview?: string
+  tool_id?: string
+  action_name?: string
 }
 
 export function PausedActionPrompt({
@@ -33,6 +36,9 @@ export function PausedActionPrompt({
       <div className="text-xs mt-1" style={{ color: 'var(--ec-text-muted)' }}>
         {paused.reason}
       </div>
+      {paused.preview && (
+        <div className="text-xs mt-2" style={{ color: 'var(--ec-text)' }}>{paused.preview}</div>
+      )}
       <pre className="text-[10px] mt-2 p-2 rounded overflow-x-auto"
         style={{ background: 'var(--ec-card-bg)', border: '1px solid var(--ec-card-border)' }}>
         {JSON.stringify(paused.params, null, 2)}

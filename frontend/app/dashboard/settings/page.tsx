@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Bell, Lock, Calendar, CheckCircle2, XCircle, RefreshCw, SlidersHorizontal, Globe, LogOut } from 'lucide-react'
+import { Bell, Lock, Calendar, CheckCircle2, XCircle, RefreshCw, SlidersHorizontal, Globe, LogOut, Brain, Pencil, Trash2 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
-import { dataSourcesApi, DataSource, settingsApi, UserSettings } from '@/lib/api'
+import { dataSourcesApi, DataSource, settingsApi, UserSettings, memoriesApi, ControlledMemory } from '@/lib/api'
 import { PageHeader } from '@/components/ui/page-header'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
@@ -69,6 +69,10 @@ const LANGUAGES = [
 export default function SettingsPage() {
   const router = useRouter()
   const [dataSources, setDataSources] = useState<DataSource[]>([])
+  const [memories, setMemories] = useState<ControlledMemory[]>([])
+  const [newMemory, setNewMemory] = useState('')
+  const [editingMemoryId, setEditingMemoryId] = useState<string | null>(null)
+  const [editingMemoryContent, setEditingMemoryContent] = useState('')
   const [syncing, setSyncing] = useState<string | null>(null)
 
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS)
@@ -98,7 +102,48 @@ export default function SettingsPage() {
   useEffect(() => {
     dataSourcesApi.list().then(({ sources }) => setDataSources(sources)).catch(console.error)
     settingsApi.get().then(setSettings).catch(console.error)
+    memoriesApi.list().then(({ memories: rows }) => setMemories(rows)).catch(console.error)
   }, [])
+
+  const addMemory = async () => {
+    const content = newMemory.trim()
+    if (!content) return
+    const created = await memoriesApi.create(content)
+    setMemories(prev => [created, ...prev])
+    setNewMemory('')
+  }
+
+  const toggleMemory = async (memory: ControlledMemory) => {
+    const updated = await memoriesApi.update(memory.id, { active: !memory.active })
+    setMemories(prev => prev.map(item => item.id === updated.id ? updated : item))
+  }
+
+  const startEditingMemory = (memory: ControlledMemory) => {
+    setEditingMemoryId(memory.id)
+    setEditingMemoryContent(memory.content)
+  }
+
+  const cancelEditingMemory = () => {
+    setEditingMemoryId(null)
+    setEditingMemoryContent('')
+  }
+
+  const saveMemoryCorrection = async (memory: ControlledMemory) => {
+    const content = editingMemoryContent.trim()
+    if (!content) return
+    if (content === memory.content) {
+      cancelEditingMemory()
+      return
+    }
+    const updated = await memoriesApi.update(memory.id, { content })
+    setMemories(prev => prev.map(item => item.id === updated.id ? updated : item))
+    cancelEditingMemory()
+  }
+
+  const forgetMemory = async (id: string) => {
+    await memoriesApi.forget(id)
+    setMemories(prev => prev.filter(item => item.id !== id))
+  }
 
   const handleToggle = (key: keyof UserSettings) => (checked: boolean) => {
     setSettings(prev => ({ ...prev, [key]: checked }))
@@ -211,6 +256,51 @@ export default function SettingsPage() {
             checked={!!appearance.reduceMotion}
             onCheckedChange={v => saveAppearance({ reduceMotion: v })}
           />
+        </div>
+      </div>
+
+      {/* User-controlled long-term memory */}
+      <div className="rounded-2xl p-5" style={CARD_STYLE}>
+        <div className="flex items-center gap-2 mb-1">
+          <Brain size={15} style={{ color: '#000000' }} />
+          <h3 className="text-sm font-semibold" style={{ color: '#0a0a0a' }}>Chat memory</h3>
+        </div>
+        <p className="mb-4 text-xs" style={{ color: '#9e9e9e' }}>Only active memories below are added to future chats. You can pause, correct, or forget them at any time.</p>
+        <div className="flex gap-2">
+          <input value={newMemory} onChange={e => setNewMemory(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void addMemory() }} maxLength={2000} placeholder="Something you want the companion to remember" className="min-w-0 flex-1 rounded-lg border border-neutral-200 px-3 py-2 text-sm outline-none" />
+          <button onClick={() => void addMemory()} disabled={!newMemory.trim()} className="rounded-lg bg-neutral-900 px-3 py-2 text-xs font-medium text-white disabled:opacity-40">Remember</button>
+        </div>
+        <div className="mt-3 space-y-2">
+          {memories.map(memory => (
+            <div key={memory.id} className="flex items-start gap-3 rounded-lg border border-neutral-100 p-3">
+              <button onClick={() => void toggleMemory(memory)} className="mt-0.5 text-xs font-medium" style={{ color: memory.active ? '#4A7C59' : '#9e9e9e' }}>{memory.active ? 'Active' : 'Paused'}</button>
+              {editingMemoryId === memory.id ? (
+                <div className="min-w-0 flex-1">
+                  <input
+                    autoFocus
+                    aria-label="Correct memory"
+                    value={editingMemoryContent}
+                    onChange={event => setEditingMemoryContent(event.target.value)}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter') void saveMemoryCorrection(memory)
+                      if (event.key === 'Escape') cancelEditingMemory()
+                    }}
+                    maxLength={2000}
+                    className="w-full rounded-lg border border-neutral-200 px-2 py-1 text-sm outline-none"
+                  />
+                  <div className="mt-2 flex gap-2">
+                    <button onClick={() => void saveMemoryCorrection(memory)} disabled={!editingMemoryContent.trim()} className="text-xs font-medium text-neutral-900 disabled:opacity-40">Save correction</button>
+                    <button onClick={cancelEditingMemory} className="text-xs text-neutral-500">Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <p className="min-w-0 flex-1 text-sm text-neutral-700">{memory.content}</p>
+              )}
+              <button onClick={() => startEditingMemory(memory)} aria-label="Correct memory" title="Correct memory" className="text-neutral-400 hover:text-neutral-900"><Pencil size={14} /></button>
+              <button onClick={() => void forgetMemory(memory.id)} aria-label="Forget memory" title="Forget memory" className="text-neutral-400 hover:text-red-700"><Trash2 size={14} /></button>
+            </div>
+          ))}
+          {memories.length === 0 && <p className="py-2 text-xs text-neutral-400">No saved memories.</p>}
         </div>
       </div>
 

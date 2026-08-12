@@ -28,6 +28,7 @@ router = APIRouter(prefix="/api/chat", tags=["Chat"])
 class ChatMessage(BaseModel):
     """A chat message"""
 
+    id: Optional[str] = Field(None, description="Persistent conversation turn ID")
     role: str = Field(..., description="'user' or 'assistant'")
     content: str = Field(..., description="Message content")
     timestamp: Optional[str] = None
@@ -182,6 +183,7 @@ async def stream_chat(
     conversation_id: Optional[UUID] = None,
     active_sources: str = "",  # comma-separated: "calendar,web,goals,memory" — empty = all
     force_retrieval: bool = False,  # `/ask` slash command — force a search_documents call
+    request_id: Optional[str] = None,
     user_id: str = Depends(get_current_read_user_id),
 ):
     """Server-Sent Events endpoint for streaming chat responses via LangGraph."""
@@ -214,10 +216,19 @@ async def stream_chat(
             str(conversation_id) if conversation_id else None,
             active_sources=sources,
             force_retrieval=force_retrieval,
+            request_id=request_id,
         ):
             yield f"data: {_json.dumps(event)}\n\n"
 
-    return StreamingResponse(_lg_stream(), media_type="text/event-stream")
+    return StreamingResponse(
+        _lg_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ── Sprint J: resume a paused graph thread ──────────────────────────
@@ -227,6 +238,42 @@ class ChatResumeBody(BaseModel):
     thread_id: str
     decision: str  # "approve" | "skip" | "cancel"
     trust: bool = False
+
+
+def _pending_interrupt_payload(snapshot: Any) -> dict:
+    """Return the currently paused action payload, if this thread is paused."""
+    tasks = getattr(snapshot, "tasks", ()) or ()
+    for task in tasks:
+        interrupts = getattr(task, "interrupts", ()) or ()
+        if not interrupts:
+            continue
+        value = getattr(interrupts[0], "value", None)
+        if isinstance(value, dict):
+            return value
+    return {}
+
+
+@router.get("/paused/{thread_id}")
+async def get_paused_chat_action(
+    thread_id: str,
+    user_id: str = Depends(get_current_read_user_id),
+) -> dict:
+    """Recover a durable confirmation prompt after refresh or reconnect."""
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM conversations WHERE id = %s AND user_id = %s",
+                (thread_id, str(user_id)),
+            )
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail="Conversation not found")
+
+    from orchestrator.graph import get_graph_async
+
+    graph = await get_graph_async()
+    snapshot = await graph.aget_state({"configurable": {"thread_id": thread_id}})
+    payload = _pending_interrupt_payload(snapshot)
+    return {"paused": bool(payload), "thread_id": thread_id, **payload}
 
 
 @router.post("/resume")
@@ -247,6 +294,19 @@ async def chat_resume(
             status_code=422, detail=f"invalid decision: {body.decision}"
         )
 
+    # Checkpoint thread IDs are conversation IDs for persisted chats. Never let
+    # one user resume another user's graph by guessing an identifier.
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM conversations WHERE id = %s AND user_id = %s",
+                (body.thread_id, str(user_id)),
+            )
+            if not cur.fetchone():
+                raise HTTPException(
+                    status_code=404, detail="Paused conversation not found"
+                )
+
     from orchestrator.graph import get_graph_async
     from langgraph.types import Command
 
@@ -254,8 +314,19 @@ async def chat_resume(
 
     async def _stream():
         try:
+            response_parts: list[str] = []
+            final_output: dict = {}
             graph = await get_graph_async()
             config = {"configurable": {"thread_id": body.thread_id}}
+            snapshot = await graph.aget_state(config)
+            original_state = getattr(snapshot, "values", {}) or {}
+            if not _pending_interrupt_payload(snapshot):
+                payload = {
+                    "event": "error",
+                    "message": "This action is no longer awaiting confirmation.",
+                }
+                yield f"data: {_json.dumps(payload)}\n\n"
+                return
             async for event in graph.astream_events(
                 Command(resume=resume_payload), config, version="v2"
             ):
@@ -283,6 +354,7 @@ async def chat_resume(
                             for block in content
                         )
                     if isinstance(content, str) and content:
+                        response_parts.append(content)
                         yield f"data: {_json.dumps({'event': 'token', 'token': content})}\n\n"
                 # A re-pause (e.g. a later action in the same or a later
                 # step also needs confirmation) surfaces as an
@@ -317,11 +389,37 @@ async def chat_resume(
                             f"data: {_json.dumps({'event': 'plan_paused', 'thread_id': body.thread_id, **payload})}\n\n"
                         )
                         return
-            yield f"data: {_json.dumps({'event': 'done'})}\n\n"
+            from orchestrator.graph import _post_stream_store
+
+            answer = final_output.get("response_text") or "".join(response_parts)
+            turn_ids = await _post_stream_store(
+                user_id=str(user_id),
+                user_msg=final_output.get("message")
+                or original_state.get("message")
+                or "",
+                assistant_msg=answer,
+                conversation_id=body.thread_id,
+                document_sources=final_output.get("document_sources") or [],
+                citations=final_output.get("citations") or [],
+                plan_steps=final_output.get("plan_steps") or [],
+            )
+            turn_ids = turn_ids or {}
+            persisted = bool(
+                turn_ids.get("user_turn_id") and turn_ids.get("assistant_turn_id")
+            )
+            yield f"data: {_json.dumps({'event': 'done', **turn_ids, 'persisted': persisted})}\n\n"
         except Exception as exc:
             yield f"data: {_json.dumps({'event': 'error', 'message': str(exc)})}\n\n"
 
-    return StreamingResponse(_stream(), media_type="text/event-stream")
+    return StreamingResponse(
+        _stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/conversations")
@@ -556,6 +654,7 @@ async def get_conversation_history(
 
     messages = [
         ChatMessage(
+            id=t.get("id"),
             role=t["role"],
             content=t["content"],
             timestamp=(

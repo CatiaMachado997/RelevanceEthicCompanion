@@ -36,6 +36,40 @@ _BILINGUAL_TERMS = (
     ("environmental", "ambiental"),
     ("fundamental rights", "direitos fundamentais"),
 )
+_FOLLOWUP_PREFIX = re.compile(
+    r"^(?:and|also|but|so|then|what about|how about|can you|could you|please)\b",
+    re.IGNORECASE,
+)
+_REFERENTIAL_TERM = re.compile(
+    r"\b(?:it|its|that|this|those|these|they|them|same|former|latter)\b",
+    re.IGNORECASE,
+)
+
+
+def contextualize_followup_query(query: str, history: list[dict]) -> str:
+    """Add the latest user request only when a retrieval query depends on it."""
+    current = re.sub(r"\s+", " ", (query or "").strip())
+    if not current:
+        return current
+
+    is_followup = bool(_FOLLOWUP_PREFIX.search(current)) or (
+        len(current.split()) <= 24 and bool(_REFERENTIAL_TERM.search(current))
+    )
+    if not is_followup:
+        return current
+
+    previous = ""
+    for turn in reversed(history or []):
+        if not isinstance(turn, dict) or turn.get("role") != "user":
+            continue
+        previous = re.sub(r"\s+", " ", str(turn.get("content") or "").strip())
+        if previous:
+            break
+    if not previous or previous.casefold() == current.casefold():
+        return current
+    if len(previous) > 700:
+        previous = f"{previous[:350]} … {previous[-350:]}"
+    return f"Previous request: {previous}\nCurrent follow-up: {current}"
 
 
 def clean_retrieval_query(query: str) -> str:
