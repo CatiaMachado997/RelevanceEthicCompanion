@@ -7,6 +7,12 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+pytest.importorskip(
+    "deepeval",
+    reason="DeepEval is installed only with requirements-evals.txt",
+)
+
 from deepeval import assert_test, log_hyperparameters
 from deepeval.test_case import LLMTestCase
 

@@ -9,6 +9,12 @@ import re
 from pathlib import Path
 
 import pytest
+
+pytest.importorskip(
+    "deepeval",
+    reason="DeepEval is installed only with requirements-evals.txt",
+)
+
 from deepeval import assert_test, log_hyperparameters
 from deepeval.dataset import Golden
 
