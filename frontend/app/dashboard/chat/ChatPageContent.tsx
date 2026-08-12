@@ -550,6 +550,20 @@ export default function ChatPageContent({ conversationId: conversationIdProp }: 
 
   /* send */
   const handleSend = async (text?: string, retryRequestId?: string) => {
+    let createdConversationId: string | undefined
+    let persistenceFailed = false
+    let planPaused = false
+    let turnCompleted = false
+    const discardCreatedConversation = async () => {
+      if (!createdConversationId) return
+      const id = createdConversationId
+      await api.chat.conversations.delete(id)
+      createdConversationId = undefined
+      skipHistoryLoadForRef.current = null
+      setConversationId(undefined)
+      window.history.replaceState(null, '', '/dashboard/chat')
+      window.dispatchEvent(new Event('ec:conversation-created'))
+    }
     let userText = (text ?? input).trim()
     // `/ask <query>` slash command — strip the prefix and force document
     // retrieval on this turn, regardless of the planner's judgement.
@@ -600,6 +614,7 @@ export default function ChatPageContent({ conversationId: conversationIdProp }: 
       if (!activeConvId) {
         const conv = await api.chat.conversations.create()
         activeConvId = conv.id
+        createdConversationId = conv.id
         // Update local state so subsequent sends reuse this conversation. The
         // route prop won't refresh because we use replaceState (not router.push)
         // to avoid unmounting this component mid-stream.
@@ -657,7 +672,9 @@ export default function ChatPageContent({ conversationId: conversationIdProp }: 
             m.id === assistantId ? { ...m, pendingConfirmation: data } : m
           ))
         },
-        onDone: ({ citations, document_sources, user_turn_id, assistant_turn_id }) => {
+        onDone: ({ citations, document_sources, user_turn_id, assistant_turn_id, persisted }) => {
+          turnCompleted = true
+          persistenceFailed = !(persisted ?? Boolean(user_turn_id && assistant_turn_id))
           setMessages(prev => prev.map(m => {
             if (m.id === assistantId) {
               return {
@@ -709,6 +726,7 @@ export default function ChatPageContent({ conversationId: conversationIdProp }: 
           })
         },
         onPlanPaused: (payload: unknown) => {
+          planPaused = true
           const p = payload as Record<string, unknown>
           setPausedAction({
             thread_id: p.thread_id as string,
@@ -731,6 +749,19 @@ export default function ChatPageContent({ conversationId: conversationIdProp }: 
       })
       streamRef.current = s
       await s
+      if (turnCompleted && persistenceFailed) {
+        setMessages(prev => prev.map(m =>
+          m.id === assistantId
+            ? {
+                ...m,
+                content: `${m.content}\n\n*This response could not be saved. Please retry.*`.trim(),
+              }
+            : m
+        ))
+      }
+      if (createdConversationId && !planPaused && (!turnCompleted || persistenceFailed)) {
+        await discardCreatedConversation()
+      }
       setActiveTool(null)
       setIsThinking(false)
       setMessages(prev => {
@@ -783,6 +814,13 @@ export default function ChatPageContent({ conversationId: conversationIdProp }: 
               : `⚠️ ${userMsg}`,
           }
         }))
+      }
+      if (createdConversationId && !planPaused) {
+        try {
+          await discardCreatedConversation()
+        } catch (cleanupError) {
+          console.error('[chat] failed to discard empty conversation:', cleanupError)
+        }
       }
     } finally {
       streamRef.current = null

@@ -381,7 +381,11 @@ async def chat_resume(
                 citations=final_output.get("citations") or [],
                 plan_steps=final_output.get("plan_steps") or [],
             )
-            yield f"data: {_json.dumps({'event': 'done', **(turn_ids or {})})}\n\n"
+            turn_ids = turn_ids or {}
+            persisted = bool(
+                turn_ids.get("user_turn_id") and turn_ids.get("assistant_turn_id")
+            )
+            yield f"data: {_json.dumps({'event': 'done', **turn_ids, 'persisted': persisted})}\n\n"
         except Exception as exc:
             yield f"data: {_json.dumps({'event': 'error', 'message': str(exc)})}\n\n"
 

@@ -61,12 +61,23 @@ Conversation continuity rules:
   update action actually succeeded.
 """
 
+RESPONSE_STRUCTURE_POLICY = """\
+Response structure rules:
+- Lead with the result or direct answer.
+- Use compact Markdown headings only for genuinely distinct sections.
+- Use bullets for lists and numbered steps for procedures.
+- Keep paragraphs short and do not repeat the conclusion.
+- When an item was persisted, name its type and destination (Goals, Tasks, Values,
+  or Notes) and only say it was saved when tool evidence confirms status=saved.
+"""
+
 
 def _build_synthesis_system_prompt() -> str:
     """Return the stable evidence contract used after tool execution."""
     return (
         f"{UNTRUSTED_CONTENT_POLICY}\n\n"
         f"{CONVERSATION_CONTINUITY_POLICY}\n"
+        f"{RESPONSE_STRUCTURE_POLICY}\n"
         f"{EVIDENCE_SYNTHESIS_POLICY}\n"
         "Answer the user's request directly and concisely using the relevant evidence."
     )
@@ -336,6 +347,9 @@ _TOOL_CITATION_META: dict = {
     "web_search": {"label": "Web Search", "icon": "globe"},
     "search_documents": {"label": "Documents", "icon": "file-text"},
     "create_note": None,  # write tool — omit from citations
+    "create_goal": None,
+    "create_task": None,
+    "save_user_value": None,
 }
 
 
@@ -497,7 +511,24 @@ def _build_system_prompt(state: AgentState) -> str:
         prompt += f"\n\nUser-approved memories (may be corrected or forgotten in Settings):\n{memory_lines}"
     if context_block:
         prompt += f"\n\n{context_block}"
-    prompt += "\n\nAnswer helpfully and concisely. Use tools when you need live data beyond what's shown above."
+    prompt += """
+
+Response format:
+- Lead with the result or direct answer.
+- Use short Markdown headings only when the answer has distinct sections.
+- Use bullets for lists and numbered steps for procedures.
+- Keep paragraphs short; avoid dense walls of text and repeated conclusions.
+- For saved items, state exactly what was saved and where.
+
+Persistence rules:
+- Explicitly setting, adding, creating, saving, or tracking a goal requires create_goal.
+- A concrete todo/action/reminder requires create_task.
+- A personal preference, value, or boundary requires save_user_value.
+- An ordinary note requires create_note.
+- Never claim an item was saved unless the matching tool returned status=saved.
+- Do not substitute a note or user-value row for a goal or task.
+
+Use tools when you need live data beyond what's shown above."""
     prompt += (
         "\n\nWhen the user asks a knowledge-recall question about their own "
         "workspace — e.g. what someone said, decisions made, past emails or "

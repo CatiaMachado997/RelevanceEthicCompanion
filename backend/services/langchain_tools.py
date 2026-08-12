@@ -6,7 +6,8 @@ Converts internal tools to LangChain-compatible format for agent use.
 
 import asyncio
 import json
-from typing import Type, Any
+from datetime import datetime
+from typing import Type, Any, Literal
 from langchain.tools import BaseTool
 from pydantic import BaseModel, Field
 import logging
@@ -320,20 +321,16 @@ class NoteCreateInput(BaseModel):
     """Input for the note creation tool"""
 
     content: str = Field(description="The note or task text to save")
-    as_goal: bool = Field(
-        default=False, description="If true, also creates a goal from this note"
-    )
 
 
 class NoteCreateTool(BaseTool):
-    """Tool for saving notes, tasks, or reminders directly from chat"""
+    """Tool for saving ordinary notes directly from chat."""
 
     name: str = "create_note"
     category: str = "write-personal"  # Sprint J safety classification
     description: str = (
-        "Save a note, task, or reminder for the user. "
-        "Use this when the user says 'remember this', 'note that', or asks to save something. "
-        "Set as_goal=true if the user wants it tracked as a goal."
+        "Save an ordinary note for the user. Use create_goal for goals, "
+        "create_task for tasks or reminders, and save_user_value for values or boundaries."
     )
     args_schema: Type[BaseModel] = NoteCreateInput
 
@@ -345,7 +342,7 @@ class NoteCreateTool(BaseTool):
         self.context_manager = context_manager
         self.user_id = user_id
 
-    async def _arun(self, content: str, as_goal: bool = False) -> str:
+    async def _arun(self, content: str) -> str:
         """Async implementation — writes to PostgreSQL (M1) first, then Weaviate (M2)."""
         # --- M1 write (PostgreSQL) — primary persistence ---
         try:
@@ -362,7 +359,6 @@ class NoteCreateTool(BaseTool):
                             json.dumps(
                                 {
                                     "subtype": "note",
-                                    "as_goal": as_goal,
                                     "source": "chat_tool",
                                 }
                             ),
@@ -371,7 +367,7 @@ class NoteCreateTool(BaseTool):
                 conn.commit()
         except Exception as e:
             logger.error(f"Note M1 (PostgreSQL) write failed: {e}")
-            return f"Error saving note to database: {str(e)}"
+            raise RuntimeError("Note was not saved") from e
 
         # --- M2 write (Weaviate) — semantic index; failure is non-fatal ---
         try:
@@ -380,21 +376,221 @@ class NoteCreateTool(BaseTool):
                     user_id=self.user_id,
                     content=content,
                     source="note",
-                    metadata={"type": "user_note", "as_goal": as_goal},
+                    metadata={"type": "user_note"},
                 )
             )
         except Exception as e:
             logger.warning(f"Note M2 (Weaviate) write failed (non-fatal): {e}")
 
-        confirmation = f"Note saved: '{content[:80]}'"
-        if len(content) > 80:
-            confirmation += "..."
-        if as_goal:
-            confirmation += " (also added as goal)"
-        return confirmation
+        return json.dumps(
+            {
+                "status": "saved",
+                "kind": "note",
+                "content": content[:80] + ("..." if len(content) > 80 else ""),
+            }
+        )
 
-    def _run(self, content: str, as_goal: bool = False) -> str:
+    def _run(self, content: str) -> str:
         """Sync implementation (not used)"""
+        raise NotImplementedError("Use async version (_arun)")
+
+
+class GoalCreateInput(BaseModel):
+    title: str = Field(description="Short goal title", min_length=1, max_length=200)
+    description: str | None = Field(default=None, description="Optional goal detail")
+    priority: int = Field(default=5, ge=1, le=10, description="1 is highest")
+    target_date: datetime | None = Field(default=None, description="Optional ISO date")
+
+
+class GoalCreateTool(BaseTool):
+    name: str = "create_goal"
+    category: str = "write-personal"
+    description: str = (
+        "Persist a goal in the Goals page. Use when the user explicitly asks to "
+        "set, add, create, save, or track an outcome as a goal."
+    )
+    args_schema: Type[BaseModel] = GoalCreateInput
+    context_manager: Any = None
+    user_id: str = ""
+
+    def __init__(self, context_manager, user_id: str):
+        super().__init__()
+        self.context_manager = context_manager
+        self.user_id = user_id
+
+    async def _arun(
+        self,
+        title: str,
+        description: str | None = None,
+        priority: int = 5,
+        target_date: datetime | None = None,
+    ) -> str:
+        from models.context import Goal
+
+        goal = await self.context_manager.create_goal(
+            Goal(
+                user_id=self.user_id,
+                title=title.strip(),
+                description=description,
+                priority=priority,
+                target_date=target_date,
+                metadata={"source": "chat_tool"},
+            )
+        )
+        if not goal or not goal.id:
+            raise RuntimeError("Goal was not saved")
+        return json.dumps(
+            {"status": "saved", "kind": "goal", "id": goal.id, "title": goal.title}
+        )
+
+    def _run(self, **kwargs) -> str:
+        raise NotImplementedError("Use async version (_arun)")
+
+
+class TaskCreateInput(BaseModel):
+    title: str = Field(
+        description="Short actionable task", min_length=1, max_length=500
+    )
+    description: str | None = None
+    priority: int = Field(default=5, ge=1, le=10, description="1 is highest")
+    due_date: datetime | None = Field(default=None, description="Optional ISO due date")
+    goal_id: str | None = Field(default=None, description="Optional related goal ID")
+    project_id: str | None = Field(
+        default=None, description="Optional related project ID"
+    )
+
+
+class TaskCreateTool(BaseTool):
+    name: str = "create_task"
+    category: str = "write-personal"
+    description: str = (
+        "Persist one concrete action in the Tasks page. Use for todo, task, action "
+        "item, or reminder requests; do not store these as goals or values."
+    )
+    args_schema: Type[BaseModel] = TaskCreateInput
+    user_id: str = ""
+
+    def __init__(self, user_id: str):
+        super().__init__()
+        self.user_id = user_id
+
+    async def _arun(
+        self,
+        title: str,
+        description: str | None = None,
+        priority: int = 5,
+        due_date: datetime | None = None,
+        goal_id: str | None = None,
+        project_id: str | None = None,
+    ) -> str:
+        from utils.db import get_db_connection
+
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO tasks
+                        (user_id, project_id, goal_id, title, description, priority,
+                         due_date, source_origin, ai_confidence, user_confirmed)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, 'chat', 1.0, TRUE)
+                    RETURNING id, title
+                    """,
+                    (
+                        self.user_id,
+                        project_id,
+                        goal_id,
+                        title.strip(),
+                        description,
+                        priority,
+                        due_date,
+                    ),
+                )
+                row = cur.fetchone()
+        if not row:
+            raise RuntimeError("Task was not saved")
+        return json.dumps(
+            {
+                "status": "saved",
+                "kind": "task",
+                "id": str(row["id"]),
+                "title": row["title"],
+            }
+        )
+
+    def _run(self, **kwargs) -> str:
+        raise NotImplementedError("Use async version (_arun)")
+
+
+class UserValueCreateInput(BaseModel):
+    value: str = Field(
+        description="The preference, value, or boundary to save", min_length=1
+    )
+    value_type: Literal["preference", "boundary", "topic_filter", "time_window"] = (
+        Field(
+            default="preference",
+            description="One of preference, boundary, topic_filter, or time_window",
+        )
+    )
+    priority: int = Field(default=5, ge=1, le=10, description="1 is highest")
+
+
+class UserValueCreateTool(BaseTool):
+    name: str = "save_user_value"
+    category: str = "write-personal"
+    description: str = (
+        "Persist a user preference, personal value, or behavioral boundary. "
+        "Never use this for goals, tasks, or ordinary notes."
+    )
+    args_schema: Type[BaseModel] = UserValueCreateInput
+    user_id: str = ""
+
+    def __init__(self, user_id: str):
+        super().__init__()
+        self.user_id = user_id
+
+    async def _arun(
+        self,
+        value: str,
+        value_type: Literal[
+            "preference", "boundary", "topic_filter", "time_window"
+        ] = "preference",
+        priority: int = 5,
+    ) -> str:
+        from utils.db import get_db_connection
+
+        allowed = {"preference", "boundary", "topic_filter", "time_window"}
+        if value_type not in allowed:
+            raise ValueError(f"Unsupported value type: {value_type}")
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO user_values
+                        (user_id, type, value, priority, active, metadata)
+                    VALUES (%s, %s, %s, %s, TRUE, %s::jsonb)
+                    RETURNING id, type, value
+                    """,
+                    (
+                        self.user_id,
+                        value_type,
+                        value.strip(),
+                        priority,
+                        json.dumps({"source": "chat_tool"}),
+                    ),
+                )
+                row = cur.fetchone()
+        if not row:
+            raise RuntimeError("Value was not saved")
+        return json.dumps(
+            {
+                "status": "saved",
+                "kind": "value",
+                "id": str(row["id"]),
+                "value": row["value"],
+            }
+        )
+
+    def _run(self, **kwargs) -> str:
         raise NotImplementedError("Use async version (_arun)")
 
 
@@ -513,6 +709,9 @@ _TOOL_SOURCE_MAP: dict = {
     "get_user_goals": "goals",
     "web_search": "web",
     "create_note": None,  # always available
+    "create_goal": None,
+    "create_task": None,
+    "save_user_value": None,
     "search_documents": "documents",
 }
 
@@ -539,6 +738,9 @@ async def create_langchain_tools(
         CalendarQueryTool(context_manager=context_manager, user_id=user_id),
         UserGoalsTool(context_manager=context_manager, user_id=user_id),
         NoteCreateTool(context_manager=context_manager, user_id=user_id),
+        GoalCreateTool(context_manager=context_manager, user_id=user_id),
+        TaskCreateTool(user_id=user_id),
+        UserValueCreateTool(user_id=user_id),
     ]
 
     # Document RAG tool — always registered so the planner sees its schema.

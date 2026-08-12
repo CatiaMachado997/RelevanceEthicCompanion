@@ -34,7 +34,7 @@ def build_goals_tools(user_id: str, context_manager: Any) -> list[BaseTool]:
                         SELECT title, description, status, priority
                         FROM goals
                         WHERE user_id = %s AND status != 'archived'
-                        ORDER BY priority DESC, created_at DESC
+                        ORDER BY priority ASC, created_at DESC
                         LIMIT %s
                         """,
                         (user_id, limit),

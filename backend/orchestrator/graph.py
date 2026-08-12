@@ -335,7 +335,9 @@ async def stream_langgraph(
     if multi_agent:
         RESPONSE_NODES = frozenset({"agent"})
     else:
-        RESPONSE_NODES = frozenset({"tool_planner", "tool_execution", "deep_research"})
+        # Planner content is internal reasoning/tool selection. Direct answers
+        # fall back from final graph state; only synthesis nodes stream visibly.
+        RESPONSE_NODES = frozenset({"tool_execution", "deep_research"})
 
     response_text = ""
     esl_data = {}
@@ -355,7 +357,13 @@ async def stream_langgraph(
             node = metadata.get("langgraph_node", "")
 
             # ── True token streaming from LLM calls in content-generating nodes ──
-            if kind == "on_chat_model_stream" and node in RESPONSE_NODES:
+            is_visible_response = node in RESPONSE_NODES
+            is_visible_thought = (
+                _settings.STREAMING_REASONING_ENABLED and node == "tool_planner"
+            )
+            if kind == "on_chat_model_stream" and (
+                is_visible_response or is_visible_thought
+            ):
                 chunk = event.get("data", {}).get("chunk")
                 if chunk is None:
                     continue
@@ -370,7 +378,7 @@ async def stream_langgraph(
                 if isinstance(content, str) and content:
                     # Sprint J: planner tokens go to thought_token when flag is on;
                     # synthesis tokens (tool_execution / deep_research) stay on token.
-                    if _settings.STREAMING_REASONING_ENABLED and node == "tool_planner":
+                    if is_visible_thought:
                         yield {"event": "thought_token", "token": content}
                     else:
                         response_text += content
@@ -646,6 +654,9 @@ async def stream_langgraph(
             "citations": citations,
             "document_sources": document_sources,
             **turn_ids,
+            "persisted": bool(
+                turn_ids.get("user_turn_id") and turn_ids.get("assistant_turn_id")
+            ),
         }
 
 
@@ -678,7 +689,17 @@ async def _post_stream_store(
         # Adapt to actual ContextManager API (check what store methods exist)
         user_turn_id = None
         assistant_turn_id = None
-        if hasattr(cm, "store_conversation_turn"):
+        if hasattr(cm, "store_conversation_exchange"):
+            exchange_ids = await cm.store_conversation_exchange(
+                user_id=user_id,
+                user_content=user_msg,
+                assistant_content=assistant_msg,
+                conversation_id=conversation_id,
+                assistant_metadata=assistant_meta or None,
+            )
+            user_turn_id = exchange_ids.get("user_turn_id")
+            assistant_turn_id = exchange_ids.get("assistant_turn_id")
+        elif hasattr(cm, "store_conversation_turn"):
             user_turn_id = await cm.store_conversation_turn(
                 user_id, "user", user_msg, conversation_id=conversation_id
             )

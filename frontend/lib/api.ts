@@ -275,7 +275,7 @@ export const chatApi = {
           onToolPendingConfirmation?: (data: { tool_id: string; tool_name: string; action_name: string; preview: string }) => void
           onRateLimitWarning?: (level: string, message: string) => void
           onRateLimitExceeded?: (retryAfter: string, message: string) => void
-          onDone?: (data: { esl_decision?: Record<string, unknown>; citations?: CitationSource[]; document_sources?: DocumentSource[]; user_turn_id?: string; assistant_turn_id?: string }) => void
+          onDone?: (data: { esl_decision?: Record<string, unknown>; citations?: CitationSource[]; document_sources?: DocumentSource[]; user_turn_id?: string; assistant_turn_id?: string; persisted?: boolean }) => void
           // Sprint J callbacks
           onThoughtToken?: (token: string) => void
           onPlanStepActions?: (step: number, actions: Array<{ tool: string; params: unknown }>) => void
@@ -348,7 +348,7 @@ export const chatApi = {
             return
           }
           if (data.event === 'done') {
-            callbacks.onDone?.({ esl_decision: data.esl_decision, citations: data.citations, document_sources: data.document_sources, user_turn_id: data.user_turn_id, assistant_turn_id: data.assistant_turn_id })
+            callbacks.onDone?.({ esl_decision: data.esl_decision, citations: data.citations, document_sources: data.document_sources, user_turn_id: data.user_turn_id, assistant_turn_id: data.assistant_turn_id, persisted: data.persisted })
             es!.close()
             if (!settled) { settled = true; resolve() }
             return
@@ -389,7 +389,7 @@ export const chatApi = {
             return
           }
           if (data.done) {
-            callbacks.onDone?.({ esl_decision: data.esl_decision, citations: data.citations, document_sources: data.document_sources, user_turn_id: data.user_turn_id, assistant_turn_id: data.assistant_turn_id })
+            callbacks.onDone?.({ esl_decision: data.esl_decision, citations: data.citations, document_sources: data.document_sources, user_turn_id: data.user_turn_id, assistant_turn_id: data.assistant_turn_id, persisted: data.persisted })
             es!.close()
             if (!settled) { settled = true; resolve() }
             return
@@ -437,7 +437,7 @@ export const chatApi = {
     trust?: boolean
     onToken?: (token: string) => void
     onPlanPaused?: (payload: unknown) => void
-    onDone?: (data?: { user_turn_id?: string; assistant_turn_id?: string }) => void
+    onDone?: (data?: { user_turn_id?: string; assistant_turn_id?: string; persisted?: boolean }) => void
     onError?: (msg: string) => void
   }): { cancel: () => void } => {
     const controller = new AbortController()

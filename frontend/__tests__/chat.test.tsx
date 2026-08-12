@@ -73,12 +73,13 @@ beforeEach(() => {
   // api.chat.stream signature: (message, options) where options includes
   // onToken, onToolUse, etc.
   ;(api.chat.stream as jest.Mock).mockImplementation(
-    (_msg: string, opts: { onToken?: (t: string) => void }) => {
+    (_msg: string, opts: { onToken?: (t: string) => void; onDone?: (data: { user_turn_id: string; assistant_turn_id: string; persisted: boolean }) => void }) => {
       let cancelled = false
       const promise = new Promise<void>((resolve) => {
         Promise.resolve().then(() => {
           if (!cancelled) {
             opts.onToken?.('Hello from AI')
+            opts.onDone?.({ user_turn_id: 'stored-user', assistant_turn_id: 'stored-assistant', persisted: true })
             resolve()
           }
         })
@@ -125,4 +126,42 @@ test('test_assistant_response_renders', async () => {
   await userEvent.type(textarea, 'Hi{Enter}')
 
   expect(await screen.findByText('Hello from AI')).toBeInTheDocument()
+})
+
+test('failed first turn discards the empty conversation', async () => {
+  const failed = Promise.reject(new Error('Stream connection lost')) as Promise<void> & { cancel: () => void }
+  failed.cancel = jest.fn()
+  ;(api.chat.stream as jest.Mock).mockReturnValueOnce(failed)
+
+  render(<ChatPage />)
+  await waitFor(() => expect(api.chat.history).toHaveBeenCalled())
+
+  await userEvent.type(screen.getByPlaceholderText(/message your companion/i), 'Hello{Enter}')
+
+  await waitFor(() => {
+    expect(api.chat.conversations.delete).toHaveBeenCalledWith('test-conv-id')
+  })
+  expect(window.location.pathname).toBe('/dashboard/chat')
+})
+
+test('unpersisted completed first turn discards the empty conversation', async () => {
+  ;(api.chat.stream as jest.Mock).mockImplementationOnce(
+    (_msg: string, opts: { onToken: (token: string) => void; onDone: (data: { persisted: boolean }) => void }) => {
+      const promise = Promise.resolve().then(() => {
+        opts.onToken('Temporary answer')
+        opts.onDone({ persisted: false })
+      }) as Promise<void> & { cancel: () => void }
+      promise.cancel = jest.fn()
+      return promise
+    }
+  )
+
+  render(<ChatPage />)
+  await waitFor(() => expect(api.chat.history).toHaveBeenCalled())
+  await userEvent.type(screen.getByPlaceholderText(/message your companion/i), 'Hello{Enter}')
+
+  await waitFor(() => {
+    expect(api.chat.conversations.delete).toHaveBeenCalledWith('test-conv-id')
+  })
+  expect(await screen.findByText(/This response could not be saved/)).toBeInTheDocument()
 })
