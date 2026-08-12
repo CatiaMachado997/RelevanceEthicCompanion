@@ -235,6 +235,30 @@ WEAVIATE_SCHEMAS: List[Dict[str, Any]] = [
                 "indexFilterable": True,
                 "indexSearchable": False,
             },
+            {
+                "name": "embedding_model",
+                "dataType": ["text"],
+                "indexFilterable": True,
+                "indexSearchable": False,
+            },
+            {
+                "name": "section_title",
+                "dataType": ["text"],
+                "indexFilterable": False,
+                "indexSearchable": True,
+            },
+            {
+                "name": "language",
+                "dataType": ["text"],
+                "indexFilterable": True,
+                "indexSearchable": False,
+            },
+            {
+                "name": "document_version",
+                "dataType": ["text"],
+                "indexFilterable": True,
+                "indexSearchable": True,
+            },
         ],
     },
     {

@@ -108,9 +108,7 @@ def get_context_manager() -> ContextManager:
         weaviate_client = get_weaviate_client()
     except Exception:
         weaviate_client = None
-    embedding_service = (
-        EmbeddingService(settings.GEMINI_API_KEY) if settings.GEMINI_API_KEY else None
-    )
+    embedding_service = EmbeddingService(settings.GEMINI_API_KEY)
     return ContextManager(
         weaviate_client=weaviate_client, embedding_service=embedding_service
     )

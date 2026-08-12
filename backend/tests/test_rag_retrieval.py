@@ -6,6 +6,38 @@ from unittest.mock import AsyncMock, MagicMock, patch
 USER_ID = "00000000-0000-0000-0000-000000000000"
 
 
+def test_select_diverse_results_limits_duplicate_documents():
+    from services.rag_retrieval import select_diverse_results
+
+    ranked = [
+        {
+            "chunk_uuid": f"a-{index}",
+            "document_id": "a",
+            "snippet": f"distinct policy topic {index}",
+        }
+        for index in range(3)
+    ] + [{"chunk_uuid": "b-0", "document_id": "b", "snippet": "other evidence"}]
+    selected = select_diverse_results(ranked, top_k=3, max_per_document=2)
+    assert [row["chunk_uuid"] for row in selected] == ["a-0", "a-1", "b-0"]
+
+
+def test_expand_with_candidate_neighbors_keeps_primary_snippet():
+    from services.rag_retrieval import expand_with_candidate_neighbors
+
+    candidates = [
+        {
+            "chunk_uuid": f"u-{index}",
+            "document_id": "doc",
+            "chunk_index": index,
+            "snippet": f"part {index}",
+        }
+        for index in range(3)
+    ]
+    result = expand_with_candidate_neighbors([candidates[1]], candidates, window=1)[0]
+    assert result["snippet"] == "part 1"
+    assert result["expanded_snippet"] == "part 0\n\npart 1\n\npart 2"
+
+
 def _make_weaviate_mock(results=None):
     """Return a mock weaviate client whose hybrid_search returns `results`."""
     client = MagicMock()
@@ -16,6 +48,7 @@ def _make_weaviate_mock(results=None):
 def _make_embedder_mock(vector=None):
     """Return a mock EmbeddingService with async generate_query_embedding."""
     embedder = MagicMock()
+    embedder.model = "test-embedding"
     embedder.generate_query_embedding = AsyncMock(return_value=vector or [0.1, 0.2])
     return embedder
 
@@ -67,7 +100,7 @@ async def test_retrieve_formats_hybrid_search_results():
     assert r["filename"] == "answers.md"
     assert r["chunk_index"] == 3
     assert r["snippet"] == "The answer is 42."
-    assert r["score"] == 0.91
+    assert r["hybrid_score"] == 0.91
     # Sprint B Task 9: legacy uploaded docs default to "document".
     assert r["source_type"] == "document"
 
@@ -138,17 +171,14 @@ async def test_retrieve_passes_user_id_and_query_to_hybrid_search():
     # Sprint G Task 3: hybrid search now pulls a wider pool (floor 20) so the
     # cross-encoder reranker has meaningful candidates; rerank trims back to k.
     assert kwargs["limit"] == 20
-    # 2026 best practice: alpha=0.7 favors dense vector but keeps BM25 contribution
-    assert kwargs["alpha"] == 0.7
+    # The measured evaluation winner balances dense and BM25 retrieval equally.
+    assert kwargs["alpha"] == 0.5
+    assert kwargs["embedding_model"] == "test-embedding"
 
 
 @pytest.mark.asyncio
 async def test_retrieve_with_trace_builds_trace_no_rerank():
-    """Sprint G Task 4: trace mirrors hybrid candidates and final cited UUIDs.
-
-    With JINA_API_KEY empty (default in tests), rerank falls back and the
-    `rerank_applied` flag must be False with `rerank_top=None`.
-    """
+    """Trace mirrors hybrid candidates when a reranker declines to score."""
     raw = [
         {
             "uuid": "uuid-1",
@@ -177,6 +207,9 @@ async def test_retrieve_with_trace_builds_trace_no_rerank():
     ), patch(
         "services.rag_retrieval._get_embedding_service",
         return_value=_make_embedder_mock(vector=[0.5, 0.6]),
+    ), patch(
+        "services.rag_retrieval.rerank",
+        AsyncMock(side_effect=lambda _query, candidates, **_kwargs: candidates[:2]),
     ):
         from services.rag_retrieval import RagRetrievalService
 
@@ -239,7 +272,13 @@ async def test_retrieve_with_trace_marks_rerank_applied():
 
     assert len(results) == 1
     assert trace["rerank_applied"] is True
-    assert trace["rerank_top"] == [{"chunk_uuid": "uuid-a", "rerank_score": 0.97}]
+    assert trace["rerank_top"] == [
+        {
+            "chunk_uuid": "uuid-a",
+            "rerank_score": 0.97,
+            "rerank_provider": None,
+        }
+    ]
     assert trace["final"] == ["uuid-a"]
 
 

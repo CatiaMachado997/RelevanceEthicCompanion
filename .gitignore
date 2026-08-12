@@ -72,6 +72,18 @@ htmlcov/
 # Weaviate
 weaviate-data/
 
+# Local/private RAG corpus and generated evaluations
+knowledge-base/personal/*
+knowledge-base/recovered/*
+!knowledge-base/personal/.gitkeep
+!knowledge-base/recovered/.gitkeep
+backend/tests/evals/.dataset.json
+backend/tests/evals/contexts.json
+backend/tests/evals/contexts.manifest.json
+backend/tests/evals/synthetic_data/
+backend/tests/evals/results/
+backend/.deepeval/
+
 # Docker
 docker-compose.override.yml
 .claude/worktrees/

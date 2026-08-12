@@ -71,29 +71,47 @@ class WeaviateClient:
 
             # Idempotent runtime fix-ups for properties added after initial
             # collection creation (so existing deployments are backfilled).
-            self.ensure_document_memory_source_type()
+            self.ensure_document_memory_properties()
 
             logger.info("✅ All Weaviate schemas initialized")
         except Exception as e:
             logger.error(f"❌ Failed to initialize schemas: {e}")
             raise
 
-    def ensure_document_memory_source_type(self):
-        """Add `source_type` to DocumentMemory if missing — idempotent."""
+    def ensure_document_memory_properties(self):
+        """Add post-launch RAG metadata properties idempotently."""
         try:
             coll = self.client.collections.get("DocumentMemory")
             config = coll.config.get()
             existing = {p.name for p in config.properties}
-            if "source_type" not in existing:
-                from weaviate.classes.config import Property, DataType
+            from weaviate.classes.config import Property, DataType
 
+            properties = {
+                "source_type": (DataType.TEXT, True, False),
+                "embedding_model": (DataType.TEXT, True, False),
+                "section_title": (DataType.TEXT, False, True),
+                "language": (DataType.TEXT, True, False),
+                "document_version": (DataType.TEXT, True, True),
+            }
+            for name, (data_type, filterable, searchable) in properties.items():
+                if name in existing:
+                    continue
                 coll.config.add_property(
-                    Property(name="source_type", data_type=DataType.TEXT)
+                    Property(
+                        name=name,
+                        data_type=data_type,
+                        index_filterable=filterable,
+                        index_searchable=searchable,
+                    )
                 )
-                logger.info("✅ Added 'source_type' property to DocumentMemory")
+                logger.info("Added %s property to DocumentMemory", name)
         except Exception as e:
-            logger.error(f"❌ Failed to ensure DocumentMemory.source_type: {e}")
+            logger.error(f"Failed to ensure DocumentMemory metadata properties: {e}")
             raise
+
+    def ensure_document_memory_source_type(self):
+        """Backward-compatible alias for older callers and tests."""
+        self.ensure_document_memory_properties()
 
     def store_memory(
         self, collection: str, content: Dict[str, Any], vector: List[float]
@@ -246,6 +264,7 @@ class WeaviateClient:
         user_id: str,
         limit: int = 5,
         alpha: float = 0.7,
+        embedding_model: str | None = None,
     ) -> List[Dict[str, Any]]:
         """
         Hybrid search combining semantic (vector) and keyword (BM25)
@@ -266,6 +285,10 @@ class WeaviateClient:
 
             # Build filter using Weaviate v4 Filter class
             where_filter = Filter.by_property("user_id").equal(user_id)
+            if embedding_model:
+                where_filter = where_filter & Filter.by_property(
+                    "embedding_model"
+                ).equal(embedding_model)
 
             # Execute hybrid query
             response = collection_obj.query.hybrid(

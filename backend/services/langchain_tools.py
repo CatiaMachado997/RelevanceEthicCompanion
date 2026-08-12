@@ -488,9 +488,13 @@ class SearchDocumentsTool(BaseTool):
         # Format human-readable excerpts the LLM can quote and cite.
         lines = [f"Found {len(results)} relevant excerpts:"]
         for i, r in enumerate(results, 1):
-            snippet = (r.get("snippet") or "").strip().replace("\n", " ")
-            if len(snippet) > 400:
-                snippet = snippet[:400] + "..."
+            snippet = (
+                (r.get("expanded_snippet") or r.get("snippet") or "")
+                .strip()
+                .replace("\n", " ")
+            )
+            if len(snippet) > 1200:
+                snippet = snippet[:1200] + "..."
             filename = r.get("filename") or "untitled"
             lines.append(f"\n[{i}] ({filename}) {snippet}")
         return "\n".join(lines)

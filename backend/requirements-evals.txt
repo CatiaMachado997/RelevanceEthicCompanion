@@ -1,0 +1,12 @@
+# Local-only RAG evaluation tooling. Install separately from production:
+#   ./venv/bin/pip install -r requirements-evals.txt
+deepeval
+ollama
+# DeepEval 4 uses current structured-output/Responses surfaces; the runtime's
+# legacy OpenAI 1.7 pin is incompatible with its installed modern httpx.
+openai>=2,<3
+chromadb
+langchain-community
+langchain-text-splitters
+# Shared compatibility: Weaviate requires <7; DeepEval/Chroma accept 5.x/6.x.
+protobuf>=5.29.5,<7
