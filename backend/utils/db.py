@@ -61,7 +61,6 @@ def get_db_connection() -> Generator[psycopg.Connection, None, None]:
     Falls back to a direct connection if the pool has not been opened yet
     (useful in tests and management scripts that don't run the full lifespan).
     """
-    global _pool
     if _pool is None:
         logger.debug("Pool not open — opening direct connection")
         conn = psycopg.connect(settings.DATABASE_URL, row_factory=dict_row)

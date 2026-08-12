@@ -1,4 +1,7 @@
 import api, { configureApiAuth } from '@/lib/api'
+import { TextDecoder } from 'util'
+
+Object.defineProperty(globalThis, 'TextDecoder', { value: TextDecoder })
 
 describe('API auth integration', () => {
   beforeEach(() => {
@@ -41,5 +44,26 @@ describe('API auth integration', () => {
       'Unauthorized'
     )
     expect(onUnauthorized).toHaveBeenCalledTimes(1)
+  })
+
+  it('authenticates chat streams with a bearer header', async () => {
+    configureApiAuth({ getAccessToken: () => 'stream-token' })
+    const chunk = new Uint8Array(
+      Array.from('data: {"event":"done"}\n\n').map((char) => char.charCodeAt(0)),
+    )
+    const read = jest.fn()
+      .mockResolvedValueOnce({ value: chunk, done: false })
+      .mockResolvedValueOnce({ value: undefined, done: true })
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: { getReader: () => ({ read }) },
+    } as unknown as Response)
+    ;(globalThis as unknown as { fetch: typeof fetch }).fetch = fetchMock as unknown as typeof fetch
+
+    await api.chat.stream('hello', { onToken: jest.fn() })
+
+    const [, options] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(options.headers).toMatchObject({ Authorization: 'Bearer stream-token' })
   })
 })

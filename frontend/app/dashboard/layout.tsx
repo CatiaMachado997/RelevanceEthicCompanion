@@ -19,7 +19,12 @@ configureApiAuth({
     return session?.access_token ?? null
   },
   onUnauthorized: () => {
-    if (typeof window !== 'undefined') window.location.href = '/login'
+    if (typeof window === 'undefined') return
+    // Several dashboard queries can fail together. Never refresh here: doing
+    // so concurrently rotates the same refresh token and signs the user out.
+    void supabase.auth.getSession().then(({ data }) => {
+      if (!data.session) window.location.replace('/login')
+    })
   },
 })
 

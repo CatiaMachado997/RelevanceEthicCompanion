@@ -304,6 +304,7 @@ export default function ChatPage({ conversationId: conversationIdProp }: { conve
   // this, every subsequent send sees `conversationId === undefined` and spawns
   // yet another conversation — the "clicking anywhere starts a new chat" bug.
   const [conversationId, setConversationId] = useState<string | undefined>(conversationIdProp)
+  const locallyCreatedConversationRef = useRef<string | null>(null)
   useEffect(() => { setConversationId(conversationIdProp) }, [conversationIdProp])
 
   const [messages, setMessages] = useState<Message[]>([])
@@ -376,6 +377,18 @@ export default function ChatPage({ conversationId: conversationIdProp }: { conve
 
   /* history */
   useEffect(() => {
+    if (!conversationId) {
+      setMessages([])
+      setLoadingHistory(false)
+      return
+    }
+    // The first turn is already rendered locally. Before it is persisted, a
+    // history request for the new ID returns [] and would erase the stream.
+    if (locallyCreatedConversationRef.current === conversationId) {
+      locallyCreatedConversationRef.current = null
+      setLoadingHistory(false)
+      return
+    }
     setMessages([])
     setLoadingHistory(true)
     api.chat.history(50, 0, conversationId)
@@ -534,11 +547,14 @@ export default function ChatPage({ conversationId: conversationIdProp }: { conve
       // stream and leaving the user staring at a blank "new chat".
       let activeConvId = conversationId
       if (!activeConvId) {
-        const conv = await api.chat.conversations.create()
+        const titleSource = userText || attachedFile?.name || 'New conversation'
+        const conversationTitle = titleSource.replace(/\s+/g, ' ').trim().slice(0, 100)
+        const conv = await api.chat.conversations.create(conversationTitle)
         activeConvId = conv.id
         // Update local state so subsequent sends reuse this conversation. The
         // route prop won't refresh because we use replaceState (not router.push)
         // to avoid unmounting this component mid-stream.
+        locallyCreatedConversationRef.current = activeConvId
         setConversationId(activeConvId)
         window.history.replaceState(null, '', `/dashboard/chat/${activeConvId}`)
         window.dispatchEvent(new Event('ec:conversation-created'))
@@ -800,6 +816,8 @@ export default function ChatPage({ conversationId: conversationIdProp }: { conve
               setInput('')
               setAttachedFile(null)
               setConversationTitle('')
+              locallyCreatedConversationRef.current = null
+              setConversationId(undefined)
               if (conversationId) router.replace('/dashboard/chat')
             }}
             className="shrink-0 flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-xs transition-colors hover:bg-[rgba(0,0,0,0.05)]"

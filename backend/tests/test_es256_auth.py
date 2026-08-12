@@ -1,6 +1,8 @@
 """Tests that supabase_auth correctly requires ES256 tokens."""
 
 import time
+from datetime import datetime, timezone
+from unittest.mock import MagicMock
 
 import pytest
 from jose import jwk, jwt
@@ -107,3 +109,23 @@ def test_dev_fallback_disabled_when_enforcement_enabled(monkeypatch):
 
     # _is_dev_fallback_enabled() must return False
     assert auth_mod._is_dev_fallback_enabled() is False
+
+
+def test_fetch_jwks_uses_certifi_tls_context(monkeypatch):
+    """JWKS downloads use a portable CA bundle in local Python environments."""
+    import utils.supabase_auth as auth_mod
+
+    response = MagicMock()
+    response.__enter__.return_value.read.return_value = b'{"keys":[{"kid":"one"}]}'
+    urlopen = MagicMock(return_value=response)
+    tls_context = MagicMock()
+    monkeypatch.setattr(auth_mod.urlrequest, "urlopen", urlopen)
+    monkeypatch.setattr(auth_mod.ssl, "create_default_context", lambda **_: tls_context)
+    monkeypatch.setattr(
+        auth_mod,
+        "_JWKS_CACHE",
+        {"expires_at": datetime.now(timezone.utc), "keys": []},
+    )
+
+    assert auth_mod._fetch_jwks()["keys"] == [{"kid": "one"}]
+    assert urlopen.call_args.kwargs["context"] is tls_context
