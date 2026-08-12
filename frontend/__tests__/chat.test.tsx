@@ -22,6 +22,7 @@ jest.mock('../lib/api', () => ({
       stream: jest.fn(),
       conversations: {
         create: jest.fn(),
+        get: jest.fn(),
         list: jest.fn(),
         delete: jest.fn(),
         update: jest.fn(),
@@ -62,6 +63,10 @@ beforeEach(() => {
   ;(api.chat.conversations.create as jest.Mock).mockResolvedValue({
     id: 'test-conv-id',
     title: 'New conversation',
+  })
+  ;(api.chat.conversations.get as jest.Mock).mockResolvedValue({
+    id: 'test-conv-id',
+    title: 'Test conversation',
   })
   // api.chat.stream signature: (message, options) where options includes
   // onToken, onToolUse, etc.

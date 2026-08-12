@@ -346,6 +346,10 @@ export default function ChatPage({ conversationId: conversationIdProp }: { conve
   const textareaRef  = useRef<HTMLTextAreaElement>(null)
   const streamRef    = useRef<{ cancel: () => void } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // Creating the first conversation updates local state while a response is
+  // already streaming. The history effect must not treat that local transition
+  // like navigation to an existing conversation and clear the in-flight turns.
+  const skipHistoryLoadForRef = useRef<string | null>(null)
   /** Populated by SlashCommands; returns true if the keydown was handled. */
   const slashKeyDownRef = useRef<((e: KeyboardEvent) => boolean) | null>(null)
 
@@ -405,6 +409,11 @@ export default function ChatPage({ conversationId: conversationIdProp }: { conve
 
   /* history */
   useEffect(() => {
+    if (conversationId && skipHistoryLoadForRef.current === conversationId) {
+      skipHistoryLoadForRef.current = null
+      setLoadingHistory(false)
+      return
+    }
     setMessages([])
     setLoadingHistory(true)
     api.chat.history(50, 0, conversationId)
@@ -569,6 +578,7 @@ export default function ChatPage({ conversationId: conversationIdProp }: { conve
         // Update local state so subsequent sends reuse this conversation. The
         // route prop won't refresh because we use replaceState (not router.push)
         // to avoid unmounting this component mid-stream.
+        skipHistoryLoadForRef.current = activeConvId
         setConversationId(activeConvId)
         window.history.replaceState(null, '', `/dashboard/chat/${activeConvId}`)
         window.dispatchEvent(new Event('ec:conversation-created'))

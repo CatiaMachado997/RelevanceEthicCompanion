@@ -109,6 +109,38 @@ async def test_force_retrieval_bypasses_provider_tool_selection(
 @patch("services.langchain_tools.create_langchain_tools")
 @patch("langchain_groq.ChatGroq")
 @patch("orchestrator.nodes.tools.get_context_manager")
+async def test_force_retrieval_contextualizes_pronoun_followup(
+    mock_cm, mock_groq_cls, mock_create_tools
+):
+    from orchestrator.nodes.tools import tool_planner_node
+
+    mock_cm.return_value = MagicMock()
+    mock_create_tools.return_value = []
+    mock_groq_cls.return_value = MagicMock()
+
+    out = await tool_planner_node(
+        _base_state(
+            force_retrieval=True,
+            message="What about its documentation?",
+            conversation_history=[
+                {
+                    "role": "user",
+                    "content": "Explain obligations for a high-risk AI system.",
+                },
+                {"role": "assistant", "content": "Here is a summary."},
+            ],
+        )
+    )
+
+    query = out["tool_calls"][0]["args"]["query"]
+    assert "high-risk AI system" in query
+    assert query.endswith("Current follow-up: What about its documentation?")
+
+
+@pytest.mark.asyncio
+@patch("services.langchain_tools.create_langchain_tools")
+@patch("langchain_groq.ChatGroq")
+@patch("orchestrator.nodes.tools.get_context_manager")
 async def test_no_force_retrieval_leaves_planner_alone(
     mock_cm, mock_groq_cls, mock_create_tools
 ):

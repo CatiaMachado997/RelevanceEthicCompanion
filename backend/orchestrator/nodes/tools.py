@@ -15,6 +15,7 @@ from config import settings
 from config import settings as _j_settings
 from services.safety_preferences import SafetyPreferencesService, SafetyPreferences
 from services.planner_run_memory import PlannerRunMemoryService
+from services.rag_query import contextualize_followup_query
 from services.untrusted_content import (
     UNTRUSTED_CONTENT_POLICY,
     render_untrusted_json,
@@ -40,14 +41,61 @@ For factual answers grounded in tool results:
   when its result says otherwise.
 """
 
+CONVERSATION_CONTINUITY_POLICY = """\
+Conversation continuity rules:
+- Resolve follow-ups and pronouns from the most recent relevant user and assistant turns.
+- The user's latest explicit statement or correction overrides older conversation turns
+  and any conflicting saved memory.
+- Carry forward unchanged decisions and constraints, but replace corrected details;
+  do not repeat a stale plan as if it were current.
+- If a referent or correction is genuinely ambiguous, ask one focused clarification
+  instead of guessing.
+- Saved memories are user-controlled. Apply an explicit correction immediately in the
+  current conversation, but never claim long-term memory was changed unless a memory
+  update action actually succeeded.
+"""
+
 
 def _build_synthesis_system_prompt() -> str:
     """Return the stable evidence contract used after tool execution."""
     return (
         f"{UNTRUSTED_CONTENT_POLICY}\n\n"
+        f"{CONVERSATION_CONTINUITY_POLICY}\n"
         f"{EVIDENCE_SYNTHESIS_POLICY}\n"
         "Answer the user's request directly and concisely using the relevant evidence."
     )
+
+
+def _conversation_messages(history: list[dict]) -> list:
+    """Convert validated history rows into role-preserving LangChain messages."""
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    messages = []
+    for turn in history:
+        if not isinstance(turn, dict):
+            continue
+        role = str(turn.get("role") or "").lower()
+        content = str(turn.get("content") or "").strip()
+        if not content:
+            continue
+        if role == "user":
+            messages.append(HumanMessage(content=content))
+        elif role == "assistant":
+            messages.append(AIMessage(content=content))
+    return messages
+
+
+def _build_synthesis_messages(state: AgentState, results: list) -> list:
+    """Build the final-answer prompt without dropping conversational context."""
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    messages = [SystemMessage(content=_build_synthesis_system_prompt())]
+    messages.extend(_conversation_messages(state.get("conversation_history", [])))
+    messages.append(HumanMessage(content=f"Current user request:\n{state['message']}"))
+    messages.append(
+        HumanMessage(content=render_untrusted_json(results, source="tool results"))
+    )
+    return messages
 
 
 async def _execute_with_retry(tool: Any, params: dict) -> dict:
@@ -292,6 +340,7 @@ def _build_system_prompt(state: AgentState) -> str:
     prompt = (
         "You are Ethic Companion, a personal work assistant that respects the user's values and boundaries.\n\n"
         f"{UNTRUSTED_CONTENT_POLICY}\n\n"
+        f"{CONVERSATION_CONTINUITY_POLICY}\n"
         f"User's active goals:\n{goal_lines}\n\n"
         f"User's values:\n{value_lines}"
     )
@@ -320,7 +369,7 @@ async def tool_planner_node(state: AgentState) -> dict:
     Emits {thought, actions: [...]} per step. Empty actions = exit loop.
     Manages the planner_runs row lifecycle.
     """
-    from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+    from langchain_core.messages import HumanMessage, SystemMessage
     from langchain_groq import ChatGroq
     from services.langchain_tools import create_langchain_tools
 
@@ -338,12 +387,7 @@ async def tool_planner_node(state: AgentState) -> dict:
     from langchain_core.messages import BaseMessage
 
     messages: List[BaseMessage] = [SystemMessage(content=_build_system_prompt(state))]
-    for h in state.get("conversation_history", []):
-        messages.append(
-            HumanMessage(content=h["content"])
-            if h["role"] == "user"
-            else AIMessage(content=h["content"])
-        )
+    messages.extend(_conversation_messages(state.get("conversation_history", [])))
     messages.append(HumanMessage(content=state["message"]))
 
     # On a replan iteration, surface the running plan trace so the
@@ -412,18 +456,21 @@ async def tool_planner_node(state: AgentState) -> dict:
     # model tool selection on step one so malformed provider function-calls
     # cannot prevent the required document search.
     if state.get("force_retrieval") and not plan_steps:
+        retrieval_query = contextualize_followup_query(
+            state["message"], state.get("conversation_history", [])
+        )
         parsed = {
             "thought": "Search the user's documents before answering.",
             "actions": [
                 {
                     "tool": "search_documents",
-                    "params": {"query": state["message"], "k": 5},
+                    "params": {"query": retrieval_query, "k": 5},
                 }
             ],
             "raw_tool_calls": [
                 {
                     "name": "search_documents",
-                    "args": {"query": state["message"], "k": 5},
+                    "args": {"query": retrieval_query, "k": 5},
                     "id": "forced_search_documents",
                 }
             ],
@@ -544,7 +591,6 @@ async def tool_execution_node(state: AgentState) -> dict:
     Each action is also recorded in tool_call_events with the
     planner_run_id, step_index, action_index breadcrumbs.
     """
-    from langchain_core.messages import HumanMessage, SystemMessage
     from langchain_groq import ChatGroq
     from services.langchain_tools import create_langchain_tools
     from orchestrator.token_tracker import estimate_tokens, check_token_warning
@@ -918,15 +964,7 @@ async def tool_execution_node(state: AgentState) -> dict:
     cleared_tool_calls: list = []
 
     if results:
-        response = await llm.ainvoke(
-            [
-                SystemMessage(content=_build_synthesis_system_prompt()),
-                HumanMessage(content=f"User request:\n{state['message']}"),
-                HumanMessage(
-                    content=render_untrusted_json(results, source="tool results")
-                ),
-            ]
-        )
+        response = await llm.ainvoke(_build_synthesis_messages(state, results))
         raw = response.content
         proposed = raw if isinstance(raw, str) else str(raw)
     else:

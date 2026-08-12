@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import DashboardLayout from '../app/dashboard/layout'
 
 jest.mock('../hooks/useAuth', () => ({
@@ -46,6 +47,13 @@ jest.mock('next/navigation', () => ({
 }))
 
 test('test_mobile_menu_button_exists', () => {
-  render(<DashboardLayout><div>content</div></DashboardLayout>)
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  render(
+    <QueryClientProvider client={client}>
+      <DashboardLayout><div>content</div></DashboardLayout>
+    </QueryClientProvider>
+  )
   expect(screen.getByLabelText(/menu/i)).toBeInTheDocument()
 })

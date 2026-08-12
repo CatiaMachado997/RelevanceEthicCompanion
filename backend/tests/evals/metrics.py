@@ -293,9 +293,10 @@ def chatbot_conversation_metrics():
         TurnRelevancyMetric,
     )
 
+    async_mode = os.getenv("DEEPEVAL_METRICS_ASYNC", "0") == "1"
     return [
-        ConversationCompletenessMetric(threshold=0.7),
-        KnowledgeRetentionMetric(threshold=0.7),
-        TurnRelevancyMetric(threshold=0.7),
-        RoleAdherenceMetric(threshold=0.7),
+        ConversationCompletenessMetric(threshold=0.7, async_mode=async_mode),
+        KnowledgeRetentionMetric(threshold=0.7, async_mode=async_mode),
+        TurnRelevancyMetric(threshold=0.7, async_mode=async_mode),
+        RoleAdherenceMetric(threshold=0.7, async_mode=async_mode),
     ]

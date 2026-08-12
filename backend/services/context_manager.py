@@ -264,9 +264,15 @@ class ContextManager:
                 if conversation_id:
                     cur.execute(
                         """
-                        SELECT id, role, content, created_at, metadata FROM conversation_turns
-                        WHERE user_id = %s AND conversation_id = %s
-                        ORDER BY created_at ASC LIMIT %s
+                        SELECT id, role, content, created_at, metadata
+                        FROM (
+                            SELECT id, role, content, created_at, metadata
+                            FROM conversation_turns
+                            WHERE user_id = %s AND conversation_id = %s
+                            ORDER BY created_at DESC
+                            LIMIT %s
+                        ) recent
+                        ORDER BY created_at ASC
                     """,
                         (user_id, conversation_id, limit),
                     )

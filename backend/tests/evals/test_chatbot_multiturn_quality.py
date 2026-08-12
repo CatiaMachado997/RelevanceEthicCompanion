@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 
 import pytest
-from deepeval import assert_test
+from deepeval import assert_test, log_hyperparameters
 from deepeval.dataset import EvaluationDataset
 from deepeval.simulator import ConversationSimulator
 
@@ -31,9 +31,7 @@ class ChatbotCallback:
                     ),
                     conversation_history=self.history,
                 ),
-                timeout=float(
-                    os.getenv("CHATBOT_EVAL_TURN_TIMEOUT_SECONDS", "90")
-                ),
+                timeout=float(os.getenv("CHATBOT_EVAL_TURN_TIMEOUT_SECONDS", "90")),
             )
         )
         answer = result["answer"]
@@ -68,6 +66,17 @@ def simulate_cases() -> list:
 
 
 CASES = simulate_cases()
+
+
+@log_hyperparameters
+def chatbot_multiturn_hyperparameters():
+    return {
+        "app_model": os.getenv("CHATBOT_EVAL_APP_MODEL", "llama-3.3-70b-versatile"),
+        "judge_model": os.getenv("GROQ_EVAL_MODEL", "openai/gpt-oss-20b"),
+        "metrics_async": os.getenv("DEEPEVAL_METRICS_ASYNC", "0") == "1",
+        "max_turns": int(os.getenv("CHATBOT_EVAL_MAX_TURNS", "5")),
+        "scenario_count": len(CASES),
+    }
 
 
 @pytest.mark.integration
