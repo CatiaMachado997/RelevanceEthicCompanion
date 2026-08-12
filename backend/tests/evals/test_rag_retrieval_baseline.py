@@ -10,6 +10,12 @@ import time
 from pathlib import Path
 
 import pytest
+
+pytest.importorskip(
+    "deepeval",
+    reason="DeepEval is installed only with requirements-evals.txt",
+)
+
 from deepeval import assert_test, log_hyperparameters
 from deepeval.test_case import LLMTestCase
 

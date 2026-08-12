@@ -294,27 +294,22 @@ export const chatApi = {
         ? { onToken: callbacksOrOnToken }
         : callbacksOrOnToken
 
-    let es: EventSource | null = null
+    const controller = new AbortController()
     let settled = false
     let rejectRef: ((err: Error) => void) | null = null
 
     const promise = new Promise<void>(async (resolve, reject) => {
       rejectRef = reject
-      const modelParam = callbacks.model ? `&model=${encodeURIComponent(callbacks.model)}` : ''
-      const convParam = callbacks.conversation_id ? `&conversation_id=${encodeURIComponent(callbacks.conversation_id)}` : ''
-      const sourcesParam = callbacks.active_sources?.length
-        ? `&active_sources=${encodeURIComponent(callbacks.active_sources.join(','))}` : ''
-      // EventSource cannot send Authorization headers — pass token as query param
-      const token = await resolveAccessToken()
-      const tokenParam = token ? `&token=${encodeURIComponent(token)}` : ''
-      const forceParam = callbacks.force_retrieval ? '&force_retrieval=true' : ''
-      const requestParam = callbacks.request_id ? `&request_id=${encodeURIComponent(callbacks.request_id)}` : ''
-      const url = `${API_URL}/api/chat/stream?message=${encodeURIComponent(message)}${modelParam}${convParam}${sourcesParam}${tokenParam}${forceParam}${requestParam}`
-      es = new EventSource(url, { withCredentials: true })
+      const finish = () => {
+        if (!settled) { settled = true; resolve() }
+      }
+      const fail = (error: Error) => {
+        if (!settled) { settled = true; reject(error) }
+      }
 
-      es.onmessage = (e) => {
+      const handleData = (rawData: string) => {
         try {
-          const data = JSON.parse(e.data)
+          const data = JSON.parse(rawData)
 
           // New event schema
           if (data.event === 'tool_use') {
@@ -339,8 +334,8 @@ export const chatApi = {
           }
           if (data.event === 'rate_limit_exceeded') {
             callbacks.onRateLimitExceeded?.(data.retry_after, data.message)
-            es!.close()
-            if (!settled) { settled = true; resolve() }
+            controller.abort()
+            finish()
             return
           }
           if (data.event === 'token') {
@@ -349,13 +344,13 @@ export const chatApi = {
           }
           if (data.event === 'done') {
             callbacks.onDone?.({ esl_decision: data.esl_decision, citations: data.citations, document_sources: data.document_sources, user_turn_id: data.user_turn_id, assistant_turn_id: data.assistant_turn_id, persisted: data.persisted })
-            es!.close()
-            if (!settled) { settled = true; resolve() }
+            controller.abort()
+            finish()
             return
           }
           if (data.event === 'error') {
-            es!.close()
-            if (!settled) { settled = true; reject(new Error(data.error)) }
+            controller.abort()
+            fail(new Error(data.error))
             return
           }
           // Sprint J events
@@ -377,21 +372,21 @@ export const chatApi = {
           }
           if (data.event === 'plan_paused') {
             callbacks.onPlanPaused?.(data)
-            es!.close()
-            if (!settled) { settled = true; resolve() }
+            controller.abort()
+            finish()
             return
           }
 
           // Backward-compat: legacy {token, done} format
           if (data.error) {
-            es!.close()
-            if (!settled) { settled = true; reject(new Error(data.error)) }
+            controller.abort()
+            fail(new Error(data.error))
             return
           }
           if (data.done) {
             callbacks.onDone?.({ esl_decision: data.esl_decision, citations: data.citations, document_sources: data.document_sources, user_turn_id: data.user_turn_id, assistant_turn_id: data.assistant_turn_id, persisted: data.persisted })
-            es!.close()
-            if (!settled) { settled = true; resolve() }
+            controller.abort()
+            finish()
             return
           }
           if (data.token !== undefined) {
@@ -402,22 +397,61 @@ export const chatApi = {
         }
       }
 
-      es.onerror = () => {
-        es!.close()
-        // EventSource readyState 2 = CLOSED (never connected)
-        const msg = (es as EventSource).readyState === 2 || !navigator.onLine
-          ? 'Failed to fetch'
-          : 'Stream connection lost'
-        if (!settled) { settled = true; reject(new Error(msg)) }
+      try {
+        const params = new URLSearchParams({ message })
+        if (callbacks.model) params.set('model', callbacks.model)
+        if (callbacks.conversation_id) params.set('conversation_id', callbacks.conversation_id)
+        if (callbacks.active_sources?.length) params.set('active_sources', callbacks.active_sources.join(','))
+        if (callbacks.force_retrieval) params.set('force_retrieval', 'true')
+        if (callbacks.request_id) params.set('request_id', callbacks.request_id)
+
+        const token = await resolveAccessToken()
+        const headers: Record<string, string> = { Accept: 'text/event-stream' }
+        if (token) headers.Authorization = `Bearer ${token}`
+
+        const response = await fetch(`${API_URL}/api/chat/stream?${params}`, {
+          headers,
+          credentials: 'include',
+          signal: controller.signal,
+        })
+
+        if (response.status === 401) authConfig.onUnauthorized?.()
+        if (!response.ok || !response.body) {
+          const payload = await response.json().catch(() => null)
+          const detail = payload?.detail
+          const message = typeof detail === 'string'
+            ? detail
+            : detail?.message || `Chat stream failed with HTTP ${response.status}`
+          throw new Error(message)
+        }
+
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        while (!settled) {
+          const { value, done } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() ?? ''
+          for (const line of lines) {
+            if (line.startsWith('data: ')) handleData(line.slice(6))
+          }
+        }
+        finish()
+      } catch (error) {
+        if (settled) return
+        if (error instanceof Error && error.name === 'AbortError') {
+          fail(new Error('Stream cancelled'))
+        } else {
+          fail(error instanceof Error ? error : new Error(String(error)))
+        }
       }
     })
 
     const extended = promise as Promise<void> & { cancel: () => void }
     extended.cancel = () => {
-      if (es) {
-        es.close()
-        es = null
-      }
+      controller.abort()
       if (!settled && rejectRef) {
         settled = true
         rejectRef(new Error('Stream cancelled'))
@@ -539,8 +573,11 @@ export const chatApi = {
       apiRequest<{ conversations: Array<{ id: string; title: string; folder_id: string | null; created_at: string; updated_at: string }> }>('/api/chat/conversations'),
     get: (id: string) =>
       apiRequest<{ id: string; title: string; folder_id: string | null; created_at: string; updated_at: string }>(`/api/chat/conversations/${id}`),
-    create: () =>
-      apiRequest<{ id: string; title: string; created_at: string; updated_at: string }>('/api/chat/conversations', { method: 'POST' }),
+    create: (title = 'New conversation', folderId?: string) =>
+      apiRequest<{ id: string; title: string; folder_id: string | null; created_at: string; updated_at: string }>('/api/chat/conversations', {
+        method: 'POST',
+        body: JSON.stringify({ title, folder_id: folderId ?? null }),
+      }),
     rename: (id: string, title: string) =>
       apiRequest<{ id: string; title: string }>(`/api/chat/conversations/${id}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
     delete: (id: string) =>

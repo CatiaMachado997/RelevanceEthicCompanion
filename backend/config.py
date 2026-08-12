@@ -229,8 +229,9 @@ class Settings(BaseSettings):
     # Retention — daily prune job for tool_call_events / esl_audit_log
     RETENTION_DAYS: int = 90
 
-    # Local overrides (including tracing credentials) stay in the ignored
-    # .env.local file and take precedence over the shared .env values.
+    # Keep developer settings separate from deployed environment variables.
+    # `.env.local` is ignored by Git, includes tracing credentials, and
+    # overrides the optional shared `.env` file.
     model_config = SettingsConfigDict(
         env_file=(".env", ".env.local"), case_sensitive=True
     )

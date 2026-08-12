@@ -1,3 +1,10 @@
+import pytest
+
+pytest.importorskip(
+    "deepeval",
+    reason="DeepEval is installed only with requirements-evals.txt",
+)
+
 from deepeval.test_case import LLMTestCase
 
 from tests.evals.metrics import (

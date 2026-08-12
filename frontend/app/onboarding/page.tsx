@@ -4,12 +4,25 @@ import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Shield, Sparkles } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { onboardingApi } from '@/lib/api'
+import { configureApiAuth, onboardingApi } from '@/lib/api'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/hooks/useAuth'
+import { useOnboardingState } from '@/hooks/useOnboardingState'
 import { StepConnect } from '@/components/onboarding/StepConnect'
 import { StepValues } from '@/components/onboarding/StepValues'
 import { StepGoal } from '@/components/onboarding/StepGoal'
 
 const TOTAL_STEPS = 3
+
+configureApiAuth({
+  getAccessToken: async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    return session?.access_token ?? null
+  },
+  onUnauthorized: () => {
+    if (typeof window !== 'undefined') window.location.href = '/login'
+  },
+})
 
 function StepDots({ current }: { current: number }) {
   return (
@@ -68,6 +81,10 @@ function OnboardingWizard() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const queryClient = useQueryClient()
+  const { isAuthenticated, loading: authLoading } = useAuth()
+  const { data: onboarding, isLoading: onboardingLoading } = useOnboardingState(
+    !authLoading && isAuthenticated,
+  )
 
   // Parse step from URL — never trust it blind, clamp to [1, TOTAL_STEPS].
   const rawStep = parseInt(searchParams.get('step') ?? '1', 10)
@@ -76,6 +93,7 @@ function OnboardingWizard() {
     : 1
 
   const [completing, setCompleting] = useState(false)
+  const [completionError, setCompletionError] = useState<string | null>(null)
   const [showFinal, setShowFinal] = useState(false)
 
   // Once the wizard has loaded, the in-progress marker is no longer needed.
@@ -89,6 +107,14 @@ function OnboardingWizard() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) router.replace('/login')
+  }, [authLoading, isAuthenticated, router])
+
+  useEffect(() => {
+    if (onboarding?.onboarded_at) router.replace('/dashboard/today')
+  }, [onboarding?.onboarded_at, router])
+
   const goToStep = (n: number) => {
     const clamped = Math.max(1, Math.min(TOTAL_STEPS, n))
     router.replace(`/onboarding?step=${clamped}`)
@@ -96,12 +122,14 @@ function OnboardingWizard() {
 
   const finishOnboarding = async () => {
     setCompleting(true)
+    setCompletionError(null)
     try {
       await onboardingApi.complete()
     } catch (e) {
-      // The complete endpoint is idempotent — even if it fails we still want
-      // the user to land on the dashboard. Just log it.
       console.warn('[onboarding] failed to mark complete', e)
+      setCompletionError(e instanceof Error ? e.message : 'Could not finish setup. Please try again.')
+      setCompleting(false)
+      return
     }
     // Invalidate any caches that consumers might have set up. The standard
     // keys we publish from this Sprint are ["onboarding-state"] and
@@ -119,6 +147,17 @@ function OnboardingWizard() {
   // which then has its own CTA to finishOnboarding. This split keeps the
   // success moment distinct from any saving spinner.
   const handleStep3Done = () => setShowFinal(true)
+
+  if (authLoading || !isAuthenticated || onboardingLoading || onboarding?.onboarded_at) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center text-sm"
+        style={{ background: 'var(--ec-page-bg)', color: 'var(--ec-text-subtle)' }}
+      >
+        Loading…
+      </div>
+    )
+  }
 
   return (
     <div
@@ -161,6 +200,11 @@ function OnboardingWizard() {
             >
               {completing ? 'Just a moment…' : 'Take me to Today'}
             </button>
+            {completionError && (
+              <p className="text-sm" role="alert" style={{ color: '#b04a3a' }}>
+                {completionError}
+              </p>
+            )}
           </div>
         ) : (
           <>

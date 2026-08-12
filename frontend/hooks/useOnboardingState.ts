@@ -15,12 +15,13 @@ import api, { type OnboardingState } from '@/lib/api'
  * also reads this. Sharing one query key (`onboarding-state`) lets us
  * invalidate from a single place when the wizard saves a step.
  */
-export function useOnboardingState() {
+export function useOnboardingState(enabled = true) {
   return useQuery<OnboardingState>({
     queryKey: ['onboarding-state'],
     queryFn: () => api.onboarding.state(),
     // Refetch on window focus so a user who completed step 1 in another tab
     // sees the nudge update without a hard reload.
     staleTime: 30_000,
+    enabled,
   })
 }

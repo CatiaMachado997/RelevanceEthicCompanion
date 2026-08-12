@@ -6,7 +6,11 @@ from unittest.mock import MagicMock, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from utils.supabase_auth import get_current_read_user_id, get_current_user_id
+from utils.supabase_auth import (
+    UserPrincipal,
+    get_current_read_user_id,
+    get_current_user,
+)
 
 TEST_USER_ID = "00000000-0000-0000-0000-000000000000"
 
@@ -17,7 +21,11 @@ def _make_app():
     app = FastAPI()
     app.include_router(router)
     app.dependency_overrides[get_current_read_user_id] = lambda: TEST_USER_ID
-    app.dependency_overrides[get_current_user_id] = lambda: TEST_USER_ID
+    app.dependency_overrides[get_current_user] = lambda: UserPrincipal(
+        user_id=TEST_USER_ID,
+        email="dev@example.com",
+        claims={"sub": TEST_USER_ID},
+    )
     return app
 
 
@@ -89,7 +97,7 @@ def test_state_completed_returns_iso_timestamp():
 
 
 def test_complete_returns_timestamp_and_is_idempotent():
-    """COALESCE in the UPDATE means a second call returns the original timestamp."""
+    """The upsert provisions missing users and preserves the first completion time."""
     app = _make_app()
     ts = datetime(2026, 4, 27, 9, 0, 0, tzinfo=timezone.utc)
     with patch(
