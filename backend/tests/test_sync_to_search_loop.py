@@ -38,7 +38,14 @@ class _FakeWeaviateRoundTrip:
         return uid
 
     def hybrid_search(
-        self, collection, query, query_vector, user_id, limit=5, alpha=0.7
+        self,
+        collection,
+        query,
+        query_vector,
+        user_id,
+        limit=5,
+        alpha=0.7,
+        embedding_model=None,
     ):
         # Match RagRetrievalService.retrieve()'s shape exactly.
         out = []
