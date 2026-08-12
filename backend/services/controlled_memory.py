@@ -10,7 +10,9 @@ from utils.db import get_db_connection
 
 
 class ControlledMemoryService:
-    def list(self, user_id: str, *, active_only: bool = False, limit: int = 100) -> list[dict[str, Any]]:
+    def list(
+        self, user_id: str, *, active_only: bool = False, limit: int = 100
+    ) -> list[dict[str, Any]]:
         where_active = " AND active = TRUE" if active_only else ""
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -27,7 +29,14 @@ class ControlledMemoryService:
                 )
                 return list(cur.fetchall())
 
-    def create(self, user_id: str, *, content: str, kind: str, source_turn_id: str | None = None) -> dict[str, Any]:
+    def create(
+        self,
+        user_id: str,
+        *,
+        content: str,
+        kind: str,
+        source_turn_id: str | None = None,
+    ) -> dict[str, Any]:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -37,14 +46,32 @@ class ControlledMemoryService:
                     RETURNING id, content, kind, active, source_turn_id, metadata,
                               created_at, updated_at
                     """,
-                    (user_id, content.strip(), kind, source_turn_id, Json({"created_by": "user"})),
+                    (
+                        user_id,
+                        content.strip(),
+                        kind,
+                        source_turn_id,
+                        Json({"created_by": "user"}),
+                    ),
                 )
                 return cur.fetchone()
 
-    def update(self, user_id: str, memory_id: str, *, content: str | None, kind: str | None, active: bool | None) -> dict[str, Any] | None:
+    def update(
+        self,
+        user_id: str,
+        memory_id: str,
+        *,
+        content: str | None,
+        kind: str | None,
+        active: bool | None,
+    ) -> dict[str, Any] | None:
         assignments: list[str] = []
         values: list[Any] = []
-        for column, value in (("content", content.strip() if content else content), ("kind", kind), ("active", active)):
+        for column, value in (
+            ("content", content.strip() if content else content),
+            ("kind", kind),
+            ("active", active),
+        ):
             if value is not None:
                 assignments.append(f"{column} = %s")
                 values.append(value)

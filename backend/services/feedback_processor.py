@@ -71,7 +71,11 @@ class FeedbackProcessor:
                     ORDER BY created_at DESC
                     LIMIT 1
                     """,
-                    (user_id, assistant.get("conversation_id"), assistant["created_at"]),
+                    (
+                        user_id,
+                        assistant.get("conversation_id"),
+                        assistant["created_at"],
+                    ),
                 )
                 prompt = cur.fetchone()
         return {

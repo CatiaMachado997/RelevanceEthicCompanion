@@ -8,7 +8,10 @@ from pathlib import Path
 
 from utils.db import get_db_connection
 
-DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "tests/evals/synthetic_data/feedback_regressions.json"
+DEFAULT_OUTPUT = (
+    Path(__file__).resolve().parents[1]
+    / "tests/evals/synthetic_data/feedback_regressions.json"
+)
 
 
 def export_feedback(user_id: str) -> list[dict]:

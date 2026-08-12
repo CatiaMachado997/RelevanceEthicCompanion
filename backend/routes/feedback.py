@@ -30,7 +30,9 @@ async def submit_feedback(
             corrected_answer=request.corrected_answer,
         )
         if result.get("success") is False:
-            raise HTTPException(status_code=400, detail=result.get("error", "Invalid feedback"))
+            raise HTTPException(
+                status_code=400, detail=result.get("error", "Invalid feedback")
+            )
         # Close the feedback loop: nudge relevance weights based on patterns
         await processor.adjust_signal_from_feedback(
             user_id=str(user_id),

@@ -36,10 +36,16 @@ def create_memory(request: MemoryCreate, user_id: str = Depends(get_current_user
 
 
 @router.patch("/{memory_id}")
-def update_memory(memory_id: str, request: MemoryUpdate, user_id: str = Depends(get_current_user_id)):
-    row = ControlledMemoryService().update(str(user_id), memory_id, **request.model_dump())
+def update_memory(
+    memory_id: str, request: MemoryUpdate, user_id: str = Depends(get_current_user_id)
+):
+    row = ControlledMemoryService().update(
+        str(user_id), memory_id, **request.model_dump()
+    )
     if not row:
-        raise HTTPException(status_code=404, detail="Memory not found or no changes provided")
+        raise HTTPException(
+            status_code=404, detail="Memory not found or no changes provided"
+        )
     return serialize_row(row)
 
 

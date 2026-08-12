@@ -5,7 +5,9 @@ from services.context_manager import ContextManager
 from utils.weaviate_client import get_weaviate_client
 
 
-def bound_conversation_history(history: list[dict], max_chars: int = 12000) -> list[dict]:
+def bound_conversation_history(
+    history: list[dict], max_chars: int = 12000
+) -> list[dict]:
     """Keep the newest complete turns within a predictable prompt budget."""
     selected: list[dict] = []
     used = 0
