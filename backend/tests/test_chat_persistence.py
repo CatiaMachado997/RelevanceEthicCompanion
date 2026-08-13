@@ -11,6 +11,7 @@ from models.context import Goal
 from services.context_manager import ContextManager
 from services.langchain_tools import (
     GoalCreateTool,
+    NoteCreateTool,
     NoteCreateInput,
     TaskCreateTool,
     UserValueCreateInput,
@@ -43,13 +44,42 @@ async def test_create_goal_tool_persists_a_real_goal():
     assert goal.user_id == "user-1"
     assert goal.title == "Ship the release"
     assert goal.priority == 8
-    assert goal.metadata == {"source": "chat_tool"}
+    assert goal.metadata["source"] == "chat_tool"
+    assert len(goal.metadata["chat_dedupe_key"]) == 64
     assert result == {
         "status": "saved",
         "kind": "goal",
         "id": "goal-123",
         "title": "Ship the release",
+        "duplicate": False,
     }
+
+
+@pytest.mark.asyncio
+async def test_goal_repository_uses_database_dedupe_without_exposing_key():
+    created_at = datetime.now(timezone.utc)
+    cursor = FakeCursor(
+        [{"id": "existing-goal", "created_at": created_at, "inserted": False}]
+    )
+
+    @contextmanager
+    def fake_connection():
+        yield FakeConnection(cursor)
+
+    goal = Goal(
+        user_id="user-1",
+        title="Wake up at 6am",
+        metadata={"source": "chat_tool", "chat_dedupe_key": "stable-key"},
+    )
+    with patch("services.context_manager.get_db_connection", fake_connection):
+        saved = await ContextManager.__new__(ContextManager).create_goal(goal)
+
+    query, params = cursor.executions[0]
+    assert "ON CONFLICT (user_id, chat_dedupe_key)" in query
+    assert params[-1] == "stable-key"
+    assert json.loads(params[-2]) == {"source": "chat_tool"}
+    assert saved.id == "existing-goal"
+    assert saved.metadata == {"source": "chat_tool", "_duplicate": True}
 
 
 def test_note_and_value_schemas_cannot_masquerade_as_goals():
@@ -94,6 +124,9 @@ class FakeConnection:
 
     def cursor(self):
         return self._cursor
+
+    def commit(self):
+        return None
 
 
 @pytest.mark.asyncio
@@ -149,7 +182,8 @@ async def test_create_task_tool_uses_task_fields_and_chat_origin():
     query, params = cursor.executions[0]
     assert "INSERT INTO tasks" in query
     assert "'chat'" in query
-    assert params == ("user-1", None, "goal-1", "Send proposal", None, 2, None)
+    assert params[:7] == ("user-1", None, "goal-1", "Send proposal", None, 2, None)
+    assert len(params[7]) == 64
 
 
 @pytest.mark.asyncio
@@ -173,6 +207,25 @@ async def test_save_user_value_tool_preserves_boundary_type():
     query, params = cursor.executions[0]
     assert "INSERT INTO user_values" in query
     assert params[:4] == ("user-1", "boundary", "No work after 18:00", 1)
+    assert len(params[5]) == 64
+
+
+@pytest.mark.asyncio
+async def test_duplicate_note_does_not_duplicate_semantic_memory():
+    cursor = FakeCursor([{"id": "note-1", "value": "Remember this", "inserted": False}])
+    context_manager = AsyncMock()
+
+    @contextmanager
+    def fake_connection():
+        yield FakeConnection(cursor)
+
+    with patch("services.langchain_tools.get_db_connection", fake_connection):
+        result = json.loads(
+            await NoteCreateTool(context_manager, "user-1")._arun("Remember this")
+        )
+
+    assert result["duplicate"] is True
+    context_manager.store_semantic_memory.assert_not_awaited()
 
 
 def test_persistence_confirmation_hides_ids_and_internal_fields():
@@ -212,6 +265,25 @@ def test_persistence_confirmation_deduplicates_replayed_result():
 
     assert _clean_persistence_confirmation([saved, saved]) == (
         "Created goal in **Goals**: “Wake up at 6am”."
+    )
+
+
+def test_persistence_confirmation_marks_database_duplicate():
+    saved = {
+        "tool": "create_task",
+        "result": json.dumps(
+            {
+                "status": "saved",
+                "kind": "task",
+                "id": "task-1",
+                "title": "Send proposal",
+                "duplicate": True,
+            }
+        ),
+    }
+
+    assert _clean_persistence_confirmation([saved]) == (
+        "Already saved in **Tasks**: “Send proposal”."
     )
 
 

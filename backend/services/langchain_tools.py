@@ -14,6 +14,7 @@ import logging
 
 from models.context import SemanticMemoryEntry
 from utils.db import get_db_connection
+from services.tool_action_idempotency import build_persistence_dedupe_key
 
 logger = logging.getLogger(__name__)
 
@@ -350,8 +351,14 @@ class NoteCreateTool(BaseTool):
                 with conn.cursor() as cur:
                     cur.execute(
                         """
-                        INSERT INTO user_values (user_id, type, value, priority, active, metadata)
-                        VALUES (%s, 'preference', %s, 5, TRUE, %s)
+                        INSERT INTO user_values
+                            (user_id, type, value, priority, active, metadata,
+                             chat_dedupe_key)
+                        VALUES (%s, 'preference', %s, 5, TRUE, %s, %s)
+                        ON CONFLICT (user_id, chat_dedupe_key)
+                            WHERE chat_dedupe_key IS NOT NULL AND active
+                        DO UPDATE SET value = user_values.value
+                        RETURNING id, value, (xmax = 0) AS inserted
                         """,
                         (
                             self.user_id,
@@ -362,31 +369,39 @@ class NoteCreateTool(BaseTool):
                                     "source": "chat_tool",
                                 }
                             ),
+                            build_persistence_dedupe_key(
+                                "create_note", {"content": content}
+                            ),
                         ),
                     )
+                    row = cur.fetchone()
                 conn.commit()
         except Exception as e:
             logger.error(f"Note M1 (PostgreSQL) write failed: {e}")
             raise RuntimeError("Note was not saved") from e
 
-        # --- M2 write (Weaviate) — semantic index; failure is non-fatal ---
-        try:
-            await self.context_manager.store_semantic_memory(
-                SemanticMemoryEntry(
-                    user_id=self.user_id,
-                    content=content,
-                    source="note",
-                    metadata={"type": "user_note"},
+        inserted = bool(row.get("inserted", True))
+
+        # --- M2 write (Weaviate) — only index a newly-created M1 row. ---
+        if inserted:
+            try:
+                await self.context_manager.store_semantic_memory(
+                    SemanticMemoryEntry(
+                        user_id=self.user_id,
+                        content=content,
+                        source="note",
+                        metadata={"type": "user_note"},
+                    )
                 )
-            )
-        except Exception as e:
-            logger.warning(f"Note M2 (Weaviate) write failed (non-fatal): {e}")
+            except Exception as e:
+                logger.warning(f"Note M2 (Weaviate) write failed (non-fatal): {e}")
 
         return json.dumps(
             {
                 "status": "saved",
                 "kind": "note",
                 "content": content[:80] + ("..." if len(content) > 80 else ""),
+                "duplicate": not inserted,
             }
         )
 
@@ -434,13 +449,25 @@ class GoalCreateTool(BaseTool):
                 description=description,
                 priority=priority,
                 target_date=target_date,
-                metadata={"source": "chat_tool"},
+                metadata={
+                    "source": "chat_tool",
+                    "chat_dedupe_key": build_persistence_dedupe_key(
+                        "create_goal",
+                        {"title": title, "target_date": target_date},
+                    ),
+                },
             )
         )
         if not goal or not goal.id:
             raise RuntimeError("Goal was not saved")
         return json.dumps(
-            {"status": "saved", "kind": "goal", "id": goal.id, "title": goal.title}
+            {
+                "status": "saved",
+                "kind": "goal",
+                "id": goal.id,
+                "title": goal.title,
+                "duplicate": bool((goal.metadata or {}).get("_duplicate")),
+            }
         )
 
     def _run(self, **kwargs) -> str:
@@ -486,14 +513,28 @@ class TaskCreateTool(BaseTool):
         from utils.db import get_db_connection
 
         with get_db_connection() as conn:
+            dedupe_key = build_persistence_dedupe_key(
+                "create_task",
+                {
+                    "title": title,
+                    "due_date": due_date,
+                    "goal_id": goal_id,
+                    "project_id": project_id,
+                },
+            )
             with conn.cursor() as cur:
                 cur.execute(
                     """
                     INSERT INTO tasks
                         (user_id, project_id, goal_id, title, description, priority,
-                         due_date, source_origin, ai_confidence, user_confirmed)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, 'chat', 1.0, TRUE)
-                    RETURNING id, title
+                         due_date, source_origin, ai_confidence, user_confirmed,
+                         chat_dedupe_key)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, 'chat', 1.0, TRUE, %s)
+                    ON CONFLICT (user_id, chat_dedupe_key)
+                        WHERE chat_dedupe_key IS NOT NULL
+                          AND status IN ('todo', 'in_progress')
+                    DO UPDATE SET title = tasks.title
+                    RETURNING id, title, (xmax = 0) AS inserted
                     """,
                     (
                         self.user_id,
@@ -503,6 +544,7 @@ class TaskCreateTool(BaseTool):
                         description,
                         priority,
                         due_date,
+                        dedupe_key,
                     ),
                 )
                 row = cur.fetchone()
@@ -514,6 +556,7 @@ class TaskCreateTool(BaseTool):
                 "kind": "task",
                 "id": str(row["id"]),
                 "title": row["title"],
+                "duplicate": not bool(row.get("inserted", True)),
             }
         )
 
@@ -562,13 +605,20 @@ class UserValueCreateTool(BaseTool):
         if value_type not in allowed:
             raise ValueError(f"Unsupported value type: {value_type}")
         with get_db_connection() as conn:
+            dedupe_key = build_persistence_dedupe_key(
+                "save_user_value", {"value": value, "value_type": value_type}
+            )
             with conn.cursor() as cur:
                 cur.execute(
                     """
                     INSERT INTO user_values
-                        (user_id, type, value, priority, active, metadata)
-                    VALUES (%s, %s, %s, %s, TRUE, %s::jsonb)
-                    RETURNING id, type, value
+                        (user_id, type, value, priority, active, metadata,
+                         chat_dedupe_key)
+                    VALUES (%s, %s, %s, %s, TRUE, %s::jsonb, %s)
+                    ON CONFLICT (user_id, chat_dedupe_key)
+                        WHERE chat_dedupe_key IS NOT NULL AND active
+                    DO UPDATE SET value = user_values.value
+                    RETURNING id, type, value, (xmax = 0) AS inserted
                     """,
                     (
                         self.user_id,
@@ -576,6 +626,7 @@ class UserValueCreateTool(BaseTool):
                         value.strip(),
                         priority,
                         json.dumps({"source": "chat_tool"}),
+                        dedupe_key,
                     ),
                 )
                 row = cur.fetchone()
@@ -587,6 +638,7 @@ class UserValueCreateTool(BaseTool):
                 "kind": "value",
                 "id": str(row["id"]),
                 "value": row["value"],
+                "duplicate": not bool(row.get("inserted", True)),
             }
         )
 

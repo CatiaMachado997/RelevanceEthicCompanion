@@ -21,9 +21,9 @@ class ActionClaim:
 def _normalized_personal_write_input(tool_name: str, tool_input: dict) -> dict:
     """Use the persisted item's identity, not planner-added descriptive wording."""
     identity_fields = {
-        "create_goal": ("title",),
-        "create_task": ("title",),
-        "save_user_value": ("value",),
+        "create_goal": ("title", "target_date"),
+        "create_task": ("title", "due_date", "goal_id", "project_id"),
+        "save_user_value": ("value", "value_type"),
         "create_note": ("content",),
     }
     fields = identity_fields.get(tool_name)
@@ -36,6 +36,18 @@ def _normalized_personal_write_input(tool_name: str, tool_input: dict) -> dict:
             value = " ".join(value.casefold().split())
         identity[field] = value
     return identity
+
+
+def build_persistence_dedupe_key(tool_name: str, tool_input: dict) -> str:
+    """Return a stable database key for one logical personal item."""
+    identity = _normalized_personal_write_input(tool_name, tool_input)
+    canonical = json.dumps(
+        {"tool_name": tool_name, "identity": identity},
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def build_action_key(

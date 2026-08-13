@@ -5,7 +5,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from orchestrator.nodes.tools import _execute_action_once
-from services.tool_action_idempotency import ActionClaim, build_action_key
+from services.tool_action_idempotency import (
+    ActionClaim,
+    build_action_key,
+    build_persistence_dedupe_key,
+)
 
 
 def test_action_key_is_stable_across_parameter_order():
@@ -66,6 +70,28 @@ def test_request_id_deduplicates_goal_when_replan_adds_description():
         step_index=2,
         action_index=0,
         **common,
+    )
+
+    assert first == second
+
+
+def test_database_key_allows_same_task_at_a_different_due_date():
+    first = build_persistence_dedupe_key(
+        "create_task", {"title": "Dinner", "due_date": "2026-08-13T19:00:00"}
+    )
+    second = build_persistence_dedupe_key(
+        "create_task", {"title": "Dinner", "due_date": "2026-08-14T19:00:00"}
+    )
+
+    assert first != second
+
+
+def test_database_key_normalizes_title_but_ignores_description():
+    first = build_persistence_dedupe_key(
+        "create_goal", {"title": " Wake  up ", "description": "Daily"}
+    )
+    second = build_persistence_dedupe_key(
+        "create_goal", {"title": "wake UP", "description": None}
     )
 
     assert first == second
