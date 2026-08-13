@@ -16,6 +16,10 @@ from services.langchain_tools import (
     UserValueCreateInput,
     UserValueCreateTool,
 )
+from orchestrator.nodes.tools import (
+    _clean_persistence_confirmation,
+    _enforce_explicit_persistence_intent,
+)
 
 
 @pytest.mark.asyncio
@@ -169,3 +173,77 @@ async def test_save_user_value_tool_preserves_boundary_type():
     query, params = cursor.executions[0]
     assert "INSERT INTO user_values" in query
     assert params[:4] == ("user-1", "boundary", "No work after 18:00", 1)
+
+
+def test_persistence_confirmation_hides_ids_and_internal_fields():
+    result = _clean_persistence_confirmation(
+        [
+            {
+                "tool": "save_user_value",
+                "result": json.dumps(
+                    {
+                        "status": "saved",
+                        "kind": "value",
+                        "id": "private-id",
+                        "value": "I respect privacy",
+                    }
+                ),
+            }
+        ]
+    )
+
+    assert result == "Saved value in **Values**: “I respect privacy”."
+    assert "private-id" not in result
+    assert "kind" not in result
+
+
+def test_persistence_confirmation_deduplicates_replayed_result():
+    saved = {
+        "tool": "create_goal",
+        "result": json.dumps(
+            {
+                "status": "saved",
+                "kind": "goal",
+                "id": "goal-1",
+                "title": "Wake up at 6am",
+            }
+        ),
+    }
+
+    assert _clean_persistence_confirmation([saved, saved]) == (
+        "Created goal in **Goals**: “Wake up at 6am”."
+    )
+
+
+def test_explicit_goal_request_cannot_be_saved_as_task():
+    parsed = {
+        "thought": "Save it.",
+        "actions": [
+            {
+                "tool": "create_task",
+                "params": {"title": "Dinner at 7pm", "due_date": "2026-08-12T19:00:00"},
+            }
+        ],
+        "raw_tool_calls": [
+            {
+                "name": "create_task",
+                "args": {"title": "Dinner at 7pm", "due_date": "2026-08-12T19:00:00"},
+                "id": "call-1",
+            }
+        ],
+    }
+
+    corrected = _enforce_explicit_persistence_intent(
+        "creater a goal dinner at 7pm", parsed
+    )
+
+    assert corrected["actions"] == [
+        {
+            "tool": "create_goal",
+            "params": {
+                "title": "Dinner at 7pm",
+                "target_date": "2026-08-12T19:00:00",
+            },
+        }
+    ]
+    assert corrected["raw_tool_calls"][0]["name"] == "create_goal"

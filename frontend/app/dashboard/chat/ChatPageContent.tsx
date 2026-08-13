@@ -100,6 +100,13 @@ function formatTime(iso: string): string {
   } catch { return '' }
 }
 
+function cleanLegacyPersistenceResult(content: string): string {
+  return content.replace(
+    /\s*\(type:\s*[^,()]+,\s*id:\s*[^)]+\)\s*$/i,
+    '',
+  ).trim()
+}
+
 /* ─── Copy button ─── */
 function CopyButton({ content, size = 14 }: { content: string; size?: number }) {
   const [copied, setCopied] = useState(false)
@@ -419,7 +426,9 @@ export default function ChatPageContent({ conversationId: conversationIdProp }: 
         setMessages((h.messages ?? []).map((m, i) => ({
           id:        m.id ?? `h-${i}`,
           role:      m.role as 'user' | 'assistant',
-          content:   m.content,
+          content:   m.role === 'assistant'
+            ? cleanLegacyPersistenceResult(m.content)
+            : m.content,
           timestamp: m.timestamp ?? '',
           citations: m.metadata?.citations,
           documentSources: m.metadata?.document_sources,

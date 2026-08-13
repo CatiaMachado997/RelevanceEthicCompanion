@@ -97,6 +97,22 @@ test('test_chat_loads_history_on_mount', async () => {
   await waitFor(() => expect(api.chat.history).toHaveBeenCalledTimes(1))
 })
 
+test('hides legacy persistence IDs from chat history', async () => {
+  ;(api.chat.history as jest.Mock).mockResolvedValue({
+    messages: [{
+      id: 'assistant-1',
+      role: 'assistant',
+      content: 'Value saved: "I respect privacy" (type: value, id: private-id)',
+      timestamp: '2026-08-12T18:39:00Z',
+    }],
+  })
+
+  render(<ChatPage />)
+
+  expect(await screen.findByText('Value saved: "I respect privacy"')).toBeInTheDocument()
+  expect(screen.queryByText(/private-id/)).not.toBeInTheDocument()
+})
+
 test('test_empty_chat_shows_example_prompts', async () => {
   render(<ChatPage />)
   await waitFor(() => expect(api.chat.history).toHaveBeenCalled())
