@@ -18,6 +18,26 @@ class ActionClaim:
     error_message: Optional[str] = None
 
 
+def _normalized_personal_write_input(tool_name: str, tool_input: dict) -> dict:
+    """Use the persisted item's identity, not planner-added descriptive wording."""
+    identity_fields = {
+        "create_goal": ("title",),
+        "create_task": ("title",),
+        "save_user_value": ("value",),
+        "create_note": ("content",),
+    }
+    fields = identity_fields.get(tool_name)
+    if not fields:
+        return tool_input
+    identity: dict[str, Any] = {}
+    for field in fields:
+        value = tool_input.get(field)
+        if isinstance(value, str):
+            value = " ".join(value.casefold().split())
+        identity[field] = value
+    return identity
+
+
 def build_action_key(
     *,
     user_id: str,
@@ -34,7 +54,11 @@ def build_action_key(
         "user_id": user_id,
         "conversation_id": conversation_id,
         "tool_name": tool_name,
-        "input": tool_input,
+        "input": (
+            _normalized_personal_write_input(tool_name, tool_input)
+            if request_id
+            else tool_input
+        ),
     }
     if request_id:
         # An explicit UI retry may produce a new planner run or action order.

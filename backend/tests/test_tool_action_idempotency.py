@@ -39,6 +39,38 @@ def test_request_id_keeps_key_stable_across_replanning():
     assert first == second
 
 
+def test_request_id_deduplicates_goal_when_replan_adds_description():
+    common = {
+        "user_id": "user-1",
+        "conversation_id": "conv-1",
+        "planner_run_id": "run-1",
+        "tool_name": "create_goal",
+        "request_id": "request-1",
+    }
+    first = build_action_key(
+        tool_input={
+            "title": "Wake up at 6am",
+            "description": "Wake up at 6am every day",
+            "priority": 5,
+        },
+        step_index=1,
+        action_index=0,
+        **common,
+    )
+    second = build_action_key(
+        tool_input={
+            "title": "  WAKE   UP AT 6AM ",
+            "description": None,
+            "priority": 5,
+        },
+        step_index=2,
+        action_index=0,
+        **common,
+    )
+
+    assert first == second
+
+
 @pytest.mark.asyncio
 async def test_write_action_executes_once_and_records_success():
     tool = MagicMock(name="tool")

@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import re
 import time
 from datetime import datetime, UTC
 from typing import Any, List, Optional
@@ -69,7 +70,73 @@ Response structure rules:
 - Keep paragraphs short and do not repeat the conclusion.
 - When an item was persisted, name its type and destination (Goals, Tasks, Values,
   or Notes) and only say it was saved when tool evidence confirms status=saved.
+- Never expose database IDs, internal `kind`/`type` fields, or raw tool JSON in the
+  user-facing response.
 """
+
+
+_PERSISTENCE_DESTINATIONS = {
+    "create_goal": ("Created goal", "Goals", "title"),
+    "create_task": ("Created task", "Tasks", "title"),
+    "save_user_value": ("Saved value", "Values", "value"),
+    "create_note": ("Saved note", "Notes", "title"),
+}
+
+
+def _clean_persistence_confirmation(results: list) -> str | None:
+    """Render successful personal writes without leaking implementation details."""
+    confirmations: list[str] = []
+    for item in results:
+        if not isinstance(item, dict) or item.get("tool") not in _PERSISTENCE_DESTINATIONS:
+            return None
+        try:
+            payload = item.get("result")
+            payload = json.loads(payload) if isinstance(payload, str) else payload
+        except (TypeError, json.JSONDecodeError):
+            return None
+        if not isinstance(payload, dict) or payload.get("status") != "saved":
+            return None
+        verb, destination, content_key = _PERSISTENCE_DESTINATIONS[item["tool"]]
+        content = str(payload.get(content_key) or "").strip()
+        if not content:
+            return None
+        confirmation = f'{verb} in **{destination}**: “{content}”.'
+        if confirmation not in confirmations:
+            confirmations.append(confirmation)
+    return "\n".join(confirmations) if confirmations else None
+
+
+def _enforce_explicit_persistence_intent(message: str, parsed: dict) -> dict:
+    """Honor an explicitly named destination even when the planner confuses it."""
+    normalized = " ".join(message.lower().split())
+    explicitly_goal = bool(
+        re.search(r"\b(?:creat\w*|add|set|save|track)\s+(?:a\s+|an\s+|my\s+)?goal\b", normalized)
+    )
+    if not explicitly_goal:
+        return parsed
+
+    for action in parsed.get("actions", []):
+        if action.get("tool") != "create_task":
+            continue
+        params = dict(action.get("params") or {})
+        target_date = params.pop("due_date", None)
+        params.pop("goal_id", None)
+        params.pop("project_id", None)
+        if target_date is not None:
+            params["target_date"] = target_date
+        action["tool"] = "create_goal"
+        action["params"] = params
+    for call in parsed.get("raw_tool_calls", []):
+        if call.get("name") == "create_task":
+            call["name"] = "create_goal"
+            args = dict(call.get("args") or {})
+            target_date = args.pop("due_date", None)
+            args.pop("goal_id", None)
+            args.pop("project_id", None)
+            if target_date is not None:
+                args["target_date"] = target_date
+            call["args"] = args
+    return parsed
 
 
 def _build_synthesis_system_prompt() -> str:
@@ -654,6 +721,7 @@ async def tool_planner_node(state: AgentState) -> dict:
     else:
         response = await llm_with_tools.ainvoke(messages)
         parsed = _parse_planner_response(response)
+        parsed = _enforce_explicit_persistence_intent(state["message"], parsed)
 
     # Loop guard: Llama frequently re-emits a tool call it already ran
     # successfully (it ignores the "respond with no further tool calls"
@@ -1266,9 +1334,11 @@ async def tool_execution_node(state: AgentState) -> dict:
     cleared_tool_calls: list = []
 
     if results:
-        response = await llm.ainvoke(_build_synthesis_messages(state, results))
-        raw = response.content
-        proposed = raw if isinstance(raw, str) else str(raw)
+        proposed = _clean_persistence_confirmation(results)
+        if proposed is None:
+            response = await llm.ainvoke(_build_synthesis_messages(state, results))
+            raw = response.content
+            proposed = raw if isinstance(raw, str) else str(raw)
     else:
         proposed = state.get("proposed_content", "")
 
