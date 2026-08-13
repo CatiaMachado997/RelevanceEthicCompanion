@@ -101,7 +101,10 @@ async def test_streaming_events_emitted_in_order():
 
 
 @pytest.mark.asyncio
-async def test_saved_item_is_streamed_and_persisted_with_assistant_turn():
+@pytest.mark.parametrize("streaming_reasoning_enabled", [False, True])
+async def test_saved_item_is_streamed_and_persisted_with_assistant_turn(
+    streaming_reasoning_enabled,
+):
     from orchestrator import graph as graph_mod
 
     saved_item = {
@@ -148,9 +151,17 @@ async def test_saved_item_is_streamed_and_persisted_with_assistant_turn():
     store = AsyncMock(
         return_value={"user_turn_id": "u-turn", "assistant_turn_id": "a-turn"}
     )
-    with patch(
+    with patch.object(
+        graph_mod._settings,
+        "STREAMING_REASONING_ENABLED",
+        streaming_reasoning_enabled,
+    ), patch.dict("os.environ", {"MULTI_AGENT": "false"}), patch(
+        "orchestrator.graph.get_graph", return_value=fake_graph
+    ), patch(
         "orchestrator.graph.get_graph_async", AsyncMock(return_value=fake_graph)
-    ), patch("orchestrator.graph._post_stream_store", store):
+    ), patch(
+        "orchestrator.graph._post_stream_store", store
+    ):
         events = [
             event
             async for event in graph_mod.stream_langgraph(
