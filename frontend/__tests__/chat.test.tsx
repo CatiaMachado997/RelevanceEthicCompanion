@@ -19,6 +19,7 @@ jest.mock('../lib/api', () => ({
     chat: {
       history: jest.fn(),
       paused: jest.fn(),
+      markSavedItemUndone: jest.fn(),
       send: jest.fn(),
       stream: jest.fn(),
       conversations: {
@@ -29,6 +30,9 @@ jest.mock('../lib/api', () => ({
         update: jest.fn(),
       },
     },
+    goals: { delete: jest.fn() },
+    tasks: { delete: jest.fn() },
+    values: { delete: jest.fn() },
   },
 }))
 
@@ -111,6 +115,90 @@ test('hides legacy persistence IDs from chat history', async () => {
 
   expect(await screen.findByText('Value saved: "I respect privacy"')).toBeInTheDocument()
   expect(screen.queryByText(/private-id/)).not.toBeInTheDocument()
+})
+
+test('restores a saved-item card from conversation history', async () => {
+  ;(api.chat.history as jest.Mock).mockResolvedValue({
+    messages: [{
+      id: 'assistant-1',
+      role: 'assistant',
+      content: 'Created goal in Goals: “Ship release”.',
+      timestamp: '2026-08-13T18:39:00Z',
+      metadata: {
+        saved_items: [{
+          id: 'goal-1', kind: 'goal', label: 'Ship release',
+          destination: 'Goals', duplicate: false,
+        }],
+      },
+    }],
+  })
+
+  render(<ChatPage />)
+
+  expect(await screen.findByText('Saved to Goals')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: /view/i })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: /undo/i })).toBeInTheDocument()
+})
+
+test('undo deletes the newly saved item and updates the card', async () => {
+  ;(api.goals.delete as jest.Mock).mockResolvedValue({ message: 'Archived' })
+  ;(api.chat.markSavedItemUndone as jest.Mock).mockResolvedValue({ success: true })
+  ;(api.chat.history as jest.Mock).mockResolvedValue({
+    messages: [{
+      id: 'assistant-1', role: 'assistant', content: 'Created goal.',
+      timestamp: '2026-08-13T18:39:00Z',
+      metadata: { saved_items: [{
+        id: 'goal-1', kind: 'goal', label: 'Ship release',
+        destination: 'Goals', duplicate: false,
+      }] },
+    }],
+  })
+
+  render(<ChatPage />)
+  await userEvent.click(await screen.findByRole('button', { name: /undo/i }))
+
+  await waitFor(() => expect(api.goals.delete).toHaveBeenCalledWith('goal-1'))
+  expect(api.chat.markSavedItemUndone).toHaveBeenCalledWith(
+    'assistant-1', expect.objectContaining({ id: 'goal-1', kind: 'goal' })
+  )
+  expect(await screen.findByText('Undone')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /undo/i })).not.toBeInTheDocument()
+})
+
+test('restores an undone card without an undo button', async () => {
+  ;(api.chat.history as jest.Mock).mockResolvedValue({
+    messages: [{
+      id: 'assistant-1', role: 'assistant', content: 'Created goal.',
+      timestamp: '2026-08-13T18:39:00Z',
+      metadata: { saved_items: [{
+        id: 'goal-1', kind: 'goal', label: 'Ship release',
+        destination: 'Goals', duplicate: false, undone: true,
+      }] },
+    }],
+  })
+
+  render(<ChatPage />)
+
+  expect(await screen.findByText('Undone')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /undo/i })).not.toBeInTheDocument()
+})
+
+test('does not offer undo for an item that already existed', async () => {
+  ;(api.chat.history as jest.Mock).mockResolvedValue({
+    messages: [{
+      id: 'assistant-1', role: 'assistant', content: 'Already saved.',
+      timestamp: '2026-08-13T18:39:00Z',
+      metadata: { saved_items: [{
+        id: 'goal-1', kind: 'goal', label: 'Ship release',
+        destination: 'Goals', duplicate: true,
+      }] },
+    }],
+  })
+
+  render(<ChatPage />)
+
+  expect(await screen.findByText('Already saved')).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /undo/i })).not.toBeInTheDocument()
 })
 
 test('test_empty_chat_shows_example_prompts', async () => {

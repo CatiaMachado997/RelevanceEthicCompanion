@@ -10,7 +10,7 @@ import { ReasoningPanel } from '@/components/chat/ReasoningPanel'
 import { PausedActionPrompt } from '@/components/chat/PausedActionPrompt'
 import type { ActionEntry } from '@/components/chat/ReasoningPanel'
 import type { PausedAction } from '@/components/chat/PausedActionPrompt'
-import api, { CitationSource, DocumentSource } from '@/lib/api'
+import api, { CitationSource, DocumentSource, SavedChatItem } from '@/lib/api'
 import { SourceCards } from '@/components/chat/SourceCards'
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
@@ -19,7 +19,7 @@ import {
   ThumbsUp, ThumbsDown, RotateCcw, Plus, Cpu,
   Paperclip, Globe, Calendar, Target, StickyNote,
   BarChart2, ShieldCheck, Sparkles, Shield,
-  BookmarkPlus, ListTodo, CheckCircle,
+  BookmarkPlus, ListTodo, CheckCircle, ExternalLink, Undo2,
 } from 'lucide-react'
 import type { ExtractedTask as ExtractedTaskType } from '@/lib/api'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -44,6 +44,7 @@ interface Message {
     preview: string
   }
   toolFailure?: { tool: string; message: string; error_code: string; retryable: boolean; request_id: string }
+  savedItems?: SavedChatItem[]
 }
 
 const ESL_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -105,6 +106,66 @@ function cleanLegacyPersistenceResult(content: string): string {
     /\s*\(type:\s*[^,()]+,\s*id:\s*[^)]+\)\s*$/i,
     '',
   ).trim()
+}
+
+const SAVED_ITEM_ROUTES: Record<SavedChatItem['kind'], string> = {
+  goal: '/dashboard/goals',
+  task: '/dashboard/tasks',
+  value: '/dashboard/values',
+  note: '/dashboard/values',
+}
+
+function SavedItemCard({
+  item,
+  onView,
+  onUndo,
+}: {
+  item: SavedChatItem
+  onView: () => void
+  onUndo: () => void
+}) {
+  const [undoing, setUndoing] = useState(false)
+  const [undone, setUndone] = useState(Boolean(item.undone))
+  const [error, setError] = useState(false)
+
+  const handleUndo = async () => {
+    setUndoing(true)
+    setError(false)
+    try {
+      await onUndo()
+      setUndone(true)
+    } catch {
+      setError(true)
+    } finally {
+      setUndoing(false)
+    }
+  }
+
+  return (
+    <div className="mt-3 rounded-xl border p-3" style={{ borderColor: 'rgba(74,124,89,0.22)', background: 'rgba(74,124,89,0.06)' }}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium uppercase tracking-wide" style={{ color: '#4A7C59' }}>
+            {undone ? 'Undone' : item.duplicate ? 'Already saved' : `Saved to ${item.destination}`}
+          </p>
+          <p className={`mt-1 text-sm font-medium truncate ${undone ? 'line-through opacity-60' : ''}`} style={{ color: 'var(--ec-text)' }}>
+            {item.label}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <button onClick={onView} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs hover:bg-black/5" style={{ color: 'var(--ec-text-muted)' }}>
+            <ExternalLink size={12} /> View
+          </button>
+          {!item.duplicate && !undone && (
+            <button disabled={undoing} onClick={() => void handleUndo()} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs hover:bg-black/5 disabled:opacity-50" style={{ color: '#9B5B4A' }}>
+              <Undo2 size={12} /> {undoing ? 'Undoing…' : 'Undo'}
+            </button>
+          )}
+        </div>
+      </div>
+      {error && <p className="mt-2 text-xs text-red-700">Could not undo this save. The item was left unchanged.</p>}
+    </div>
+  )
 }
 
 /* ─── Copy button ─── */
@@ -346,6 +407,19 @@ export default function ChatPageContent({ conversationId: conversationIdProp }: 
   const [reasoningByMsg, setReasoningByMsg] = useState<Record<string, { thought: string; actions: ActionEntry[]; isStreaming: boolean }>>({})
   const [pausedAction, setPausedAction] = useState<PausedAction | null>(null)
 
+  const undoSavedItem = useCallback(async (item: SavedChatItem, turnId: string) => {
+    if (item.kind === 'goal') await api.goals.delete(item.id)
+    else if (item.kind === 'task') await api.tasks.delete(item.id)
+    else await api.values.delete(item.id)
+    try {
+      await api.chat.markSavedItemUndone(turnId, item)
+    } catch (error) {
+      // The item deletion already succeeded. Do not falsely show it as active
+      // because only the secondary chat-card metadata update failed.
+      console.error('[chat] could not persist undone card state:', error)
+    }
+  }, [])
+
   const endRef       = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const textareaRef  = useRef<HTMLTextAreaElement>(null)
@@ -432,6 +506,7 @@ export default function ChatPageContent({ conversationId: conversationIdProp }: 
           timestamp: m.timestamp ?? '',
           citations: m.metadata?.citations,
           documentSources: m.metadata?.document_sources,
+          savedItems: m.metadata?.saved_items,
         })))
       })
       .catch(console.error)
@@ -668,7 +743,17 @@ export default function ChatPageContent({ conversationId: conversationIdProp }: 
           setIsThinking(false)
           setActiveTool(tool)
         },
-        onToolResult: () => setActiveTool(null),
+        onToolResult: (_tool, savedItem) => {
+          setActiveTool(null)
+          if (!savedItem) return
+          setMessages(prev => prev.map(m => {
+            if (m.id !== assistantId) return m
+            const items = m.savedItems ?? []
+            return items.some(item => item.id === savedItem.id && item.kind === savedItem.kind)
+              ? m
+              : { ...m, savedItems: [...items, savedItem] }
+          }))
+        },
         onToolError: (failure) => {
           setActiveTool(null)
           setMessages(prev => prev.map(m =>
@@ -681,7 +766,7 @@ export default function ChatPageContent({ conversationId: conversationIdProp }: 
             m.id === assistantId ? { ...m, pendingConfirmation: data } : m
           ))
         },
-        onDone: ({ citations, document_sources, user_turn_id, assistant_turn_id, persisted }) => {
+        onDone: ({ citations, document_sources, saved_items, user_turn_id, assistant_turn_id, persisted }) => {
           turnCompleted = true
           persistenceFailed = !(persisted ?? Boolean(user_turn_id && assistant_turn_id))
           setMessages(prev => prev.map(m => {
@@ -691,6 +776,7 @@ export default function ChatPageContent({ conversationId: conversationIdProp }: 
                 id: assistant_turn_id ?? m.id,
                 citations: citations ?? m.citations,
                 documentSources: document_sources ?? m.documentSources,
+                savedItems: saved_items ?? m.savedItems,
               }
             }
             if (user_turn_id && m.id === userId) {
@@ -1151,6 +1237,14 @@ export default function ChatPageContent({ conversationId: conversationIdProp }: 
                   ) : null}
                   <CitationPills citations={msg.citations} />
                   <SourceCards sources={msg.documentSources} />
+                  {!msg.streaming && msg.savedItems?.map(item => (
+                    <SavedItemCard
+                      key={`${item.kind}-${item.id}`}
+                      item={item}
+                      onView={() => router.push(SAVED_ITEM_ROUTES[item.kind])}
+                      onUndo={() => undoSavedItem(item, msg.id)}
+                    />
+                  ))}
                   {msg.toolFailure && (
                     <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
                       <div><strong>{msg.toolFailure.tool}</strong> failed: {msg.toolFailure.message}</div>

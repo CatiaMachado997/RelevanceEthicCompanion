@@ -20,6 +20,7 @@ from services.langchain_tools import (
 from orchestrator.nodes.tools import (
     _clean_persistence_confirmation,
     _enforce_explicit_persistence_intent,
+    _tool_result_event,
 )
 
 
@@ -285,6 +286,34 @@ def test_persistence_confirmation_marks_database_duplicate():
     assert _clean_persistence_confirmation([saved]) == (
         "Already saved in **Tasks**: “Send proposal”."
     )
+
+
+def test_tool_result_event_exposes_only_safe_saved_item_fields():
+    event = _tool_result_event(
+        "create_goal",
+        json.dumps(
+            {
+                "status": "saved",
+                "kind": "goal",
+                "id": "goal-1",
+                "title": "Ship release",
+                "duplicate": False,
+                "private": "do not expose",
+            }
+        ),
+    )
+
+    assert event == {
+        "event": "tool_result",
+        "tool": "create_goal",
+        "saved_item": {
+            "id": "goal-1",
+            "kind": "goal",
+            "label": "Ship release",
+            "destination": "Goals",
+            "duplicate": False,
+        },
+    }
 
 
 def test_explicit_goal_request_cannot_be_saved_as_task():

@@ -83,6 +83,31 @@ _PERSISTENCE_DESTINATIONS = {
 }
 
 
+def _tool_result_event(tool_name: str, result: Any) -> dict:
+    """Build a public tool event, exposing only safe saved-item fields."""
+    event = {"event": "tool_result", "tool": tool_name}
+    if tool_name not in _PERSISTENCE_DESTINATIONS:
+        return event
+    try:
+        payload = json.loads(result) if isinstance(result, str) else result
+    except (TypeError, json.JSONDecodeError):
+        return event
+    if not isinstance(payload, dict) or payload.get("status") != "saved":
+        return event
+    _verb, destination, content_key = _PERSISTENCE_DESTINATIONS[tool_name]
+    item_id = str(payload.get("id") or "").strip()
+    label = str(payload.get(content_key) or "").strip()
+    if item_id and label:
+        event["saved_item"] = {
+            "id": item_id,
+            "kind": str(payload.get("kind") or ""),
+            "label": label,
+            "destination": destination,
+            "duplicate": bool(payload.get("duplicate")),
+        }
+    return event
+
+
 def _clean_persistence_confirmation(results: list) -> str | None:
     """Render successful personal writes without leaking implementation details."""
     confirmations: list[str] = []
@@ -974,7 +999,7 @@ async def tool_execution_node(state: AgentState) -> dict:
             params = action.get("params", {})
             if obs["status"] == "ok":
                 results.append({"tool": tool_name, "result": str(obs["result"])})
-                events.append({"event": "tool_result", "tool": tool_name})
+                events.append(_tool_result_event(tool_name, obs["result"]))
                 telemetry_output: Any = (
                     obs["result"]
                     if isinstance(obs["result"], (dict, list))
@@ -1094,7 +1119,7 @@ async def tool_execution_node(state: AgentState) -> dict:
             )
             if obs["status"] == "ok":
                 results.append({"tool": tool_name, "result": str(obs["result"])})
-                events.append({"event": "tool_result", "tool": tool_name})
+                events.append(_tool_result_event(tool_name, obs["result"]))
                 _record_telemetry(
                     user_id,
                     conversation_id,
@@ -1279,7 +1304,7 @@ async def tool_execution_node(state: AgentState) -> dict:
         )
         if obs["status"] == "ok":
             results.append({"tool": tool_name, "result": str(obs["result"])})
-            events.append({"event": "tool_result", "tool": tool_name})
+            events.append(_tool_result_event(tool_name, obs["result"]))
             await _audit_tool_action(
                 user_id, tool_id, action_name, "APPROVED", "Marketplace tool executed"
             )
