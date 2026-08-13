@@ -400,6 +400,7 @@ class NoteCreateTool(BaseTool):
             {
                 "status": "saved",
                 "kind": "note",
+                "id": str(row["id"]),
                 "content": content[:80] + ("..." if len(content) > 80 else ""),
                 "duplicate": not inserted,
             }

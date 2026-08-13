@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from typing import Annotated, List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from datetime import datetime, UTC
+import json
 from uuid import UUID
 
 from services.context_manager import ContextManager
@@ -52,6 +53,11 @@ class ConversationCreate(BaseModel):
 
 class ConversationUpdate(BaseModel):
     title: str = Field(..., min_length=1, max_length=100)
+
+
+class SavedItemUndo(BaseModel):
+    kind: str = Field(..., pattern="^(goal|task|value|note)$")
+    item_id: str = Field(..., min_length=1)
 
 
 class ChatResponse(BaseModel):
@@ -562,6 +568,54 @@ async def delete_conversation(
             )
             if cur.rowcount == 0:
                 raise HTTPException(status_code=404, detail="Conversation not found")
+    return {"success": True}
+
+
+@router.patch("/turns/{turn_id}/saved-item")
+async def mark_saved_item_undone(
+    turn_id: str,
+    payload: SavedItemUndo,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Persist an undone chat-card state after its item deletion succeeds."""
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT metadata
+                FROM conversation_turns
+                WHERE id = %s AND user_id = %s AND role = 'assistant'
+                FOR UPDATE
+                """,
+                (turn_id, user_id),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Assistant turn not found")
+            metadata = dict(row.get("metadata") or {})
+            saved_items = list(metadata.get("saved_items") or [])
+            matched = False
+            for item in saved_items:
+                if not isinstance(item, dict):
+                    continue
+                if (
+                    item.get("id") == payload.item_id
+                    and item.get("kind") == payload.kind
+                ):
+                    item["undone"] = True
+                    matched = True
+                    break
+            if not matched:
+                raise HTTPException(status_code=404, detail="Saved item not found")
+            metadata["saved_items"] = saved_items
+            cur.execute(
+                """
+                UPDATE conversation_turns
+                SET metadata = %s::jsonb
+                WHERE id = %s AND user_id = %s
+                """,
+                (json.dumps(metadata), turn_id, user_id),
+            )
     return {"success": True}
 
 

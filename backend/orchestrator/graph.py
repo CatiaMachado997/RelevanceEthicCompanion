@@ -343,6 +343,7 @@ async def stream_langgraph(
     esl_data = {}
     citations: list = []
     document_sources: list = []
+    saved_items: list = []
     tool_events_yielded = False
     done_yielded = False
     paused = False
@@ -416,6 +417,10 @@ async def stream_langgraph(
                         "tool_skipped",
                     ):
                         yield ev
+                        if ev.get("event") == "tool_result" and ev.get("saved_item"):
+                            item = ev["saved_item"]
+                            if item not in saved_items:
+                                saved_items.append(item)
                 # Capture citation sources for the done event
                 citations = output.get("citations", [])
                 document_sources = output.get("document_sources", [])
@@ -643,6 +648,7 @@ async def stream_langgraph(
             document_sources=document_sources,
             citations=citations,
             plan_steps=plan_steps,
+            saved_items=saved_items,
         )
         if isinstance(stored_ids, dict):
             turn_ids = stored_ids
@@ -653,6 +659,7 @@ async def stream_langgraph(
             "esl_decision": esl_data,
             "citations": citations,
             "document_sources": document_sources,
+            "saved_items": saved_items,
             **turn_ids,
             "persisted": bool(
                 turn_ids.get("user_turn_id") and turn_ids.get("assistant_turn_id")
@@ -668,6 +675,7 @@ async def _post_stream_store(
     document_sources: Optional[list] = None,
     citations: Optional[list] = None,
     plan_steps: Optional[list] = None,  # Sprint I — denormalized cache
+    saved_items: Optional[list] = None,
 ) -> dict[str, Optional[str]]:
     """Persist conversation turns to M1 + M2. Non-blocking — errors are logged."""
     import logging
@@ -685,6 +693,8 @@ async def _post_stream_store(
             assistant_meta["citations"] = citations
         if plan_steps:
             assistant_meta["plan_steps"] = plan_steps  # Sprint I cache
+        if saved_items:
+            assistant_meta["saved_items"] = saved_items
 
         # Adapt to actual ContextManager API (check what store methods exist)
         user_turn_id = None

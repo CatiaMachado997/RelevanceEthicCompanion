@@ -135,6 +135,15 @@ export interface UserValue {
   updated_at: string
 }
 
+export interface SavedChatItem {
+  id: string
+  kind: 'goal' | 'task' | 'value' | 'note'
+  label: string
+  destination: string
+  duplicate: boolean
+  undone?: boolean
+}
+
 export const valuesApi = {
   /**
    * Get all user values
@@ -271,11 +280,11 @@ export const chatApi = {
       | {
           onToken: (token: string) => void
           onToolUse?: (tool: string) => void
-          onToolResult?: (tool: string) => void
+          onToolResult?: (tool: string, savedItem?: SavedChatItem) => void
           onToolPendingConfirmation?: (data: { tool_id: string; tool_name: string; action_name: string; preview: string }) => void
           onRateLimitWarning?: (level: string, message: string) => void
           onRateLimitExceeded?: (retryAfter: string, message: string) => void
-          onDone?: (data: { esl_decision?: Record<string, unknown>; citations?: CitationSource[]; document_sources?: DocumentSource[]; user_turn_id?: string; assistant_turn_id?: string; persisted?: boolean }) => void
+          onDone?: (data: { esl_decision?: Record<string, unknown>; citations?: CitationSource[]; document_sources?: DocumentSource[]; saved_items?: SavedChatItem[]; user_turn_id?: string; assistant_turn_id?: string; persisted?: boolean }) => void
           // Sprint J callbacks
           onThoughtToken?: (token: string) => void
           onPlanStepActions?: (step: number, actions: Array<{ tool: string; params: unknown }>) => void
@@ -317,7 +326,7 @@ export const chatApi = {
             return
           }
           if (data.event === 'tool_result') {
-            callbacks.onToolResult?.(data.tool)
+            callbacks.onToolResult?.(data.tool, data.saved_item)
             return
           }
           if (data.event === 'tool_error') {
@@ -343,7 +352,7 @@ export const chatApi = {
             return
           }
           if (data.event === 'done') {
-            callbacks.onDone?.({ esl_decision: data.esl_decision, citations: data.citations, document_sources: data.document_sources, user_turn_id: data.user_turn_id, assistant_turn_id: data.assistant_turn_id, persisted: data.persisted })
+            callbacks.onDone?.({ esl_decision: data.esl_decision, citations: data.citations, document_sources: data.document_sources, saved_items: data.saved_items, user_turn_id: data.user_turn_id, assistant_turn_id: data.assistant_turn_id, persisted: data.persisted })
             controller.abort()
             finish()
             return
@@ -549,6 +558,12 @@ export const chatApi = {
   paused: (threadId: string): Promise<Record<string, unknown>> =>
     apiRequest<Record<string, unknown>>(`/api/chat/paused/${encodeURIComponent(threadId)}`),
 
+  markSavedItemUndone: (turnId: string, item: Pick<SavedChatItem, 'id' | 'kind'>) =>
+    apiRequest<{ success: boolean }>(`/api/chat/turns/${turnId}/saved-item`, {
+      method: 'PATCH',
+      body: JSON.stringify({ kind: item.kind, item_id: item.id }),
+    }),
+
   /**
    * Get conversation history
    */
@@ -560,7 +575,7 @@ export const chatApi = {
         role: string
         content: string
         timestamp: string
-        metadata?: { document_sources?: DocumentSource[]; citations?: CitationSource[] } & Record<string, unknown>
+        metadata?: { document_sources?: DocumentSource[]; citations?: CitationSource[]; saved_items?: SavedChatItem[] } & Record<string, unknown>
       }>
       total_count: number
     }>(`/api/chat/history?limit=${limit}&offset=${offset}${conversationId ? `&conversation_id=${conversationId}` : ''}`),
