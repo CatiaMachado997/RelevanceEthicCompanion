@@ -115,7 +115,7 @@ class ContextManager:
                     """
                     INSERT INTO user_values (id, user_id, type, value, priority, active, metadata)
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    RETURNING id, created_at
+                    RETURNING id, created_at, (xmax = 0) AS inserted
                 """,
                     (
                         value_id,
@@ -421,10 +421,18 @@ class ContextManager:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 goal_id = goal.id or str(uuid.uuid4())
+                metadata = dict(goal.metadata or {})
+                chat_dedupe_key = metadata.pop("chat_dedupe_key", None)
                 cur.execute(
                     """
-                    INSERT INTO goals (id, user_id, title, description, status, priority, target_date, metadata)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO goals
+                        (id, user_id, title, description, status, priority,
+                         target_date, metadata, chat_dedupe_key)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (user_id, chat_dedupe_key)
+                        WHERE chat_dedupe_key IS NOT NULL
+                          AND status IN ('active', 'paused')
+                    DO UPDATE SET title = goals.title
                     RETURNING id, created_at
                 """,
                     (
@@ -435,7 +443,8 @@ class ContextManager:
                         goal.status.value,
                         goal.priority,
                         goal.target_date,
-                        json.dumps(goal.metadata),
+                        json.dumps(metadata),
+                        chat_dedupe_key,
                     ),
                 )
 
@@ -445,9 +454,13 @@ class ContextManager:
                 if isinstance(result, dict):
                     goal.id = str(result["id"])
                     goal.created_at = result["created_at"]
+                    goal.metadata = metadata
+                    if not bool(result.get("inserted", True)):
+                        goal.metadata["_duplicate"] = True
                 else:
                     goal.id = str(result[0])
                     goal.created_at = result[1]
+                    goal.metadata = metadata
 
                 logger.debug(f"✅ Created goal: {goal.id}")
                 return goal

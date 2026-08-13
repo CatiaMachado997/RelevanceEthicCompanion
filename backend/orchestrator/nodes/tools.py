@@ -79,7 +79,7 @@ _PERSISTENCE_DESTINATIONS = {
     "create_goal": ("Created goal", "Goals", "title"),
     "create_task": ("Created task", "Tasks", "title"),
     "save_user_value": ("Saved value", "Values", "value"),
-    "create_note": ("Saved note", "Notes", "title"),
+    "create_note": ("Saved note", "Notes", "content"),
 }
 
 
@@ -100,6 +100,8 @@ def _clean_persistence_confirmation(results: list) -> str | None:
         if not isinstance(payload, dict) or payload.get("status") != "saved":
             return None
         verb, destination, content_key = _PERSISTENCE_DESTINATIONS[item["tool"]]
+        if payload.get("duplicate"):
+            verb = "Already saved"
         content = str(payload.get(content_key) or "").strip()
         if not content:
             return None
