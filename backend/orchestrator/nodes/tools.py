@@ -87,7 +87,10 @@ def _clean_persistence_confirmation(results: list) -> str | None:
     """Render successful personal writes without leaking implementation details."""
     confirmations: list[str] = []
     for item in results:
-        if not isinstance(item, dict) or item.get("tool") not in _PERSISTENCE_DESTINATIONS:
+        if (
+            not isinstance(item, dict)
+            or item.get("tool") not in _PERSISTENCE_DESTINATIONS
+        ):
             return None
         try:
             payload = item.get("result")
@@ -100,7 +103,7 @@ def _clean_persistence_confirmation(results: list) -> str | None:
         content = str(payload.get(content_key) or "").strip()
         if not content:
             return None
-        confirmation = f'{verb} in **{destination}**: “{content}”.'
+        confirmation = f"{verb} in **{destination}**: “{content}”."
         if confirmation not in confirmations:
             confirmations.append(confirmation)
     return "\n".join(confirmations) if confirmations else None
@@ -110,7 +113,10 @@ def _enforce_explicit_persistence_intent(message: str, parsed: dict) -> dict:
     """Honor an explicitly named destination even when the planner confuses it."""
     normalized = " ".join(message.lower().split())
     explicitly_goal = bool(
-        re.search(r"\b(?:creat\w*|add|set|save|track)\s+(?:a\s+|an\s+|my\s+)?goal\b", normalized)
+        re.search(
+            r"\b(?:creat\w*|add|set|save|track)\s+(?:a\s+|an\s+|my\s+)?goal\b",
+            normalized,
+        )
     )
     if not explicitly_goal:
         return parsed

@@ -201,7 +201,12 @@ def test_persistence_confirmation_deduplicates_replayed_result():
     saved = {
         "tool": "create_goal",
         "result": json.dumps(
-            {"status": "saved", "kind": "goal", "id": "goal-1", "title": "Wake up at 6am"}
+            {
+                "status": "saved",
+                "kind": "goal",
+                "id": "goal-1",
+                "title": "Wake up at 6am",
+            }
         ),
     }
 
